@@ -11,6 +11,13 @@ Research Assistant 是在 [ScienceClaw](https://github.com/AgentTeam-TaichuAI/Sc
 RAG、证据边界、三层记忆、多 Agent 研究流、Evidence Audit 和 Harness 思维。
 第三方归属说明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
+## 当前工程基线
+
+当前仓库已经导入 ScienceClaw baseline application shell，后续二次开发应以该
+baseline 为可运行底座推进，而不是重新发明一套工作台。导入范围、验证命令、
+已知构建警告和 Research Assistant 功能接入顺序见
+[ScienceClaw Baseline Import Notes](docs/baseline-import-notes.md)。
+
 Research Assistant 是一个 Python-first 的智能科研工作台，核心关注文献理解、证据可信、多 Agent 研究流程、记忆沉淀与报告生成。
 
 这个项目不是通用聊天机器人。所有主要能力都应该服务于以下研究工作流：
