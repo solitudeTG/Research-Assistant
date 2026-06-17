@@ -4,99 +4,68 @@ doc_kind: feature
 status: active
 owner: solitudeTG
 created: 2026-06-17
-updated: 2026-06-17
+updated: 2026-06-18
 ---
-# Project Vision and Scope
 
-## 目标
+# F001: Project Vision and Scope
+
+## Goal
 
 构建一个 Python-first 的智能科研工作台，帮助用户管理论文、提出有依据的问题、检查证据、运行多 Agent 研究流程、沉淀研究记忆，并生成可追溯的研究报告。
 
-这个项目既要适合面试展示，也要保持产品方向清晰。它应该体现现代 Agent 工程能力，但不能脱离真实科研工作流。
+这个项目既要适合展示现代 Agent 工程能力，也要保持产品方向清晰：所有主要能力都必须服务真实科研工作流，而不是堆叠通用聊天或泛工具能力。
 
-## 原始问题
+## Vision Anchor
 
-上一版研究助手已经验证了多项重要能力：多 Agent 协作、三层记忆、RAG、证据边界、SSE trace 和 Docker 化部署。但它有两个战略弱点：
+- 原始请求或来源：项目初始化方向与本地 `AGENTS.md` 军规。
+- 用户痛点或工程问题：科研工作分散在论文、笔记、证据、结论和输出文档之间，用户需要一个能收集资料、检索可追溯证据、展示答案生成过程，并将审查后内容转化为产物的工作台。
+- 期望结果：以 ScienceClaw 为 baseline application shell，融合旧版 Research Workbench 的论文 RAG、证据边界、三层记忆、多 Agent 研究流、Evidence Audit 和 Harness/AgentMentor 思维。
+- 非目标或边界：不做通用个人聊天机器人；不默认暴露大规模工具集合；不把 memory 当作 citation evidence；不在 UI 中展示虚假的 Agent、并行、工具调用、证据或 workflow state；不在缺少明确编排需求时提前引入 LangGraph。
+- Exit Gate 对照来源：本 Feature、linked Feature Map spec、`docs/baseline-import-notes.md`、以及后续每个 Research Assistant 功能的 AgentMentor closeout evidence。
 
-- 技术栈偏 Java，而 Agent 面试更常围绕 Python、LangChain、DeepAgents、RAG、tools、memory 和 tracing 展开。
-- 产品 UI 不足以支撑一个有说服力的科研工作台演示。
+## Current Status
 
-本项目围绕 Python Agent 技术栈和更成熟的工作台体验重新实现这些核心能力。
+In Progress。
 
-## 用户痛点
+当前仓库已经导入 ScienceClaw baseline application shell，并通过基础 backend/frontend 验证。Research Assistant 专属能力尚未完成，后续应按可验证能力增量继续开发。
 
-读研或科研阶段的研究工作经常分散在多个工具中：论文、笔记、证据、结论和输出文档彼此割裂。用户需要一个工作台，能够摄取资料、检索可追溯证据、展示答案生成过程，并把经过审查的研究内容转化为可用产物。
-
-## 能力承诺
-
-系统应支持以下核心闭环：
-
-```text
-上传或收集研究资料
--> 解析、切分并索引
--> 提出研究问题
--> 检索论文、网页或数据库证据
--> 审查结论与来源是否匹配
--> 生成带引用的答案
--> 生成报告或论文笔记
--> 在明确边界下沉淀有用记忆
-```
-
-## 范围
-
-### P0：可演示研究闭环
-
-- 论文上传与解析。
-- 文档切分并写入向量存储。
-- 混合检索与引用生成。
-- 有依据的答案生成。
-- 通过 SSE 展示检索、工具调用和答案生成过程。
-- 工作台 UI 包含聊天、活动过程、文件和报告预览。
-
-### P1：多 Agent 可信研究流程
-
-- Supervisor 在轻量直接回答和深度研究流程之间做选择。
-- Deep Research Agent 收集并组织证据。
-- Evidence Audit Agent 检查结论与来源的对齐关系。
-- Document Composer Agent 只基于已审查证据生成 Markdown 或文档型输出。
-
-### P2：记忆与自学习
-
-- L1 session working memory，用于当前任务连续性。
-- L2 confirmed project knowledge，用于用户确认过的可复用项目知识。
-- L3 candidate knowledge，用于待审核的长期候选沉淀。
-- 记忆召回过程必须可观察。
-- 记忆来源必须遵守 `contextOnly` 边界。
-
-### P3：工具与 Skills
-
-- 受控的 tool registry。
-- 可复用 workflow 的 skill documents。
-- 用户自定义工具或技能持久化前必须经过 sandbox 验证。
-- 使用领域 tool pack，而不是默认暴露大而全的工具集合。
-
-### P4：产品化增强
-
-- 定时研究任务。
-- 周期性研究报告。
-- 文件分享。
-- 资源与 token 统计。
-- 通知集成必须等核心研究流程稳定后再进入。
-
-## 非目标
-
-- 不做通用个人聊天机器人。
-- 不默认暴露大规模工具集合。
-- 不把 memory 当作 citation evidence。
-- 不在 UI 中展示虚假的 Agent、虚假的并行或虚假的工具调用。
-- 不在缺少明确编排需求时提前引入 LangGraph。
-- 不以代码量衡量进度；进度只看可验证能力增量。
-
-## 验收来源
-
-本 Feature 是项目初始开发的 Vision Anchor。后续 Feature、计划和实现切片都应对照本文档和 linked Feature Map spec 判断是否跑偏。
-
-## 链接
+## Links
 
 - Spec: [F001-feature-map-and-rules-spec.md](../specs/F001-feature-map-and-rules-spec.md)
+- Baseline import notes: [baseline-import-notes.md](../baseline-import-notes.md)
+- Third-party notices: [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md)
 
+## Acceptance Criteria
+
+- [x] 项目公开说明以 ScienceClaw 为二次开发 baseline，并保留 attribution / notice。
+- [x] 当前仓库包含 ScienceClaw baseline application shell，且不包含参考副本的 `.git` 历史。
+- [x] `AGENTS.md` 保持本地 Agent 规则文件，不进入 Git 管理。
+- [x] 至少完成一组 baseline 验证命令，并记录命令、结果和已知警告。
+- [ ] 支持论文上传与解析，并能把解析结果纳入研究工作流。
+- [ ] 支持论文 RAG，并能返回可追溯 citation evidence。
+- [ ] 明确区分 citation evidence 与 context-only memory。
+- [ ] ActivityPanel / trace panel 只展示真实后端事件。
+- [ ] 支持 Evidence Audit 对结论和来源关系进行检查。
+- [ ] 支持报告生成，且报告只基于已审查证据和明确上下文。
+- [ ] 支持三层记忆，并保证 memory 不伪装为 citation evidence。
+
+## Patch History
+
+None yet.
+
+| Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+
+## Evidence
+
+- `35d660fcc060ed114582be5dfa992bc6f6698113` added public ScienceClaw attribution notices.
+- `0d5d2ff0c549ef1a94a3a0f724a7968b9c696c15` imported the ScienceClaw baseline application shell.
+- `c781ce23d22f032a966a2602555ed9a6f0e4f47d` recorded baseline import verification and the next Research Assistant development order.
+- Baseline verification recorded in [baseline-import-notes.md](../baseline-import-notes.md):
+  - `python -m compileall ScienceClaw\backend`
+  - `npm.cmd ci` in `ScienceClaw\frontend`
+  - `npm.cmd run build` in `ScienceClaw\frontend`
+
+## Next Step
+
+Start the first Research Assistant-specific feature slice with AgentMentor gates: paper upload and parsing. The slice should add real backend behavior, a visible workflow entry point in the ScienceClaw workbench shell, and verification evidence before claiming completion.
