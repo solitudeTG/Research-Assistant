@@ -49,8 +49,15 @@ from backend.deepagent.sessions import (
     async_get_science_session,
     async_list_science_sessions,
 )
+from backend.research_assistant.answering import answer_research_question
+from backend.research_assistant.indexing import index_ingestion_result
+from backend.research_assistant.ingestion import ingest_uploaded_paper, is_research_document
+from backend.research_assistant.parsers import PaperParseError
+from backend.research_assistant.reports import generate_markdown_research_report
+from backend.research_assistant.storage.database import get_research_session_status_from_database
 from backend.user.dependencies import get_current_user, require_user, User
 from backend.models import get_model_config
+from backend.config import settings
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -117,6 +124,16 @@ class ChatRequest(BaseModel):
     model_config_id: Optional[str] = Field(default=None, description="Model config ID to use (overrides session default)")
 
 
+class ResearchAnswerRequest(BaseModel):
+    question: str = Field(..., description="Research question grounded in uploaded papers")
+    limit: int = Field(default=5, ge=1, le=20, description="Maximum evidence chunks to cite")
+
+
+class ResearchReportRequest(BaseModel):
+    question: str = Field(..., description="Research question or note topic grounded in uploaded papers")
+    limit: int = Field(default=8, ge=1, le=20, description="Maximum evidence chunks to include")
+
+
 # ═══════════════════════════════════════════════════════════════════
 # 内部辅助函数
 # ═══════════════════════════════════════════════════════════════════
@@ -164,6 +181,50 @@ def _append_session_event(session: Any, event: Dict[str, Any]) -> None:
         if isinstance(content, str) and content.strip():
             setattr(session, "latest_message", content)
             setattr(session, "latest_message_at", int(data.get("timestamp") or _now_ts()))
+
+
+def _research_upload_step_event(
+    *,
+    step_id: str,
+    status: str,
+    description: str,
+    metadata: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    data: Dict[str, Any] = {
+        "event_id": _new_event_id(),
+        "timestamp": _now_ts(),
+        "status": status,
+        "id": step_id,
+        "description": description,
+    }
+    if metadata:
+        data["metadata"] = metadata
+    return _wrap_event("step", data)
+
+
+def _publish_session_event(session_id: str, user_id: str, event: Dict[str, Any]) -> None:
+    try:
+        from backend.notifications import publish as _notify
+
+        _notify("session_updated", {
+            "session_id": session_id,
+            "user_id": user_id,
+            "session_event": event,
+        })
+    except Exception:
+        logger.debug("Failed to publish session event", exc_info=True)
+
+
+async def _append_save_publish_session_event(
+    session: Any,
+    *,
+    session_id: str,
+    user_id: str,
+    event: Dict[str, Any],
+) -> None:
+    _append_session_event(session, event)
+    await session.save()
+    _publish_session_event(session_id, user_id, event)
 
 
 def _count_user_messages(events: List[Dict[str, Any]]) -> int:
@@ -1177,6 +1238,147 @@ async def upload_session_file(
         stat = target_path.stat()
         logger.info(f"[Upload] Saved file to {abs_path} ({stat.st_size} bytes)")
 
+        metadata: Dict[str, Any] = {"sandbox_path": abs_path, "session_id": session_id}
+        if is_research_document(target_path):
+            upload_step_id = f"research-upload-{_new_event_id()}"
+            parse_step_id = f"research-parse-{_new_event_id()}"
+            index_step_id = f"research-index-{_new_event_id()}"
+            await _append_save_publish_session_event(
+                session,
+                session_id=session_id,
+                user_id=current_user.id,
+                event=_research_upload_step_event(
+                    step_id=upload_step_id,
+                    status="completed",
+                    description=f"Research document uploaded: {target_path.name}",
+                    metadata={"filename": target_path.name, "path": abs_path, "size": stat.st_size},
+                ),
+            )
+            await _append_save_publish_session_event(
+                session,
+                session_id=session_id,
+                user_id=current_user.id,
+                event=_research_upload_step_event(
+                    step_id=parse_step_id,
+                    status="running",
+                    description=f"Parsing research document: {target_path.name}",
+                    metadata={"filename": target_path.name, "path": abs_path},
+                ),
+            )
+
+            try:
+                ingestion = ingest_uploaded_paper(
+                    file_path=target_path,
+                    session_id=session_id,
+                    user_id=current_user.id,
+                    workspace_dir=workspace_dir,
+                )
+                metadata["research_assistant"] = {
+                    "status": "ingested",
+                    "paper_id": ingestion.paper.paper_id,
+                    "title": ingestion.paper.title,
+                    "authors": ingestion.paper.authors,
+                    "parser": ingestion.paper.parser,
+                    "chunk_count": len(ingestion.chunks),
+                    "manifest_path": ingestion.artifact.manifest_path,
+                    "evidence_preview_path": ingestion.artifact.evidence_preview_path,
+                }
+                await _append_save_publish_session_event(
+                    session,
+                    session_id=session_id,
+                    user_id=current_user.id,
+                    event=_research_upload_step_event(
+                        step_id=parse_step_id,
+                        status="completed",
+                        description=f"Research document parsed: {target_path.name}",
+                        metadata=metadata["research_assistant"],
+                    ),
+                )
+                await _append_save_publish_session_event(
+                    session,
+                    session_id=session_id,
+                    user_id=current_user.id,
+                    event=_research_upload_step_event(
+                        step_id=index_step_id,
+                        status="running",
+                        description=f"Indexing paper evidence in PostgreSQL: {target_path.name}",
+                        metadata={
+                            "paper_id": ingestion.paper.paper_id,
+                            "chunk_count": len(ingestion.chunks),
+                            "embedding_model": settings.research_embedding_model,
+                        },
+                    ),
+                )
+                try:
+                    indexing_summary = await index_ingestion_result(
+                        database_url=settings.research_database_url,
+                        result=ingestion,
+                        embedding_dimensions=settings.research_embedding_dimensions,
+                        embedding_model=settings.research_embedding_model,
+                    )
+                    metadata["research_assistant"].update(
+                        {
+                            "status": "indexed",
+                            "stored_in": "postgresql",
+                            "evidence_record_count": indexing_summary.evidence_record_count,
+                            "embedding_count": indexing_summary.embedding_count,
+                            "embedding_model": indexing_summary.embedding_model,
+                        }
+                    )
+                    completed_event = _research_upload_step_event(
+                        step_id=index_step_id,
+                        status="completed",
+                        description=f"Paper evidence indexed: {target_path.name}",
+                        metadata=metadata["research_assistant"],
+                    )
+                except Exception as exc:
+                    logger.exception("[ResearchAssistant] PostgreSQL indexing failed")
+                    metadata["research_assistant"].update(
+                        {
+                            "status": "index_failed",
+                            "stored_in": "filesystem_only",
+                            "index_error": str(exc),
+                        }
+                    )
+                    completed_event = _research_upload_step_event(
+                        step_id=index_step_id,
+                        status="failed",
+                        description=f"Paper evidence indexing failed for {target_path.name}",
+                        metadata=metadata["research_assistant"],
+                    )
+            except (NotImplementedError, PaperParseError) as exc:
+                metadata["research_assistant"] = {
+                    "status": "parser_unavailable",
+                    "reason": str(exc),
+                }
+                completed_event = _research_upload_step_event(
+                    step_id=parse_step_id,
+                    status="completed",
+                    description=f"Research parsing deferred for {target_path.name}: parser unavailable",
+                    metadata=metadata["research_assistant"],
+                )
+            except Exception as exc:
+                logger.exception("[ResearchAssistant] ingestion failed")
+                metadata["research_assistant"] = {
+                    "status": "failed",
+                    "reason": str(exc),
+                }
+                completed_event = _research_upload_step_event(
+                    step_id=parse_step_id,
+                    status="failed",
+                    description=f"Research document parsing failed for {target_path.name}",
+                    metadata=metadata["research_assistant"],
+                )
+
+            await _append_save_publish_session_event(
+                session,
+                session_id=session_id,
+                user_id=current_user.id,
+                event=completed_event,
+            )
+            setattr(session, "status", SessionStatus.COMPLETED)
+            await session.save()
+
         return ApiResponse(data={
             "file_id": abs_path,
             "filename": target_path.name,
@@ -1184,7 +1386,7 @@ async def upload_session_file(
             "upload_date": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
             "content_type": file.content_type or "application/octet-stream",
             "file_url": f"/api/v1/sessions/{session_id}/sandbox-file/download?path={abs_path}",
-            "metadata": {"sandbox_path": abs_path, "session_id": session_id},
+            "metadata": metadata,
         })
     except ScienceSessionNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -1198,6 +1400,236 @@ async def upload_session_file(
 # ═══════════════════════════════════════════════════════════════════
 # Real-time session notifications (SSE)
 # ═══════════════════════════════════════════════════════════════════
+
+@router.post("/{session_id}/research/answer", response_model=ApiResponse)
+async def answer_research_question_for_session(
+    session_id: str,
+    body: ResearchAnswerRequest,
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """Answer a question using only citation evidence from uploaded papers."""
+    try:
+        session = await async_get_science_session(session_id)
+        if session.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        user_event = _wrap_event("message", {
+            "event_id": _new_event_id(),
+            "timestamp": _now_ts(),
+            "content": body.question,
+            "role": "user",
+            "attachments": [],
+            "metadata": {"research_assistant": {"mode": "paper_evidence"}},
+        })
+        _append_session_event(session, user_event)
+        _publish_session_event(session_id, current_user.id, user_event)
+
+        step_id = f"research-answer-{_new_event_id()}"
+        retrieval_started = _research_upload_step_event(
+            step_id=step_id,
+            status="running",
+            description="Retrieving citation evidence from uploaded papers",
+            metadata={"question": body.question, "limit": body.limit},
+        )
+        _append_session_event(session, retrieval_started)
+        _publish_session_event(session_id, current_user.id, retrieval_started)
+
+        try:
+            answer = await answer_research_question(
+                database_url=settings.research_database_url,
+                session_id=session_id,
+                question=body.question,
+                embedding_dimensions=settings.research_embedding_dimensions,
+                embedding_model=settings.research_embedding_model,
+                limit=body.limit,
+            )
+        except Exception as exc:
+            await _append_save_publish_session_event(
+                session,
+                session_id=session_id,
+                user_id=current_user.id,
+                event=_research_upload_step_event(
+                    step_id=step_id,
+                    status="failed",
+                    description="Citation evidence retrieval failed",
+                    metadata={"question": body.question, "error": str(exc)},
+                ),
+            )
+            raise
+
+        retrieval_completed = _research_upload_step_event(
+            step_id=step_id,
+            status="completed",
+            description="Citation evidence retrieval completed",
+            metadata={
+                "citation_count": answer.citation_count,
+                "embedding_model": settings.research_embedding_model,
+            },
+        )
+        _append_session_event(session, retrieval_completed)
+        _publish_session_event(session_id, current_user.id, retrieval_completed)
+
+        assistant_event = _wrap_event("message", {
+            "event_id": _new_event_id(),
+            "timestamp": _now_ts(),
+            "content": answer.content,
+            "role": "assistant",
+            "attachments": [],
+            "metadata": {"research_assistant": {**answer.to_dict(), "question": body.question}},
+        })
+        _append_session_event(session, assistant_event)
+        _publish_session_event(session_id, current_user.id, assistant_event)
+        await session.save()
+
+        return ApiResponse(data=answer.to_dict())
+    except ScienceSessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("answer_research_question_for_session failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/{session_id}/research/status", response_model=ApiResponse)
+async def get_research_status_for_session(
+    session_id: str,
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """Return whether this session has indexed uploaded-paper evidence."""
+    try:
+        session = await async_get_science_session(session_id)
+        if session.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        status = await get_research_session_status_from_database(
+            settings.research_database_url,
+            session_id=session_id,
+        )
+        return ApiResponse(data=status.to_dict())
+    except ScienceSessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("get_research_status_for_session failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/{session_id}/research/report", response_model=ApiResponse)
+async def generate_research_report_for_session(
+    session_id: str,
+    body: ResearchReportRequest,
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """Generate a Markdown research artifact using only uploaded paper evidence."""
+    try:
+        session = await async_get_science_session(session_id)
+        if session.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        pre_file_snapshot = _snapshot_workspace_files(session.vm_root_dir)
+
+        user_event = _wrap_event("message", {
+            "event_id": _new_event_id(),
+            "timestamp": _now_ts(),
+            "content": f"Generate Markdown research report: {body.question}",
+            "role": "user",
+            "attachments": [],
+            "metadata": {"research_assistant": {"mode": "markdown_report"}},
+        })
+        _append_session_event(session, user_event)
+        _publish_session_event(session_id, current_user.id, user_event)
+
+        step_id = f"research-report-{_new_event_id()}"
+        report_started = _research_upload_step_event(
+            step_id=step_id,
+            status="running",
+            description="Generating Markdown research artifact from uploaded paper evidence",
+            metadata={"question": body.question, "limit": body.limit},
+        )
+        _append_session_event(session, report_started)
+        _publish_session_event(session_id, current_user.id, report_started)
+
+        try:
+            report = await generate_markdown_research_report(
+                database_url=settings.research_database_url,
+                session_id=session_id,
+                question=body.question,
+                workspace_dir=session.vm_root_dir,
+                embedding_dimensions=settings.research_embedding_dimensions,
+                embedding_model=settings.research_embedding_model,
+                limit=body.limit,
+            )
+        except Exception as exc:
+            await _append_save_publish_session_event(
+                session,
+                session_id=session_id,
+                user_id=current_user.id,
+                event=_research_upload_step_event(
+                    step_id=step_id,
+                    status="failed",
+                    description="Markdown research artifact generation failed",
+                    metadata={"question": body.question, "error": str(exc)},
+                ),
+            )
+            raise
+
+        report_completed = _research_upload_step_event(
+            step_id=step_id,
+            status="completed",
+            description="Markdown research artifact generated",
+            metadata=report.to_dict(),
+        )
+        _append_session_event(session, report_completed)
+        _publish_session_event(session_id, current_user.id, report_completed)
+
+        post_file_snapshot = _snapshot_workspace_files(session.vm_root_dir)
+        round_files = _diff_workspace_files(
+            pre_file_snapshot,
+            post_file_snapshot,
+            session.vm_root_dir,
+            session_id,
+        )
+
+        assistant_event = _wrap_event("message", {
+            "event_id": _new_event_id(),
+            "timestamp": _now_ts(),
+            "content": (
+                f"Generated Markdown research artifact `{report.title}` with "
+                f"{report.citation_count} paper citations."
+            ),
+            "role": "assistant",
+            "attachments": [],
+            "metadata": {"research_assistant": {"report": report.to_dict()}},
+        })
+        _append_session_event(session, assistant_event)
+        _publish_session_event(session_id, current_user.id, assistant_event)
+
+        done_event = _wrap_event("done", {
+            "event_id": _new_event_id(),
+            "timestamp": _now_ts(),
+            "statistics": {
+                "citation_count": report.citation_count,
+                "artifact_count": len(round_files),
+            },
+            "round_files": round_files,
+        })
+        _append_session_event(session, done_event)
+        _publish_session_event(session_id, current_user.id, done_event)
+
+        setattr(session, "status", SessionStatus.COMPLETED)
+        await session.save()
+
+        return ApiResponse(data={**report.to_dict(), "round_files": round_files})
+    except ScienceSessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("generate_research_report_for_session failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
 
 @router.get("/notifications")
 async def session_notifications(

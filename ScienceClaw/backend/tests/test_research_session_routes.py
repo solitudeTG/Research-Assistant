@@ -1,0 +1,197 @@
+import importlib
+import sys
+import types
+from pathlib import Path
+
+import pytest
+
+
+class FakeSession:
+    def __init__(self, *, user_id="user-1", vm_root_dir=None):
+        self.user_id = user_id
+        self.events = []
+        self.vm_root_dir = Path(vm_root_dir or ".")
+        self.save_count = 0
+        self.status = "pending"
+
+    async def save(self):
+        self.save_count += 1
+
+
+class FakeUpload:
+    filename = "paper.pdf"
+    content_type = "application/pdf"
+
+    async def read(self):
+        return b"%PDF-1.4\nfake"
+
+
+def _load_sessions_module(monkeypatch):
+    async def unused_async(*args, **kwargs):
+        raise AssertionError("unexpected ScienceClaw session dependency call")
+
+    monkeypatch.setitem(
+        sys.modules,
+        "backend.deepagent.engine",
+        types.SimpleNamespace(get_llm_model=lambda *args, **kwargs: None),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "backend.deepagent.runner",
+        types.SimpleNamespace(arun_science_task_stream=unused_async),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "backend.deepagent.sessions",
+        types.SimpleNamespace(
+            ScienceSessionNotFoundError=type("ScienceSessionNotFoundError", (Exception,), {}),
+            async_create_science_session=unused_async,
+            async_delete_science_session=unused_async,
+            async_get_science_session=unused_async,
+            async_list_science_sessions=unused_async,
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "backend.user.dependencies",
+        types.SimpleNamespace(
+            get_current_user=lambda: None,
+            require_user=lambda: None,
+            User=object,
+        ),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "backend.models",
+        types.SimpleNamespace(get_model_config=lambda *args, **kwargs: None),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "backend.mongodb.db",
+        types.SimpleNamespace(db=types.SimpleNamespace(get_collection=lambda name: None)),
+    )
+    sys.modules.pop("backend.route.sessions", None)
+    return importlib.import_module("backend.route.sessions")
+
+
+@pytest.mark.asyncio
+async def test_research_answer_failure_persists_failed_trace_step(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession()
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    async def fail_answer(*args, **kwargs):
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "answer_research_question", fail_answer)
+    monkeypatch.setattr(sessions, "_publish_session_event", lambda *args, **kwargs: None)
+
+    with pytest.raises(sessions.HTTPException) as excinfo:
+        await sessions.answer_research_question_for_session(
+            "session-1",
+            sessions.ResearchAnswerRequest(question="What did the paper find?"),
+            types.SimpleNamespace(id="user-1"),
+        )
+
+    assert excinfo.value.status_code == 500
+    failed_steps = [
+        event["data"]
+        for event in session.events
+        if event.get("event") == "step" and event.get("data", {}).get("status") == "failed"
+    ]
+    assert len(failed_steps) == 1
+    assert failed_steps[0]["id"].startswith("research-answer-")
+    assert failed_steps[0]["description"] == "Citation evidence retrieval failed"
+    assert failed_steps[0]["metadata"]["question"] == "What did the paper find?"
+    assert "database unavailable" in failed_steps[0]["metadata"]["error"]
+    assert session.save_count == 1
+
+
+@pytest.mark.asyncio
+async def test_research_report_failure_persists_failed_trace_step(monkeypatch, tmp_path):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession(vm_root_dir=tmp_path)
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    async def fail_report(*args, **kwargs):
+        raise RuntimeError("report writer unavailable")
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "generate_markdown_research_report", fail_report)
+    monkeypatch.setattr(sessions, "_publish_session_event", lambda *args, **kwargs: None)
+
+    with pytest.raises(sessions.HTTPException) as excinfo:
+        await sessions.generate_research_report_for_session(
+            "session-1",
+            sessions.ResearchReportRequest(question="Summarize the evidence"),
+            types.SimpleNamespace(id="user-1"),
+        )
+
+    assert excinfo.value.status_code == 500
+    failed_steps = [
+        event["data"]
+        for event in session.events
+        if event.get("event") == "step" and event.get("data", {}).get("status") == "failed"
+    ]
+    assert len(failed_steps) == 1
+    assert failed_steps[0]["id"].startswith("research-report-")
+    assert failed_steps[0]["description"] == "Markdown research artifact generation failed"
+    assert failed_steps[0]["metadata"]["question"] == "Summarize the evidence"
+    assert "report writer unavailable" in failed_steps[0]["metadata"]["error"]
+    assert session.save_count == 1
+
+
+@pytest.mark.asyncio
+async def test_research_upload_marks_session_completed_after_indexing(monkeypatch, tmp_path):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession(vm_root_dir=tmp_path)
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    async def fake_index_ingestion_result(*args, **kwargs):
+        return types.SimpleNamespace(
+            evidence_record_count=1,
+            embedding_count=1,
+            embedding_model="local-hashing-v1",
+        )
+
+    paper = types.SimpleNamespace(
+        paper_id="paper-1",
+        title="Paper 1",
+        authors=[],
+        parser="grobid-tei",
+    )
+    ingestion = types.SimpleNamespace(
+        paper=paper,
+        chunks=[types.SimpleNamespace(chunk_id="chunk-1")],
+        artifact=types.SimpleNamespace(
+            manifest_path="/workspace/research_data/paper-1/canonical_paper.json",
+            evidence_preview_path="/workspace/research_data/paper-1/evidence_preview.md",
+        ),
+    )
+
+    monkeypatch.setattr(sessions, "_WORKSPACE_DIR", str(tmp_path))
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "is_research_document", lambda path: True)
+    monkeypatch.setattr(sessions, "ingest_uploaded_paper", lambda **kwargs: ingestion)
+    monkeypatch.setattr(sessions, "index_ingestion_result", fake_index_ingestion_result)
+    monkeypatch.setattr(sessions, "_publish_session_event", lambda *args, **kwargs: None)
+
+    response = await sessions.upload_session_file(
+        "session-1",
+        FakeUpload(),
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    assert response.data["metadata"]["research_assistant"]["status"] == "indexed"
+    assert session.status == sessions.SessionStatus.COMPLETED
+    assert session.events[-1]["data"]["description"] == "Paper evidence indexed: paper.pdf"

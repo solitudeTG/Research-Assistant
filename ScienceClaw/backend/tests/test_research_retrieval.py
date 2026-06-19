@@ -1,0 +1,56 @@
+import pytest
+
+from backend.research_assistant.retrieval import hybrid_search_evidence
+
+
+class FetchingConnection:
+    def __init__(self):
+        self.calls = []
+
+    async def fetch(self, sql, *args):
+        self.calls.append((sql, args))
+        return [
+            {
+                "evidence_id": 7,
+                "chunk_id": "chunk-1",
+                "paper_id": "paper-1",
+                "title": "Hybrid Retrieval for Papers",
+                "section": "Method",
+                "page_start": 3,
+                "page_end": 4,
+                "quote": "PostgreSQL full-text search and pgvector both contribute evidence.",
+                "rank_score": 0.91,
+            }
+        ]
+
+
+@pytest.mark.asyncio
+async def test_hybrid_search_evidence_returns_citable_paper_chunks():
+    connection = FetchingConnection()
+
+    hits = await hybrid_search_evidence(
+        connection,
+        session_id="session-1",
+        query_text="hybrid retrieval evidence",
+        query_embedding=[0.1] * 1536,
+        embedding_model="test-embedding",
+        limit=5,
+    )
+
+    assert len(hits) == 1
+    assert hits[0].evidence_id == 7
+    assert hits[0].paper_id == "paper-1"
+    assert hits[0].section == "Method"
+    assert hits[0].quote.startswith("PostgreSQL full-text search")
+    assert hits[0].citation_label == "[paper-1:Method:3-4]"
+
+    sql, args = connection.calls[0]
+    normalized_sql = sql.lower()
+    assert "evidence_type = 'paper'" in normalized_sql
+    assert "evidence_type = 'web'" not in normalized_sql
+    assert "content_tsv @@ websearch_to_tsquery" in normalized_sql
+    assert "embedding <=> $3::vector" in normalized_sql
+    assert "research_evidence_records" in normalized_sql
+    assert args[0] == "session-1"
+    assert args[1] == "hybrid retrieval evidence"
+    assert args[3] == "test-embedding"
