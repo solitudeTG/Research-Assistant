@@ -49,6 +49,45 @@
           <suggested-questions v-else-if="part.type === 'questions'" :questions="part.questions || []" @click="emit('suggestionClick', $event)" />
         </template>
       </div>
+      <div v-if="researchCitations.length > 0" class="border-t border-gray-100 dark:border-gray-800 px-4 py-3 bg-gray-50/60 dark:bg-gray-900/30">
+        <div class="flex items-center justify-between gap-3 mb-2">
+          <div class="text-xs font-semibold text-[var(--text-secondary)]">
+            Citation evidence
+          </div>
+          <div class="text-[11px] text-[var(--text-tertiary)] tabular-nums">
+            {{ researchCitations.length }}
+          </div>
+        </div>
+        <div class="flex flex-col gap-2">
+          <details
+            v-for="citation in researchCitations"
+            :key="citation.evidence_id"
+            class="rounded-lg border border-gray-200/80 dark:border-gray-700/80 bg-white/80 dark:bg-[#1e1e1e]/80 px-3 py-2"
+          >
+            <summary class="cursor-pointer list-none">
+              <div class="flex flex-col gap-1">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-xs font-semibold text-[var(--text-primary)] truncate">
+                    {{ citation.citation_label }}
+                  </span>
+                  <span class="text-[10px] uppercase tracking-wide text-[var(--text-tertiary)]">
+                    paper
+                  </span>
+                </div>
+                <div class="text-[11px] text-[var(--text-tertiary)] truncate">
+                  {{ citation.title }} · {{ citation.section }}<span v-if="citation.page_start"> · p. {{ citation.page_start }}<template v-if="citation.page_end && citation.page_end !== citation.page_start">-{{ citation.page_end }}</template></span>
+                </div>
+              </div>
+            </summary>
+            <div class="mt-2 text-xs leading-relaxed text-[var(--text-secondary)] whitespace-pre-wrap">
+              {{ citation.quote }}
+            </div>
+            <div class="mt-2 text-[11px] text-[var(--text-tertiary)]">
+              chunk: {{ citation.chunk_id }}
+            </div>
+          </details>
+        </div>
+      </div>
     </div>
 
     <!-- Footer Bar - 操作按钮 + 统计信息 -->
@@ -88,11 +127,19 @@
         >
           <PdfIcon :size="16" />
         </button>
+        <button
+          v-if="canGenerateResearchReport"
+          class="msg-action-btn msg-action-btn--report"
+          @click="handleGenerateResearchReport"
+          title="Generate Markdown research report"
+        >
+          <FileText class="w-4 h-4" />
+        </button>
         <template v-if="roundFiles.length > 0">
           <div class="msg-action-divider"></div>
           <button
             class="msg-action-btn msg-action-btn--files"
-            @click="showFileListPanel()"
+            @click="showRoundFilesPanel(roundFiles)"
             :title="`查看本轮对话文件 (${roundFiles.length})`"
           >
             <FolderOpen class="w-4 h-4" />
@@ -145,7 +192,7 @@ import DOMPurify from 'dompurify';
 import hljs from 'highlight.js';
 import katex from 'katex';
 import mermaid from 'mermaid';
-import { CheckIcon, ThumbsUpIcon, ThumbsDownIcon, CopyIcon, ClockIcon, WrenchIcon, ArrowDownIcon, ArrowUpIcon, FolderOpen } from 'lucide-vue-next';
+import { CheckIcon, ThumbsUpIcon, ThumbsDownIcon, CopyIcon, ClockIcon, WrenchIcon, ArrowDownIcon, ArrowUpIcon, FolderOpen, FileText } from 'lucide-vue-next';
 import PdfIcon from './icons/PdfIcon.vue';
 import { computed, ref, onMounted, nextTick, watch } from 'vue';
 import { ToolContent, StepContent } from '../types/message';
@@ -500,6 +547,7 @@ const emit = defineEmits<{
   (e: 'toolClick', tool: ToolContent): void;
   (e: 'suggestionClick', question: string): void;
   (e: 'convertToPdf'): void;
+  (e: 'generateResearchReport', question: string): void;
 }>();
 
 const handleToolClick = (tool: ToolContent) => {
@@ -539,7 +587,21 @@ const handleConvertToPdf = () => {
 
 // 本轮文件
 const roundFiles = computed(() => messageContent.value.round_files || []);
-const { showRoundFilesPanel, showFileListPanel } = useFilePanel();
+const { showRoundFilesPanel } = useFilePanel();
+
+const reportQuestion = computed(() => {
+  return messageContent.value.metadata?.research_assistant?.question || '';
+});
+
+const canGenerateResearchReport = computed(() => {
+  return researchCitations.value.length > 0 && reportQuestion.value.trim().length > 0;
+});
+
+const handleGenerateResearchReport = () => {
+  const question = reportQuestion.value.trim();
+  if (!question) return;
+  emit('generateResearchReport', question);
+};
 
 // 处理 Markdown 内容区域的点击事件（图片 Lightbox + 代码块全屏）
 const handleMarkdownClick = (event: MouseEvent) => {
@@ -596,6 +658,9 @@ const stepContent = computed(() => props.message.content as StepContent);
 const messageContent = computed(() => props.message.content as MessageContent);
 const toolContent = computed(() => props.message.content as ToolContent);
 const attachmentsContent = computed(() => props.message.content as AttachmentsContent);
+const researchCitations = computed(() => {
+  return messageContent.value.metadata?.research_assistant?.citations || [];
+});
 
 const { relativeTime } = useRelativeTime();
 

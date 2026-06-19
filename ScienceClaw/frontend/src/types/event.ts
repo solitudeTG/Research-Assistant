@@ -42,6 +42,7 @@ export interface MessageEventData extends BaseEventData {
   content: string;
   role: "user" | "assistant";
   attachments: FileInfo[];
+  metadata?: Record<string, any>;
 }
 
 export interface ErrorEventData extends BaseEventData {

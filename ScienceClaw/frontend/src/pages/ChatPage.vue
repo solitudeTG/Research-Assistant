@@ -86,6 +86,15 @@
                 class="h-8 w-8 rounded-xl inline-flex items-center justify-center border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 hover:shadow-sm transition-all duration-200">
                 <FileSearch class="text-[var(--icon-secondary)]" :size="16" />
               </button>
+              <button v-if="researchModeAvailable" @click="toggleResearchMode"
+                class="h-8 rounded-xl inline-flex items-center justify-center gap-1.5 border px-2.5 text-xs font-semibold hover:shadow-sm transition-all duration-200"
+                :class="researchModeEnabled
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300'
+                  : 'border-gray-200 bg-white text-[var(--text-secondary)] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'"
+                :title="researchModeEnabled ? 'Paper evidence mode' : 'General agent mode'">
+                <FileText :size="14" />
+                <span class="hidden sm:inline">{{ researchModeEnabled ? 'Research' : 'General' }}</span>
+              </button>
 
             </div>
           </div>
@@ -147,7 +156,7 @@
               </div>
             </div>
             <ChatMessage v-else-if="group.type === 'single' && group.message" :message="group.message"
-              @toolClick="handleToolClick" @suggestionClick="handleSuggestionClick" @convertToPdf="handleConvertToPdf" :mode="mode"
+              @toolClick="handleToolClick" @suggestionClick="handleSuggestionClick" @convertToPdf="handleConvertToPdf" @generateResearchReport="handleGenerateResearchReport" :mode="mode"
               :isLast="index === lastProcessGroupIndex" :isLoading="isLoading" />
           </template>
 
@@ -256,7 +265,7 @@ import {
 } from '../types/event';
 import ToolPanel from '../components/ToolPanel.vue'
 import PlanPanel from '../components/PlanPanel.vue';
-import { ArrowDown, FileSearch, PanelLeft, Lock, Globe, Link, Check, Package, Wrench, X } from 'lucide-vue-next';
+import { ArrowDown, FileSearch, PanelLeft, Lock, Globe, Link, Check, Package, Wrench, X, FileText } from 'lucide-vue-next';
 import ShareIcon from '@/components/icons/ShareIcon.vue';
 import { showErrorToast, showSuccessToast } from '../utils/toast';
 import type { FileInfo } from '../api/file';
@@ -319,6 +328,8 @@ const createInitialState = () => ({
   activitySnapshots: [] as { items: ActivityItem[], plan: PlanEventData | undefined }[], // Per-turn snapshots
   selectedActivityTurn: -1 as number, // Which turn to show (-1 = live/current)
   pendingToolCallIds: [] as string[], // Tools not yet associated with any plan step
+  researchModeAvailable: false,
+  researchModeEnabled: false,
 });
 
 // Create reactive state
@@ -349,6 +360,8 @@ const {
   activitySnapshots,
   selectedActivityTurn,
   pendingToolCallIds,
+  researchModeAvailable,
+  researchModeEnabled,
 } = toRefs(state);
 
 const { groupedMessages } = useMessageGrouper(messages);
@@ -651,9 +664,33 @@ const findBestStepForFlush = (): StepEventData | undefined => {
     || plan.value.steps[0];
 };
 
+const syncStepIntoActivityPlan = (stepData: StepEventData) => {
+  const existingPlan = plan.value ?? {
+    event_id: stepData.event_id,
+    timestamp: stepData.timestamp,
+    steps: [] as StepEventData[],
+  };
+  const existingStep = existingPlan.steps.find(s => s.id === stepData.id);
+
+  if (existingStep) {
+    existingStep.status = stepData.status;
+    if (stepData.description) existingStep.description = stepData.description;
+    if (stepData.tools?.length) existingStep.tools = stepData.tools;
+  } else {
+    existingPlan.steps.push({
+      ...stepData,
+      tools: stepData.tools ?? [],
+    });
+  }
+
+  plan.value = { ...existingPlan, steps: [...existingPlan.steps] };
+};
+
 // Handle step event
 const handleStepEvent = (stepData: StepEventData) => {
   const lastStep = getLastStep();
+
+  syncStepIntoActivityPlan(stepData);
   
   // Sync status with plan
   if (plan.value) {
@@ -860,15 +897,123 @@ const handleEvent = (event: AgentSSEEvent) => {
 
 const onFilesChanged = (files: FileInfo[]) => {
   attachments.value = [...files];
+  if (hasIndexedResearchAttachment(files)) {
+    activateResearchMode();
+  }
 };
 
 const handleSubmit = () => {
   chat(inputMessage.value, attachments.value);
 }
 
+const activateResearchMode = () => {
+  if (!researchModeAvailable.value) {
+    researchModeEnabled.value = true;
+  }
+  researchModeAvailable.value = true;
+};
+
+const toggleResearchMode = () => {
+  if (!researchModeAvailable.value) return;
+  researchModeEnabled.value = !researchModeEnabled.value;
+};
+
+const hasIndexedResearchAttachment = (files: FileInfo[]) => {
+  return files.some((file) => {
+    const status = file.metadata?.research_assistant?.status;
+    return status === 'indexed';
+  });
+};
+
+const hasIndexedResearchEvent = (event: any) => {
+  const status = event?.data?.metadata?.research_assistant?.status;
+  return status === 'indexed';
+};
+
+const refreshResearchStatus = async (targetSessionId: string) => {
+  try {
+    const status = await agentApi.getResearchStatus(targetSessionId);
+    if (status.has_indexed_papers) {
+      activateResearchMode();
+    } else {
+      researchModeAvailable.value = false;
+      researchModeEnabled.value = false;
+    }
+  } catch (error) {
+    console.warn('Failed to load research status:', error);
+  }
+};
+
+const researchChat = async (message: string) => {
+  if (!sessionId.value || _unmounted) return;
+  const trimmed = message.trim();
+  if (!trimmed) return;
+
+  if (cancelCurrentChat.value) {
+    cancelCurrentChat.value();
+    cancelCurrentChat.value = null;
+  }
+
+  inputMessage.value = '';
+  attachments.value = [];
+  selectedActivityTurn.value = -1;
+  activityItems.value = [];
+  pendingToolCallIds.value = [];
+  lastTurnHadError.value = false;
+  follow.value = true;
+  isLoading.value = true;
+  activityPanelRef.value?.show();
+
+  try {
+    await agentApi.answerResearchQuestion(sessionId.value, trimmed, 5);
+    activateResearchMode();
+  } catch (error) {
+    console.error('Research answer error:', error);
+    showErrorToast(t('Failed to answer from paper evidence'));
+    isLoading.value = false;
+    lastTurnHadError.value = true;
+  } finally {
+    isLoading.value = false;
+  }
+};
+
+const handleGenerateResearchReport = async (question: string) => {
+  if (!sessionId.value || _unmounted) return;
+  const trimmed = question.trim();
+  if (!trimmed) return;
+
+  selectedActivityTurn.value = -1;
+  activityItems.value = [];
+  pendingToolCallIds.value = [];
+  lastTurnHadError.value = false;
+  follow.value = true;
+  isLoading.value = true;
+  activityPanelRef.value?.show();
+
+  try {
+    await agentApi.generateResearchReport(sessionId.value, trimmed, 8);
+    showSuccessToast(t('Markdown research report generated'));
+  } catch (error) {
+    console.error('Research report error:', error);
+    showErrorToast(t('Failed to generate Markdown research report'));
+    lastTurnHadError.value = true;
+  } finally {
+    isLoading.value = false;
+  }
+};
+
 const chat = async (message: string = '', files: FileInfo[] = [], reconnect: boolean = false) => {
   console.log('[chat] called, sessionId:', sessionId.value, 'reconnect:', reconnect, 'message:', message?.slice(0, 30), 'files:', files?.length, '_unmounted:', _unmounted);
   if (!sessionId.value || _unmounted) { console.log('[chat] aborted: no sessionId or unmounted'); return; }
+
+  const hasIndexedAttachment = hasIndexedResearchAttachment(files);
+  if (hasIndexedAttachment) {
+    activateResearchMode();
+  }
+  if (!reconnect && message.trim() && (hasIndexedAttachment || (researchModeAvailable.value && researchModeEnabled.value && files.length === 0))) {
+    await researchChat(message);
+    return;
+  }
 
   if (cancelCurrentChat.value) {
     cancelCurrentChat.value();
@@ -1039,6 +1184,8 @@ const restoreSession = async () => {
   }
 
   if (isStale()) { console.log('[restoreSession] stale after load, aborting'); return; }
+  await refreshResearchStatus(restoreTarget);
+  if (isStale()) return;
 
   if (session.title) {
     title.value = session.title;
@@ -1111,6 +1258,9 @@ const restoreSession = async () => {
   onSessionUpdated(({ session_id, session_event }) => {
     if (!sessionId.value || session_id !== sessionId.value || _unmounted) return;
     if (session_event) {
+      if (hasIndexedResearchEvent(session_event)) {
+        activateResearchMode();
+      }
       if (session_event.event === 'message' && session_event.data?.role === 'user') {
         isLoading.value = true;
         lastTurnHadError.value = false;

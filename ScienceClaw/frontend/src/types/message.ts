@@ -14,10 +14,42 @@ export interface BaseContent {
 
 export interface MessageContent extends BaseContent {
   content: string;
+  metadata?: {
+    research_assistant?: ResearchAnswerMetadata;
+    [key: string]: any;
+  };
   /** 该轮对话的统计信息 */
   statistics?: StatisticsData;
   /** 本轮新增/修改的文件列表 */
   round_files?: RoundFileInfo[];
+}
+
+export interface ResearchCitationMetadata {
+  evidence_id: number;
+  chunk_id: string;
+  paper_id: string;
+  title: string;
+  section: string;
+  page_start?: number | null;
+  page_end?: number | null;
+  quote: string;
+  citation_label: string;
+  source_type: 'paper';
+}
+
+export interface ResearchAnswerMetadata {
+  content?: string;
+  question?: string;
+  citations?: ResearchCitationMetadata[];
+  citation_count?: number;
+  report?: {
+    report_id: string;
+    title: string;
+    question: string;
+    markdown_path: string;
+    evidence_map_path: string;
+    citation_count: number;
+  };
 }
 
 export interface ToolContent extends BaseContent {

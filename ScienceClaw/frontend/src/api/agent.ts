@@ -1,5 +1,6 @@
 import { apiClient, ApiResponse, createSSEConnection, SSECallbacks } from './client';
 import type { FileInfo } from './file';
+import type { RoundFileInfo } from '../types/event';
 import { ListSessionItem, SessionStatus, GetSessionResponse, SkillItem, ExternalSkillItem, ExternalToolItem } from '../types/response';
 
 // Re-export or alias if needed for backward compatibility, 
@@ -19,6 +20,43 @@ export interface ChatRequest {
   attachments?: string[];
   language?: string;
   model_config_id?: string;
+}
+
+export interface ResearchCitation {
+  evidence_id: number;
+  chunk_id: string;
+  paper_id: string;
+  title: string;
+  section: string;
+  page_start?: number | null;
+  page_end?: number | null;
+  quote: string;
+  citation_label: string;
+  source_type: 'paper';
+}
+
+export interface ResearchAnswer {
+  content: string;
+  citations: ResearchCitation[];
+  citation_count: number;
+  question?: string;
+}
+
+export interface ResearchReport {
+  report_id: string;
+  title: string;
+  question: string;
+  markdown_path: string;
+  evidence_map_path: string;
+  citation_count: number;
+  round_files?: RoundFileInfo[];
+}
+
+export interface ResearchSessionStatus {
+  session_id: string;
+  paper_count: number;
+  chunk_count: number;
+  has_indexed_papers: boolean;
 }
 
 export async function createSession(data: CreateSessionRequest): Promise<Session> {
@@ -64,6 +102,37 @@ export async function updateSessionTitle(sessionId: string, title: string): Prom
 
 export function chatWithSession(sessionId: string, data: ChatRequest, callbacks: SSECallbacks<any>): Promise<() => void> {
   return createSSEConnection(`/sessions/${sessionId}/chat`, { method: 'POST', body: data }, callbacks);
+}
+
+export async function answerResearchQuestion(
+  sessionId: string,
+  question: string,
+  limit: number = 5,
+): Promise<ResearchAnswer> {
+  const response = await apiClient.post<ApiResponse<ResearchAnswer>>(
+    `/sessions/${sessionId}/research/answer`,
+    { question, limit },
+  );
+  return response.data.data;
+}
+
+export async function getResearchStatus(sessionId: string): Promise<ResearchSessionStatus> {
+  const response = await apiClient.get<ApiResponse<ResearchSessionStatus>>(
+    `/sessions/${sessionId}/research/status`,
+  );
+  return response.data.data;
+}
+
+export async function generateResearchReport(
+  sessionId: string,
+  question: string,
+  limit: number = 8,
+): Promise<ResearchReport> {
+  const response = await apiClient.post<ApiResponse<ResearchReport>>(
+    `/sessions/${sessionId}/research/report`,
+    { question, limit },
+  );
+  return response.data.data;
 }
 
 export async function stopSession(sessionId: string): Promise<void> {
