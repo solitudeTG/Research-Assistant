@@ -43,7 +43,39 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
 
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: research_assistant
+      POSTGRES_USER: research
+      POSTGRES_PASSWORD: research_dev_password
+      TZ: Asia/Shanghai
+    ports:
+      - "25432:5432"
+    volumes:
+      - research_assistant_postgres_data:/var/lib/postgresql/data
+      - ./ScienceClaw/backend/research_assistant/storage/schema.sql:/docker-entrypoint-initdb.d/001-research-schema.sql:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U research -d research_assistant"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
   # ── SearXNG 搜索引擎（websearch 服务的依赖） ──
+  grobid:
+    image: ${GROBID_IMAGE:-grobid/grobid:0.8.0}
+    environment:
+      TZ: Asia/Shanghai
+    ports:
+      - "8070:8070"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8070/api/isalive >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
   searxng:
     image: searxng/searxng:latest
     environment:
@@ -110,6 +142,11 @@ services:
       MONGODB_PORT: 27017
       MONGODB_USER: scienceone
       MONGODB_PASSWORD: Yp51Bi1eEjC77sAt
+      RESEARCH_DATABASE_URL: postgresql://research:research_dev_password@postgres:5432/research_assistant
+      RESEARCH_EMBEDDING_PROVIDER: local-hashing
+      RESEARCH_EMBEDDING_MODEL: local-hashing-v1
+      RESEARCH_EMBEDDING_DIMENSIONS: 1536
+      RESEARCH_GROBID_URL: http://grobid:8070
       TASK_SERVICE_API_KEY: ${TASK_SERVICE_API_KEY:-}
       WEBSEARCH_API_KEY: "fdsfkjikmii"
       # 网页搜索服务地址（Docker 内部通信）
@@ -133,6 +170,10 @@ services:
         condition: service_started
       mongo:
         condition: service_started
+      postgres:
+        condition: service_healthy
+      grobid:
+        condition: service_healthy
       websearch:
         condition: service_started
     healthcheck:
@@ -246,5 +287,6 @@ services:
 
 volumes:
   scienceclaw_mongo_data:
+  research_assistant_postgres_data:
   scienceclaw_frontend_node_modules:
   scienceclaw_frontend_npm_cache:

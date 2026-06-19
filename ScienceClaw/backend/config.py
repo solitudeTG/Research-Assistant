@@ -34,6 +34,15 @@ class Settings(BaseSettings):
     mongodb_username: str = os.environ.get("MONGODB_USER", "")
     mongodb_password: str = os.environ.get("MONGODB_PASSWORD", "")
 
+    research_database_url: str = os.environ.get(
+        "RESEARCH_DATABASE_URL",
+        "postgresql://research:research_dev_password@localhost:25432/research_assistant",
+    )
+    research_embedding_dimensions: int = int(os.environ.get("RESEARCH_EMBEDDING_DIMENSIONS", "1536"))
+    research_embedding_provider: str = os.environ.get("RESEARCH_EMBEDDING_PROVIDER", "local-hashing")
+    research_embedding_model: str = os.environ.get("RESEARCH_EMBEDDING_MODEL", "local-hashing-v1")
+    research_grobid_url: str = os.environ.get("RESEARCH_GROBID_URL", "http://localhost:8070")
+
     xelatex_cmd: str = os.environ.get("XELATEX_CMD", "/usr/local/texlive/2025/bin/universal-darwin/xelatex")
     pandoc_cmd: str = os.environ.get("PANDOC_CMD", "/usr/local/bin/pandoc")
 
