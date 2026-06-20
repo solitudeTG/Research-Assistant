@@ -74,6 +74,7 @@ const initTerminal = () => {
 };
 
 const writeExecution = (toolName: string, command: string, output?: string, status?: string) => {
+  void toolName;
   if (!terminal) {
     initTerminal();
   }

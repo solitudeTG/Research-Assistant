@@ -138,12 +138,12 @@
 
 <script setup lang="ts">
 import SimpleBar from '../components/SimpleBar.vue';
-import { ref, onMounted, onUnmounted, watch, nextTick, reactive, toRefs, computed } from 'vue';
+import { ref, onMounted, watch, nextTick, reactive, toRefs, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import ChatMessage from '../components/ChatMessage.vue';
 import * as agentApi from '../api/agent';
-import { Message, MessageContent, ToolContent, StepContent, AttachmentsContent, ThinkingContent } from '../types/message';
+import { Message, MessageContent, ToolContent, StepContent, AttachmentsContent } from '../types/message';
 import {
   StepEventData,
   ToolEventData,
@@ -161,7 +161,6 @@ import { ArrowDown, FileSearch, Link, SkipForward, RotateCcw } from 'lucide-vue-
 import RobotAvatar from '../components/icons/RobotAvatar.vue';
 import ScienceClawLogoTextIcon from '../components/icons/ScienceClawLogoTextIcon.vue';
 import { showErrorToast, showSuccessToast } from '../utils/toast';
-import type { FileInfo } from '../api/file';
 import { useSessionFileList } from '../composables/useSessionFileList'
 import { useFilePanel } from '../composables/useFilePanel'
 import { copyToClipboard } from '../utils/dom'

@@ -244,7 +244,7 @@ const { t } = useI18n();
 import LoadingSpinnerIcon from './icons/LoadingSpinnerIcon.vue';
 import SandboxPreview from './SandboxPreview.vue';
 import type { ToolContent } from '../types/message';
-import type { PlanEventData, StepEventData } from '../types/event';
+import type { PlanEventData } from '../types/event';
 import type { SandboxPreviewMode } from '../utils/sandbox';
 import { getPreviewMode } from '../utils/sandbox';
 import { useResizeObserver } from '../composables/useResizeObserver';
@@ -397,10 +397,6 @@ const getToolArg = (tool: ToolContent): string => {
 const formatDuration = (ms: number): string => {
   if (ms < 1000) return `${ms}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
-};
-
-const handleToolClick = (tool: ToolContent) => {
-  emit('toolClick', tool);
 };
 
 const handleClose = () => {

@@ -23,7 +23,7 @@
         :class="{
           'bg-blue-500': isCurrentSession,
           'bg-amber-400': isRunning,
-          'bg-amber-400': session.pinned && !isRunning,
+          'bg-amber-500': session.pinned && !isRunning,
           'bg-gray-300 dark:bg-gray-600': !isCurrentSession && !isRunning && !session.pinned
         }">
       </div>
@@ -134,7 +134,7 @@
 
 <script setup lang="ts">
 import { Pencil, Pin, Trash2, Globe } from 'lucide-vue-next';
-import { computed, ref, nextTick, watch } from 'vue';
+import { computed, ref, nextTick } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { useCustomTime } from '../composables/useTime';
@@ -190,12 +190,56 @@ const isRunning = computed(() => {
 });
 
 const handleSessionClick = () => {
+  if (isSwiping.value || Math.abs(swipeOffset.value) > 0) {
+    swipeOffset.value = 0;
+    isSwiping.value = false;
+    return;
+  }
+
   router.push(`/chat/${props.session.session_id}`);
 
   // Auto close left panel on mobile/tablet
   if (window.innerWidth < 1280) {
     toggleLeftPanel();
   }
+};
+
+const handleTouchStart = (event: TouchEvent) => {
+  const touch = event.touches[0];
+  if (!touch) return;
+  touchStartX.value = touch.clientX;
+  touchStartY.value = touch.clientY;
+  isSwiping.value = false;
+};
+
+const handleTouchMove = (event: TouchEvent) => {
+  const touch = event.touches[0];
+  if (!touch) return;
+
+  const deltaX = touch.clientX - touchStartX.value;
+  const deltaY = touch.clientY - touchStartY.value;
+  if (Math.abs(deltaY) > Math.abs(deltaX)) return;
+
+  if (deltaX < -SWIPE_THRESHOLD / 3) {
+    isSwiping.value = true;
+    swipeOffset.value = Math.max(deltaX, -DELETE_THRESHOLD);
+  }
+};
+
+const handleTouchEnd = () => {
+  if (!isSwiping.value) {
+    swipeOffset.value = 0;
+    return;
+  }
+
+  if (Math.abs(swipeOffset.value) >= DELETE_THRESHOLD) {
+    handleDeleteClick();
+  }
+
+  swipeOffset.value = 0;
+  setTimeout(() => {
+    isSwiping.value = false;
+  }, 0);
 };
 
 const handleTogglePin = async () => {

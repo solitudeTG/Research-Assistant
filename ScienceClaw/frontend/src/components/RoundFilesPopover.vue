@@ -113,7 +113,6 @@ import { Download, FolderOpen, ChevronRight, Eye } from 'lucide-vue-next';
 import type { RoundFileInfo } from '../types/event';
 import { getFileType } from '../utils/fileType';
 import { formatFileSize } from '../utils/fileType';
-import { useFilePanel } from '../composables/useFilePanel';
 import { triggerAuthenticatedDownload } from '../api/file';
 import type { FileInfo } from '../api/file';
 import FilePreviewModal from './FilePreviewModal.vue';
@@ -122,14 +121,9 @@ const props = defineProps<{
   files: RoundFileInfo[];
 }>();
 
-const emit = defineEmits<{
-  (e: 'file-click', file: FileInfo): void;
-}>();
-
 const processExpanded = ref(false);
 const previewFile = ref<FileInfo | null>(null);
 const previewVisible = ref(false);
-const { showFilePanel } = useFilePanel();
 
 const PREVIEWABLE_EXTS = ['md', 'txt', 'log', 'csv', 'json', 'xml', 'yaml', 'yml', 'sh', 'py', 'js', 'ts', 'html', 'css', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp', 'ico'];
 
@@ -165,12 +159,6 @@ const toFileInfo = (rf: RoundFileInfo): FileInfo => ({
   upload_date: rf.upload_date,
   file_url: rf.file_url,
 });
-
-const onFileClick = (file: RoundFileInfo) => {
-  const fi = toFileInfo(file);
-  emit('file-click', fi);
-  showFilePanel(fi);
-};
 
 const downloadFile = async (file: RoundFileInfo) => {
   try {

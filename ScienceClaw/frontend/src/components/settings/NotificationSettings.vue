@@ -122,7 +122,7 @@
 <script setup lang="ts">
 import { ref, onMounted, markRaw } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { Pencil, Trash2, Plus, Bell, MessageSquare, Send, AlertTriangle } from 'lucide-vue-next';
+import { Pencil, Trash2, Plus, Bell, MessageSquare, AlertTriangle } from 'lucide-vue-next';
 import { listWebhooks, createWebhook, updateWebhook, deleteWebhook, testWebhook } from '@/api/webhooks';
 import type { Webhook } from '@/api/webhooks';
 import { showSuccessToast, showErrorToast } from '@/utils/toast';

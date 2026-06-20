@@ -1,8 +1,8 @@
 import type { FileInfo } from '../api/file';
 
 export type AgentSSEEvent = {
-  event: 'tool' | 'step' | 'message' | 'error' | 'done' | 'title' | 'wait' | 'plan' | 'attachments' | 'thinking';
-  data: ToolEventData | StepEventData | MessageEventData | ErrorEventData | DoneEventData | TitleEventData | WaitEventData | PlanEventData | ThinkingEventData;
+  event: 'tool' | 'step' | 'message' | 'message_chunk' | 'message_chunk_done' | 'error' | 'done' | 'title' | 'wait' | 'plan' | 'attachments' | 'thinking' | 'skill_save_prompt' | 'tool_save_prompt';
+  data: ToolEventData | StepEventData | MessageEventData | MessageChunkEventData | MessageChunkDoneEventData | ErrorEventData | DoneEventData | TitleEventData | WaitEventData | PlanEventData | ThinkingEventData | SkillSavePromptEventData | ToolSavePromptEventData;
 }
 
 export interface BaseEventData {
@@ -32,10 +32,17 @@ export interface ToolEventData extends BaseEventData {
 }
 
 export interface StepEventData extends BaseEventData {
-  status: "pending" | "running" | "completed" | "failed"
+  status: "pending" | "running" | "in_progress" | "completed" | "failed"
   id: string
   description: string
   tools?: ToolEventData[]
+}
+
+export interface MessageChunkEventData extends BaseEventData {
+  content: string;
+}
+
+export interface MessageChunkDoneEventData extends BaseEventData {
 }
 
 export interface MessageEventData extends BaseEventData {
@@ -90,4 +97,13 @@ export interface PlanEventData extends BaseEventData {
 /** 思考过程事件 */
 export interface ThinkingEventData extends BaseEventData {
   content: string;
+}
+
+export interface SkillSavePromptEventData extends BaseEventData {
+  skill_name?: string;
+}
+
+export interface ToolSavePromptEventData extends BaseEventData {
+  tool_name?: string;
+  replaces?: string | null;
 }

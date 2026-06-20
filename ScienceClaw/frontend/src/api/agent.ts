@@ -1,7 +1,7 @@
 import { apiClient, ApiResponse, createSSEConnection, SSECallbacks } from './client';
 import type { FileInfo } from './file';
 import type { RoundFileInfo } from '../types/event';
-import { ListSessionItem, SessionStatus, GetSessionResponse, SkillItem, ExternalSkillItem, ExternalToolItem } from '../types/response';
+import { ListSessionItem, GetSessionResponse, ExternalSkillItem, ExternalToolItem } from '../types/response';
 
 // Re-export or alias if needed for backward compatibility, 
 // but prefer using types from response.ts to ensure consistency.

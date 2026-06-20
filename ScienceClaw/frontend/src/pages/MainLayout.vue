@@ -4,7 +4,7 @@
     <div className="flex-1 min-w-0 h-full py-0 pr-0 relative">
       <div className="flex h-full bg-[var(--background-gray-main)]">
         <div class="flex flex-1 min-w-0 min-h-0">
-          <router-view :key="$route.params.sessionId" />
+          <router-view :key="String($route.params.sessionId || '')" />
           <FilePanel />
         </div>
       </div>

@@ -101,10 +101,6 @@ import { getFileType } from '../utils/fileType';
 import { useSessionFileList } from '../composables/useSessionFileList';
 import FilePreviewModal from './FilePreviewModal.vue';
 
-const emit = defineEmits<{
-  (e: 'file-click', file: FileInfo): void
-}>();
-
 const route = useRoute();
 const files = ref<FileInfo[]>([]);
 const { shared } = useSessionFileList();
@@ -126,7 +122,7 @@ const openPreview = (file: FileInfo) => {
 };
 
 const resultFiles = computed(() => files.value.filter(f => f.category === 'result' || !f.category));
-const processFiles = computed(() => files.value.filter(f => f.category === 'process' || f.category === 'system'));
+const processFiles = computed(() => files.value.filter(f => f.category === 'process'));
 
 const getFileColor = (filename: string) => {
     const ext = filename.split('.').pop()?.toLowerCase() || '';
@@ -166,10 +162,6 @@ const downloadFile = async (fileInfo: FileInfo) => {
     } catch (err) {
         console.error('Download failed:', err);
     }
-}
-
-const onFileClick = (file: FileInfo) => {
-    emit('file-click', file);
 }
 
 onMounted(() => {

@@ -42,7 +42,8 @@ const initVNCConnection = async () => {
     if (props.directWsUrl) {
       wsUrl = props.directWsUrl;
     } else {
-      wsUrl = await getVNCUrl(props.sessionId);
+      const signedUrl = await getVNCUrl(props.sessionId);
+      wsUrl = signedUrl.signed_url;
     }
 
     // Create NoVNC connection

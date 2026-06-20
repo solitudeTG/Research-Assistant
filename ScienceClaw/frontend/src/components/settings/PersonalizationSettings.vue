@@ -30,7 +30,7 @@
           <!-- Existing items -->
           <div
             v-for="(item, iIdx) in section.items"
-            :key="iIdx"
+            :key="`${iIdx}-${item}`"
             class="group flex items-start gap-2"
           >
             <div class="flex-1 relative">

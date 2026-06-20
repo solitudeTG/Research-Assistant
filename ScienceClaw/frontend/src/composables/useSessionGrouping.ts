@@ -42,14 +42,6 @@ function isWithinDays(timestamp: number | null, days: number): boolean {
   return diffDays > 0 && diffDays <= days
 }
 
-function isWithinMonths(timestamp: number | null, months: number): boolean {
-  if (!timestamp) return false
-  const now = new Date()
-  const date = new Date(timestamp * 1000)
-  const diffMonths = (now.getFullYear() - date.getFullYear()) * 12 + (now.getMonth() - date.getMonth())
-  return diffMonths > 0 && diffMonths <= months
-}
-
 /**
  * 会话分组和筛选 composable
  */

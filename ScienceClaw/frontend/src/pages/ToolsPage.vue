@@ -235,7 +235,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
-import { Search, Eye, EyeOff, Trash2, Box, FileCode } from 'lucide-vue-next';
+import { Search, Eye, EyeOff, Trash2, Box } from 'lucide-vue-next';
 import { getTools, blockTool, deleteTool as apiDeleteTool } from '../api/agent';
 import { listTUTools, TUTool, TUCategory } from '../api/tooluniverse';
 import { ExternalToolItem } from '../types/response';

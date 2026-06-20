@@ -259,7 +259,6 @@
 
 <script setup lang="ts">
 import { Message, MessageContent, AttachmentsContent } from '../types/message';
-import ToolUse from './ToolUse.vue';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import hljs from 'highlight.js';
@@ -268,7 +267,7 @@ import mermaid from 'mermaid';
 import { CheckIcon, ThumbsUpIcon, ThumbsDownIcon, CopyIcon, ClockIcon, WrenchIcon, ArrowDownIcon, ArrowUpIcon, FolderOpen, FileText } from 'lucide-vue-next';
 import PdfIcon from './icons/PdfIcon.vue';
 import { computed, ref, onMounted, nextTick, watch } from 'vue';
-import { ToolContent, StepContent } from '../types/message';
+import { ToolContent } from '../types/message';
 import { useRelativeTime } from '../composables/useTime';
 import AttachmentsMessage from './AttachmentsMessage.vue';
 import ImageViewer from './ImageViewer.vue';
@@ -560,7 +559,7 @@ renderer.code = function(token: { text: string; lang?: string } | string, langua
 renderer.link = function(token: { href: string; title?: string | null; text: string } | string, title?: string | null, text?: string) {
   let href: string;
   let linkTitle: string | null | undefined;
-  let linkText: string;
+  let linkText = '';
 
   try {
     if (typeof token === 'object' && token !== null) {
@@ -623,10 +622,6 @@ const emit = defineEmits<{
   (e: 'convertToPdf'): void;
   (e: 'generateResearchReport', question: string): void;
 }>();
-
-const handleToolClick = (tool: ToolContent) => {
-  emit('toolClick', tool);
-};
 
 // Feedback state
 const feedback = ref<'like' | 'dislike' | null>(null);
@@ -728,9 +723,7 @@ const formatTokenCount = (count: number): string => {
 };
 
 // For backward compatibility
-const stepContent = computed(() => props.message.content as StepContent);
 const messageContent = computed(() => props.message.content as MessageContent);
-const toolContent = computed(() => props.message.content as ToolContent);
 const attachmentsContent = computed(() => props.message.content as AttachmentsContent);
 const researchCitations = computed(() => {
   return messageContent.value.metadata?.research_assistant?.citations || [];
@@ -828,8 +821,6 @@ const renderMarkdown = (text: string): string => {
   if (typeof text !== 'string') return '';
 
   const logPrefix = '[Markdown]';
-  const startTime = performance.now();
-
   try {
     // 步骤1：格式化 Markdown
     let formatted = formatMarkdown(text);

@@ -64,10 +64,6 @@ import { computed, onMounted, ref } from 'vue';
 import { bindLarkAccount, getLarkBindingStatus, unbindLarkAccount, type LarkBindingStatus } from '../../api/im';
 import { showErrorToast, showSuccessToast } from '../../utils/toast';
 
-const emit = defineEmits<{
-  back: []
-}>();
-
 const status = ref<LarkBindingStatus>({ bound: false });
 const larkUserId = ref('');
 const loading = ref(false);
