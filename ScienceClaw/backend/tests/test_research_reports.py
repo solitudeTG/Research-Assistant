@@ -94,3 +94,62 @@ async def test_generate_markdown_research_report_writes_artifact_and_evidence_ma
         "subject_id": report.report_id,
         "status": "approved",
     }
+
+
+@pytest.mark.asyncio
+async def test_generate_markdown_research_report_keeps_unsupported_claims_out_of_findings(tmp_path, monkeypatch):
+    async def fake_answer(**kwargs):
+        return ResearchAnswer(
+            content=(
+                "Based on uploaded paper evidence:\n"
+                "1. Hybrid retrieval improves recall. [paper-1:Results:4]\n"
+                "2. Hybrid retrieval proves clinical benefit."
+            ),
+            citations=[
+                ResearchCitation(
+                    evidence_id=17,
+                    chunk_id="chunk-17",
+                    paper_id="paper-1",
+                    title="Hybrid Retrieval",
+                    section="Results",
+                    page_start=4,
+                    page_end=4,
+                    quote="Hybrid retrieval improves recall.",
+                    citation_label="[paper-1:Results:4]",
+                )
+            ],
+        )
+
+    async def fake_persist(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr("backend.research_assistant.reports.answer_research_question", fake_answer)
+    monkeypatch.setattr(
+        "backend.research_assistant.reports.persist_report_evidence_map_to_database",
+        fake_persist,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.reports.persist_audit_result_to_database",
+        fake_persist,
+    )
+
+    report = await generate_markdown_research_report(
+        database_url="postgresql://test",
+        session_id="session-1",
+        question="What does the paper say about retrieval?",
+        workspace_dir=tmp_path,
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=5,
+    )
+
+    markdown = (tmp_path / "research_reports" / f"{report.report_id}.md").read_text(encoding="utf-8")
+    findings_section = markdown.split("## Citation Evidence", maxsplit=1)[0]
+
+    assert "Status: `partial`" in markdown
+    assert "Hybrid retrieval improves recall. [paper-1:Results:4]" in findings_section
+    assert "Hybrid retrieval proves clinical benefit." not in findings_section
+    assert (
+        "| Hybrid retrieval proves clinical benefit. | `unsupported` |  | "
+        "No attached citation quote directly supports this claim. |"
+    ) in markdown

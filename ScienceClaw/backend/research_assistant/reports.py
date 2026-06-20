@@ -123,7 +123,7 @@ def _compose_markdown_report(
         "",
         "## Evidence-Grounded Answer",
         "",
-        answer.content,
+        *_compose_audited_answer_lines(answer),
         "",
         "## Citation Evidence",
         "",
@@ -217,6 +217,23 @@ def _page_label(citation: ResearchCitation) -> str:
 
 def _format_sources(sources: list[str]) -> str:
     return ", ".join(f"`{source}`" for source in sources)
+
+
+def _compose_audited_answer_lines(answer: ResearchAnswer) -> list[str]:
+    approved_claims = [
+        claim.claim_text
+        for claim in answer.audit.claims
+        if claim.status == "approved"
+    ]
+    if approved_claims:
+        return [
+            "Only claims approved by Evidence Audit are listed here:",
+            "",
+            *[f"{index}. {claim_text}" for index, claim_text in enumerate(approved_claims, start=1)],
+        ]
+    return [
+        "No claims passed Evidence Audit for this report. See Claim Checks before using this output.",
+    ]
 
 
 def _compose_claim_check_rows(answer: ResearchAnswer) -> list[str]:
