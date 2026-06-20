@@ -83,9 +83,10 @@ async def test_generate_markdown_research_report_writes_artifact_and_evidence_ma
     assert "Memory, model reasoning, process trace, and tool logs are not cited" in markdown
     assert evidence["audit"]["status"] == "approved"
     assert evidence["evidence"][0]["evidence_id"] == 17
+    assert evidence["evidence"][0]["claim_text"] == "Hybrid retrieval improves recall. [paper-1:Results:4]"
     assert persisted["database_url"] == "postgresql://test"
     assert persisted["report_id"] == report.report_id
-    assert persisted["evidence_rows"] == [(17, "evidence-1", "Hybrid retrieval improves recall.")]
+    assert persisted["evidence_rows"] == [(17, "evidence-1", "Hybrid retrieval improves recall. [paper-1:Results:4]")]
     assert persisted_audit == {
         "database_url": "postgresql://test",
         "audit_id": f"{report.report_id}:audit",

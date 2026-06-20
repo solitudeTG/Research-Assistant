@@ -177,20 +177,13 @@ def _compose_markdown_report(
 
 
 def _build_evidence_map(*, report_id: str, answer: ResearchAnswer) -> dict:
+    citations_by_id = {citation.evidence_id: citation for citation in answer.citations}
     return {
         "report_id": report_id,
         "evidence_scope": "uploaded_papers_only",
         "citation_count": answer.citation_count,
         "audit": answer.audit.to_dict(),
-        "evidence": [
-            {
-                "evidence_id": citation.evidence_id,
-                "markdown_anchor": _citation_anchor(index),
-                "claim_text": citation.quote,
-                "citation": citation.to_dict(),
-            }
-            for index, citation in enumerate(answer.citations, start=1)
-        ],
+        "evidence": _build_approved_claim_evidence_rows(answer, citations_by_id),
     }
 
 
@@ -217,6 +210,30 @@ def _page_label(citation: ResearchCitation) -> str:
 
 def _format_sources(sources: list[str]) -> str:
     return ", ".join(f"`{source}`" for source in sources)
+
+
+def _build_approved_claim_evidence_rows(
+    answer: ResearchAnswer,
+    citations_by_id: dict[int, ResearchCitation],
+) -> list[dict]:
+    rows: list[dict] = []
+    for claim in answer.audit.claims:
+        if claim.status != "approved":
+            continue
+        for evidence_id in claim.evidence_ids:
+            citation = citations_by_id.get(evidence_id)
+            if citation is None:
+                continue
+            citation_index = answer.citations.index(citation) + 1
+            rows.append(
+                {
+                    "evidence_id": citation.evidence_id,
+                    "markdown_anchor": _citation_anchor(citation_index),
+                    "claim_text": claim.claim_text,
+                    "citation": citation.to_dict(),
+                }
+            )
+    return rows
 
 
 def _compose_audited_answer_lines(answer: ResearchAnswer) -> list[str]:
