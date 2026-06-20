@@ -153,6 +153,7 @@
             <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-tertiary)]">
               <span>contextOnly=true</span>
               <span>source=memory</span>
+              <span v-if="typeof memory.relevance_score === 'number'">score={{ memory.relevance_score.toFixed(2) }}</span>
               <span v-if="memory.recall_reason">{{ memory.recall_reason }}</span>
             </div>
           </div>

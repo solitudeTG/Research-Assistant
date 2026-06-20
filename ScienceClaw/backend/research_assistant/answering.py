@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+import re
 
 import shortuuid
 
@@ -10,6 +11,32 @@ from backend.research_assistant.storage.database import (
     hybrid_search_evidence_in_database,
     list_memory_entries_from_database,
 )
+
+_RECALL_STOP_WORDS = {
+    "about",
+    "after",
+    "also",
+    "and",
+    "are",
+    "can",
+    "did",
+    "does",
+    "for",
+    "from",
+    "has",
+    "have",
+    "how",
+    "into",
+    "that",
+    "the",
+    "this",
+    "what",
+    "when",
+    "where",
+    "which",
+    "with",
+    "work",
+}
 
 
 @dataclass(frozen=True)
@@ -103,6 +130,7 @@ async def answer_research_question(
     context_memory = await _load_context_memory(
         database_url=database_url,
         session_id=session_id,
+        question=question,
     )
     content = _compose_extractive_answer(citations)
     return ResearchAnswer(
@@ -125,7 +153,7 @@ def _compose_extractive_answer(citations: list[ResearchCitation]) -> str:
     return "\n".join(lines)
 
 
-async def _load_context_memory(*, database_url: str, session_id: str) -> list[dict]:
+async def _load_context_memory(*, database_url: str, session_id: str, question: str) -> list[dict]:
     memories = await list_memory_entries_from_database(
         database_url,
         session_id=session_id,
@@ -133,14 +161,53 @@ async def _load_context_memory(*, database_url: str, session_id: str) -> list[di
         limit=5,
     )
     context_rows = []
-    for memory in memories:
+    for index, memory in enumerate(memories):
         context = memory.to_context_dict()
         if context.get("source_type") != "memory" or context.get("context_only") is not True:
             continue
+        relevance_score, matched_terms = _memory_relevance(question=question, context=context)
         context_rows.append(
             {
                 **context,
-                "recall_reason": f"Stored {context.get('layer')} research memory for this session.",
+                "relevance_score": relevance_score,
+                "recall_reason": _memory_recall_reason(context=context, matched_terms=matched_terms),
+                "_recall_order": index,
             }
         )
-    return context_rows
+    context_rows.sort(key=lambda row: (-row["relevance_score"], row["_recall_order"]))
+    return [{key: value for key, value in row.items() if key != "_recall_order"} for row in context_rows]
+
+
+def _memory_relevance(*, question: str, context: dict) -> tuple[float, list[str]]:
+    question_terms = _recall_terms(question)
+    memory_terms = _recall_terms(" ".join([str(context.get("title") or ""), str(context.get("content") or "")]))
+    if not question_terms or not memory_terms:
+        return 0.0, []
+    matched_terms = sorted(question_terms & memory_terms)
+    if not matched_terms:
+        return 0.0, []
+    return round(len(matched_terms) / len(question_terms), 3), matched_terms
+
+
+def _recall_terms(text: str) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"[a-zA-Z0-9]+", text.lower())
+        if len(token) > 2 and token not in _RECALL_STOP_WORDS
+    }
+
+
+def _memory_recall_reason(*, context: dict, matched_terms: list[str]) -> str:
+    layer = context.get("layer") or "research"
+    if matched_terms:
+        match_text = f"matched question terms: {', '.join(matched_terms[:5])}"
+    else:
+        match_text = "no direct question-term match"
+
+    source_subject_type = context.get("source_subject_type")
+    source_subject_id = context.get("source_subject_id")
+    source_text = ""
+    if source_subject_type and source_subject_id:
+        source_text = f"; source {source_subject_type} {source_subject_id}"
+
+    return f"{layer} memory recalled for this session; {match_text}{source_text}."

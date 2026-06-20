@@ -44,6 +44,7 @@ export interface ResearchContextMemory {
   context_only: true;
   source_subject_type?: string | null;
   source_subject_id?: string | null;
+  relevance_score?: number;
   recall_reason?: string;
 }
 

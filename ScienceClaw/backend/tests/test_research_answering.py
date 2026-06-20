@@ -116,14 +116,22 @@ async def test_answer_research_question_returns_context_only_memory_separate_fro
         assert limit == 5
 
         class Memory:
-            memory_id = "mem-1"
-            layer = "l2"
-            title = "Retrieval preference"
-            content = "Prefer hybrid retrieval for scholarly terminology."
-            source_type = "memory"
-            context_only = True
-            source_subject_type = "answer"
-            source_subject_id = "answer-1"
+            def __init__(
+                self,
+                *,
+                memory_id,
+                title,
+                content,
+                source_subject_id,
+            ):
+                self.memory_id = memory_id
+                self.layer = "l2"
+                self.title = title
+                self.content = content
+                self.source_type = "memory"
+                self.context_only = True
+                self.source_subject_type = "answer"
+                self.source_subject_id = source_subject_id
 
             def to_context_dict(self):
                 return {
@@ -137,7 +145,20 @@ async def test_answer_research_question_returns_context_only_memory_separate_fro
                     "source_subject_id": self.source_subject_id,
                 }
 
-        return [Memory()]
+        return [
+            Memory(
+                memory_id="mem-unrelated",
+                title="Report preference",
+                content="Keep Markdown report sections compact.",
+                source_subject_id="answer-2",
+            ),
+            Memory(
+                memory_id="mem-relevant",
+                title="Retrieval preference",
+                content="Prefer hybrid retrieval for scholarly terminology.",
+                source_subject_id="answer-1",
+            ),
+        ]
 
     monkeypatch.setattr(
         "backend.research_assistant.answering.hybrid_search_evidence_in_database",
@@ -160,9 +181,16 @@ async def test_answer_research_question_returns_context_only_memory_separate_fro
     payload = answer.to_dict()
     assert answer.citation_count == 1
     assert payload["citation_count"] == 1
-    assert payload["context_memory_count"] == 1
+    assert payload["context_memory_count"] == 2
+    assert payload["context_memory"][0]["memory_id"] == "mem-relevant"
+    assert payload["context_memory"][1]["memory_id"] == "mem-unrelated"
     assert payload["context_memory"][0]["source_type"] == "memory"
     assert payload["context_memory"][0]["context_only"] is True
-    assert payload["context_memory"][0]["recall_reason"] == "Stored l2 research memory for this session."
+    assert payload["context_memory"][0]["relevance_score"] > payload["context_memory"][1]["relevance_score"]
+    assert 0 < payload["context_memory"][0]["relevance_score"] <= 1
+    assert payload["context_memory"][1]["relevance_score"] == 0
+    assert "matched question terms: hybrid, retrieval" in payload["context_memory"][0]["recall_reason"]
+    assert "source answer answer-1" in payload["context_memory"][0]["recall_reason"]
+    assert "no direct question-term match" in payload["context_memory"][1]["recall_reason"]
     assert all(citation["source_type"] == "paper" for citation in payload["citations"])
     assert answer.audit.status == "approved"
