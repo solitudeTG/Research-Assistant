@@ -278,7 +278,7 @@ import { transformSrc, domPurifyConfig } from '../utils/content';
 import { formatMarkdown } from '../utils/markdownFormatter';
 import MarkdownEnhancements from './MarkdownEnhancements.vue';
 import { useFilePanel } from '../composables/useFilePanel';
-import { getResearchEvidenceRecord, type ResearchEvidenceRecord } from '../api/agent';
+import { getResearchAuditResult, getResearchEvidenceRecord, type ResearchAudit, type ResearchEvidenceRecord } from '../api/agent';
 
 import RobotAvatar from './icons/RobotAvatar.vue';
 
@@ -732,6 +732,8 @@ const researchCitations = computed(() => {
 const evidenceDetails = ref<Record<number, ResearchEvidenceRecord>>({});
 const evidenceDetailLoading = ref<Record<number, boolean>>({});
 const evidenceDetailErrors = ref<Record<number, string>>({});
+const persistedResearchAudit = ref<ResearchAudit | null>(null);
+const auditLoadingKey = ref('');
 
 const formatSourceIdentity = (sourceIdentity: Record<string, unknown>): string => {
   const entries = Object.entries(sourceIdentity || {}).filter(([, value]) => value !== null && value !== undefined && value !== '');
@@ -780,8 +782,62 @@ const handleCitationToggle = (citation: { evidence_id: number }, event: Event) =
   }
 };
 
+const researchAuditSubject = computed(() => {
+  const research = messageContent.value.metadata?.research_assistant;
+  if (!research) return null;
+  if (research.answer_id) {
+    return { type: 'answer' as const, id: research.answer_id };
+  }
+  if (research.report?.report_id) {
+    return { type: 'report' as const, id: research.report.report_id };
+  }
+  return null;
+});
+
+const loadPersistedResearchAudit = async () => {
+  const subject = researchAuditSubject.value;
+  if (!props.sessionId || !subject || messageContent.value.metadata?.research_assistant?.audit) {
+    persistedResearchAudit.value = null;
+    auditLoadingKey.value = '';
+    return;
+  }
+
+  const key = `${props.sessionId}:${subject.type}:${subject.id}`;
+  if (auditLoadingKey.value === key) {
+    return;
+  }
+
+  auditLoadingKey.value = key;
+  persistedResearchAudit.value = null;
+  try {
+    persistedResearchAudit.value = await getResearchAuditResult(props.sessionId, subject.type, subject.id);
+  } catch (err) {
+    console.error('[Research] Failed to load persisted evidence audit:', err);
+    if (auditLoadingKey.value === key) {
+      persistedResearchAudit.value = null;
+    }
+  } finally {
+    if (auditLoadingKey.value === key) {
+      auditLoadingKey.value = '';
+    }
+  }
+};
+
+watch(
+  () => [
+    props.sessionId,
+    messageContent.value.metadata?.research_assistant?.answer_id,
+    messageContent.value.metadata?.research_assistant?.report?.report_id,
+    Boolean(messageContent.value.metadata?.research_assistant?.audit),
+  ],
+  () => {
+    void loadPersistedResearchAudit();
+  },
+  { immediate: true },
+);
+
 const researchAudit = computed(() => {
-  return messageContent.value.metadata?.research_assistant?.audit;
+  return messageContent.value.metadata?.research_assistant?.audit || persistedResearchAudit.value;
 });
 
 const researchAuditStatusClass = computed(() => {

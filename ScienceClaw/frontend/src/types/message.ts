@@ -58,6 +58,7 @@ export interface ResearchAuditMetadata {
 }
 
 export interface ResearchAnswerMetadata {
+  answer_id?: string;
   content?: string;
   question?: string;
   citations?: ResearchCitationMetadata[];

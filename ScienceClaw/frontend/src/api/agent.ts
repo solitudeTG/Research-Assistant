@@ -70,6 +70,7 @@ export interface ResearchAudit {
 }
 
 export interface ResearchAnswer {
+  answer_id: string;
   content: string;
   citations: ResearchCitation[];
   citation_count: number;
@@ -164,6 +165,17 @@ export async function getResearchEvidenceRecord(
 ): Promise<ResearchEvidenceRecord> {
   const response = await apiClient.get<ApiResponse<ResearchEvidenceRecord>>(
     `/sessions/${sessionId}/research/evidence/${evidenceId}`,
+  );
+  return response.data.data;
+}
+
+export async function getResearchAuditResult(
+  sessionId: string,
+  subjectType: 'answer' | 'report',
+  subjectId: string,
+): Promise<ResearchAudit> {
+  const response = await apiClient.get<ApiResponse<ResearchAudit>>(
+    `/sessions/${sessionId}/research/audit/${subjectType}/${subjectId}`,
   );
   return response.data.data;
 }
