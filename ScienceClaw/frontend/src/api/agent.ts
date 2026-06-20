@@ -35,10 +35,31 @@ export interface ResearchCitation {
   source_type: 'paper';
 }
 
+export interface ResearchAuditClaim {
+  claim_text: string;
+  status: 'approved' | 'unsupported' | 'invalid_source';
+  evidence_ids: number[];
+  notes: string[];
+}
+
+export interface ResearchAudit {
+  status: 'approved' | 'partial' | 'unsupported' | 'invalid_source';
+  claim_count: number;
+  approved_claim_count: number;
+  unsupported_claim_count: number;
+  invalid_source_count: number;
+  boundaries: {
+    citation_evidence: string[];
+    context_only: string[];
+  };
+  claims: ResearchAuditClaim[];
+}
+
 export interface ResearchAnswer {
   content: string;
   citations: ResearchCitation[];
   citation_count: number;
+  audit?: ResearchAudit;
   question?: string;
 }
 

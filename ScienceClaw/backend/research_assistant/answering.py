@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
+from backend.research_assistant.audit import EvidenceAudit, audit_evidence_claims
 from backend.research_assistant.embeddings import HashingEmbeddingProvider
 from backend.research_assistant.storage.database import hybrid_search_evidence_in_database
 
@@ -27,6 +28,15 @@ class ResearchCitation:
 class ResearchAnswer:
     content: str
     citations: list[ResearchCitation]
+    audit: EvidenceAudit | None = None
+
+    def __post_init__(self) -> None:
+        if self.audit is None:
+            object.__setattr__(
+                self,
+                "audit",
+                audit_evidence_claims(answer_content=self.content, citations=self.citations),
+            )
 
     @property
     def citation_count(self) -> int:
@@ -37,6 +47,7 @@ class ResearchAnswer:
             "content": self.content,
             "citations": [citation.to_dict() for citation in self.citations],
             "citation_count": self.citation_count,
+            "audit": self.audit.to_dict() if self.audit else {},
         }
 
 
@@ -75,9 +86,11 @@ async def answer_research_question(
         )
         for hit in hits
     ]
+    content = _compose_extractive_answer(citations)
     return ResearchAnswer(
-        content=_compose_extractive_answer(citations),
+        content=content,
         citations=citations,
+        audit=audit_evidence_claims(answer_content=content, citations=citations),
     )
 
 

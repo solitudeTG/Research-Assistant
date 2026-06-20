@@ -137,6 +137,14 @@ def _compose_markdown_report(
             )
     lines.extend(
         [
+            "## Evidence Audit",
+            "",
+            f"- Status: `{answer.audit.status}`",
+            f"- Claims: {answer.audit.claim_count}",
+            f"- Approved: {answer.audit.approved_claim_count}",
+            f"- Unsupported: {answer.audit.unsupported_claim_count}",
+            f"- Invalid sources: {answer.audit.invalid_source_count}",
+            "",
             "## Evidence Boundary",
             "",
             (
@@ -154,6 +162,7 @@ def _build_evidence_map(*, report_id: str, answer: ResearchAnswer) -> dict:
         "report_id": report_id,
         "evidence_scope": "uploaded_papers_only",
         "citation_count": answer.citation_count,
+        "audit": answer.audit.to_dict(),
         "evidence": [
             {
                 "evidence_id": citation.evidence_id,

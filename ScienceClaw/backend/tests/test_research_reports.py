@@ -59,8 +59,11 @@ async def test_generate_markdown_research_report_writes_artifact_and_evidence_ma
 
     assert report.citation_count == 1
     assert "Evidence scope: uploaded papers only" in markdown
+    assert "Evidence Audit" in markdown
+    assert "Status: `approved`" in markdown
     assert "Hybrid retrieval improves recall. [paper-1:Results:4]" in markdown
     assert "Memory, model reasoning, process trace, and tool logs are not cited" in markdown
+    assert evidence["audit"]["status"] == "approved"
     assert evidence["evidence"][0]["evidence_id"] == 17
     assert persisted["database_url"] == "postgresql://test"
     assert persisted["report_id"] == report.report_id

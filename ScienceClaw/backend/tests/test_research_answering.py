@@ -47,6 +47,8 @@ async def test_answer_research_question_uses_only_citation_evidence(monkeypatch)
     assert answer.citations[0].quote.startswith("Hybrid retrieval")
     assert answer.citations[0].source_type == "paper"
     assert answer.citation_count == 1
+    assert answer.audit.status == "approved"
+    assert answer.to_dict()["audit"]["approved_claim_count"] == 1
 
 
 @pytest.mark.asyncio
@@ -70,3 +72,5 @@ async def test_answer_research_question_refuses_when_no_paper_evidence(monkeypat
 
     assert answer.citation_count == 0
     assert "No citation evidence" in answer.content
+    assert answer.audit.status == "unsupported"
+    assert answer.to_dict()["audit"]["unsupported_claim_count"] == 1

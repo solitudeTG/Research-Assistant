@@ -37,11 +37,32 @@ export interface ResearchCitationMetadata {
   source_type: 'paper';
 }
 
+export interface ResearchAuditClaimMetadata {
+  claim_text: string;
+  status: 'approved' | 'unsupported' | 'invalid_source';
+  evidence_ids: number[];
+  notes: string[];
+}
+
+export interface ResearchAuditMetadata {
+  status: 'approved' | 'partial' | 'unsupported' | 'invalid_source';
+  claim_count: number;
+  approved_claim_count: number;
+  unsupported_claim_count: number;
+  invalid_source_count: number;
+  boundaries: {
+    citation_evidence: string[];
+    context_only: string[];
+  };
+  claims: ResearchAuditClaimMetadata[];
+}
+
 export interface ResearchAnswerMetadata {
   content?: string;
   question?: string;
   citations?: ResearchCitationMetadata[];
   citation_count?: number;
+  audit?: ResearchAuditMetadata;
   report?: {
     report_id: string;
     title: string;

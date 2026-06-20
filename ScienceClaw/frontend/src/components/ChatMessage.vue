@@ -49,6 +49,24 @@
           <suggested-questions v-else-if="part.type === 'questions'" :questions="part.questions || []" @click="emit('suggestionClick', $event)" />
         </template>
       </div>
+      <div v-if="researchAudit" class="border-t border-gray-100 dark:border-gray-800 px-4 py-3 bg-gray-50/60 dark:bg-gray-900/30">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-semibold text-[var(--text-secondary)]">Evidence audit</span>
+            <span
+              class="rounded-md px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide"
+              :class="researchAuditStatusClass"
+            >
+              {{ researchAudit.status }}
+            </span>
+          </div>
+          <div class="flex items-center gap-2 text-[11px] text-[var(--text-tertiary)] tabular-nums">
+            <span>{{ researchAudit.approved_claim_count }}/{{ researchAudit.claim_count }} approved</span>
+            <span v-if="researchAudit.unsupported_claim_count > 0">{{ researchAudit.unsupported_claim_count }} unsupported</span>
+            <span v-if="researchAudit.invalid_source_count > 0">{{ researchAudit.invalid_source_count }} invalid source</span>
+          </div>
+        </div>
+      </div>
       <div v-if="researchCitations.length > 0" class="border-t border-gray-100 dark:border-gray-800 px-4 py-3 bg-gray-50/60 dark:bg-gray-900/30">
         <div class="flex items-center justify-between gap-3 mb-2">
           <div class="text-xs font-semibold text-[var(--text-secondary)]">
@@ -660,6 +678,23 @@ const toolContent = computed(() => props.message.content as ToolContent);
 const attachmentsContent = computed(() => props.message.content as AttachmentsContent);
 const researchCitations = computed(() => {
   return messageContent.value.metadata?.research_assistant?.citations || [];
+});
+
+const researchAudit = computed(() => {
+  return messageContent.value.metadata?.research_assistant?.audit;
+});
+
+const researchAuditStatusClass = computed(() => {
+  switch (researchAudit.value?.status) {
+    case 'approved':
+      return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300';
+    case 'partial':
+      return 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300';
+    case 'invalid_source':
+      return 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300';
+    default:
+      return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300';
+  }
 });
 
 const { relativeTime } = useRelativeTime();
