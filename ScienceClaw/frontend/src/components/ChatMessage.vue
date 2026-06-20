@@ -188,7 +188,7 @@
                     {{ citation.citation_label }}
                   </span>
                   <span class="text-[10px] uppercase tracking-wide text-[var(--text-tertiary)]">
-                    paper
+                    {{ citation.source_type }}
                   </span>
                 </div>
                 <div class="text-[11px] text-[var(--text-tertiary)] truncate">
