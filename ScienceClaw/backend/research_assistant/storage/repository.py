@@ -536,6 +536,26 @@ async def list_memory_entries(
     ]
 
 
+async def delete_memory_entry(
+    connection: Any,
+    *,
+    session_id: str,
+    memory_id: str,
+) -> bool:
+    status = await connection.execute(
+        """
+        DELETE FROM research_memory_entries
+        WHERE session_id = $1
+            AND memory_id = $2
+            AND source_type = 'memory'
+            AND context_only = true
+        """,
+        session_id,
+        memory_id,
+    )
+    return str(status).upper().endswith(" 1")
+
+
 def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 

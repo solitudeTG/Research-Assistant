@@ -349,3 +349,48 @@ async def test_list_memory_entries_returns_context_only_memory_contexts():
         "source_subject_type": "answer",
         "source_subject_id": "answer-1",
     }
+
+
+@pytest.mark.asyncio
+async def test_delete_memory_entry_deletes_session_scoped_context_only_memory():
+    connection = RecordingConnection()
+
+    async def execute(sql, *args):
+        connection.executed.append((sql, args))
+        return "DELETE 1"
+
+    connection.execute = execute
+
+    deleted = await repository.delete_memory_entry(
+        connection,
+        session_id="session-1",
+        memory_id="mem-1",
+    )
+
+    sql, args = connection.executed[0]
+    assert deleted is True
+    assert "delete from research_memory_entries" in sql.lower()
+    assert "session_id = $1" in sql.lower()
+    assert "memory_id = $2" in sql.lower()
+    assert "source_type = 'memory'" in sql.lower()
+    assert "context_only = true" in sql.lower()
+    assert args == ("session-1", "mem-1")
+
+
+@pytest.mark.asyncio
+async def test_delete_memory_entry_returns_false_when_no_row_deleted():
+    connection = RecordingConnection()
+
+    async def execute(sql, *args):
+        connection.executed.append((sql, args))
+        return "DELETE 0"
+
+    connection.execute = execute
+
+    deleted = await repository.delete_memory_entry(
+        connection,
+        session_id="session-1",
+        memory_id="missing-memory",
+    )
+
+    assert deleted is False

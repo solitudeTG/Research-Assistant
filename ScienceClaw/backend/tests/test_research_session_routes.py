@@ -501,6 +501,97 @@ async def test_promote_research_memory_rejects_unapproved_claim(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_delete_research_memory_for_session_deletes_context_only_memory(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession()
+    deleted_args = {}
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    async def fake_delete_memory(database_url, *, session_id, memory_id):
+        deleted_args.update(
+            {
+                "database_url": database_url,
+                "session_id": session_id,
+                "memory_id": memory_id,
+            }
+        )
+        return True
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "delete_memory_entry_from_database", fake_delete_memory)
+
+    response = await sessions.delete_research_memory_for_session(
+        "session-1",
+        "mem-1",
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    assert response.data == {
+        "memory_id": "mem-1",
+        "session_id": "session-1",
+        "deleted": True,
+        "source_type": "memory",
+        "context_only": True,
+    }
+    assert deleted_args == {
+        "database_url": sessions.settings.research_database_url,
+        "session_id": "session-1",
+        "memory_id": "mem-1",
+    }
+
+
+@pytest.mark.asyncio
+async def test_delete_research_memory_for_session_returns_404_when_missing(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession()
+
+    async def fake_get_session(session_id):
+        return session
+
+    async def fake_delete_memory(*args, **kwargs):
+        return False
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "delete_memory_entry_from_database", fake_delete_memory)
+
+    with pytest.raises(sessions.HTTPException) as excinfo:
+        await sessions.delete_research_memory_for_session(
+            "session-1",
+            "missing-memory",
+            types.SimpleNamespace(id="user-1"),
+        )
+
+    assert excinfo.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_delete_research_memory_for_session_rejects_other_user(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession(user_id="other-user")
+
+    async def fake_get_session(session_id):
+        return session
+
+    async def fail_delete_memory(*args, **kwargs):
+        raise AssertionError("memory deletion must not run for another user's session")
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "delete_memory_entry_from_database", fail_delete_memory)
+
+    with pytest.raises(sessions.HTTPException) as excinfo:
+        await sessions.delete_research_memory_for_session(
+            "session-1",
+            "mem-1",
+            types.SimpleNamespace(id="user-1"),
+        )
+
+    assert excinfo.value.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_get_research_evidence_record_for_session_returns_persisted_evidence(monkeypatch):
     sessions = _load_sessions_module(monkeypatch)
     session = FakeSession()

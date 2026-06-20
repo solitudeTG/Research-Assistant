@@ -55,6 +55,7 @@ from backend.research_assistant.ingestion import ingest_uploaded_paper, is_resea
 from backend.research_assistant.parsers import PaperParseError
 from backend.research_assistant.reports import generate_markdown_research_report
 from backend.research_assistant.storage.database import (
+    delete_memory_entry_from_database,
     get_audit_result_from_database,
     get_evidence_record_from_database,
     get_research_session_status_from_database,
@@ -1685,6 +1686,44 @@ async def promote_research_memory_for_session(
         raise
     except Exception as exc:
         logger.exception("promote_research_memory_for_session failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.delete("/{session_id}/research/memory/{memory_id}", response_model=ApiResponse)
+async def delete_research_memory_for_session(
+    session_id: str,
+    memory_id: str,
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """Delete a session-scoped context-only research memory entry."""
+    try:
+        session = await async_get_science_session(session_id)
+        if session.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        deleted = await delete_memory_entry_from_database(
+            settings.research_database_url,
+            session_id=session_id,
+            memory_id=memory_id,
+        )
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Research memory entry not found")
+
+        return ApiResponse(
+            data={
+                "memory_id": memory_id,
+                "session_id": session_id,
+                "deleted": True,
+                "source_type": "memory",
+                "context_only": True,
+            }
+        )
+    except ScienceSessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("delete_research_memory_for_session failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 

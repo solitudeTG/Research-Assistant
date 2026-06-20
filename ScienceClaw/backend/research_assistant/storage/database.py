@@ -10,6 +10,7 @@ from backend.research_assistant.storage.repository import (
     ResearchAuditResult,
     ResearchEvidenceRecord,
     ResearchMemoryEntry,
+    delete_memory_entry,
     get_audit_result,
     get_evidence_record,
     list_memory_entries,
@@ -226,6 +227,25 @@ async def list_memory_entries_from_database(
             session_id=session_id,
             layer=layer,
             limit=limit,
+        )
+    finally:
+        await connection.close()
+
+
+async def delete_memory_entry_from_database(
+    database_url: str,
+    *,
+    session_id: str,
+    memory_id: str,
+) -> bool:
+    import asyncpg
+
+    connection = await asyncpg.connect(database_url)
+    try:
+        return await delete_memory_entry(
+            connection,
+            session_id=session_id,
+            memory_id=memory_id,
         )
     finally:
         await connection.close()

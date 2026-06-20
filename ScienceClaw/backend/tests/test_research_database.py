@@ -304,3 +304,31 @@ async def test_list_memory_entries_from_database_returns_context_only_memory(mon
     assert memories[0].context_only is True
     assert memories[0].to_context_dict()["context_only"] is True
     assert fake_connection.closed is True
+
+
+@pytest.mark.asyncio
+async def test_delete_memory_entry_from_database_closes_asyncpg_connection(monkeypatch):
+    fake_connection = FakeConnection()
+
+    async def execute(sql, *args):
+        fake_connection.executed.append((sql, args))
+        return "DELETE 1"
+
+    fake_connection.execute = execute
+
+    async def connect(database_url):
+        assert database_url == "postgresql://test"
+        return fake_connection
+
+    monkeypatch.setitem(sys.modules, "asyncpg", types.SimpleNamespace(connect=connect))
+
+    deleted = await database.delete_memory_entry_from_database(
+        "postgresql://test",
+        session_id="session-1",
+        memory_id="mem-1",
+    )
+
+    assert deleted is True
+    assert "research_memory_entries" in fake_connection.executed[0][0].lower()
+    assert fake_connection.executed[0][1] == ("session-1", "mem-1")
+    assert fake_connection.closed is True

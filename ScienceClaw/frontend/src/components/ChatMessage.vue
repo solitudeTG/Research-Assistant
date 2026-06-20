@@ -131,9 +131,21 @@
               <span class="text-xs font-semibold text-[var(--text-primary)] truncate">
                 {{ memory.title || memory.memory_id }}
               </span>
-              <span class="text-[10px] uppercase tracking-wide text-[var(--text-tertiary)]">
-                {{ memory.layer }} memory
-              </span>
+              <div class="flex shrink-0 items-center gap-2">
+                <button
+                  v-if="props.sessionId"
+                  class="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-tertiary)] transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900/40 dark:hover:border-red-900/60 dark:hover:bg-red-900/20 dark:hover:text-red-300"
+                  :disabled="memoryDeletionLoading[memory.memory_id]"
+                  title="Forget context-only memory"
+                  @click="handleDeleteMemory(memory)"
+                >
+                  <Trash2Icon class="h-3 w-3" />
+                  <span>Forget</span>
+                </button>
+                <span class="text-[10px] uppercase tracking-wide text-[var(--text-tertiary)]">
+                  {{ memory.layer }} memory
+                </span>
+              </div>
             </div>
             <div class="mt-1 text-xs leading-relaxed text-[var(--text-secondary)] whitespace-pre-wrap">
               {{ memory.content }}
@@ -311,7 +323,7 @@ import DOMPurify from 'dompurify';
 import hljs from 'highlight.js';
 import katex from 'katex';
 import mermaid from 'mermaid';
-import { CheckIcon, ThumbsUpIcon, ThumbsDownIcon, CopyIcon, ClockIcon, WrenchIcon, ArrowDownIcon, ArrowUpIcon, FolderOpen, FileText, SaveIcon } from 'lucide-vue-next';
+import { CheckIcon, ThumbsUpIcon, ThumbsDownIcon, CopyIcon, ClockIcon, WrenchIcon, ArrowDownIcon, ArrowUpIcon, FolderOpen, FileText, SaveIcon, Trash2Icon } from 'lucide-vue-next';
 import PdfIcon from './icons/PdfIcon.vue';
 import { computed, ref, onMounted, nextTick, watch } from 'vue';
 import { ToolContent } from '../types/message';
@@ -325,7 +337,7 @@ import { transformSrc, domPurifyConfig } from '../utils/content';
 import { formatMarkdown } from '../utils/markdownFormatter';
 import MarkdownEnhancements from './MarkdownEnhancements.vue';
 import { useFilePanel } from '../composables/useFilePanel';
-import { getResearchAuditResult, getResearchEvidenceRecord, promoteResearchMemory, type ResearchAudit, type ResearchAuditClaim, type ResearchEvidenceRecord } from '../api/agent';
+import { deleteResearchMemory, getResearchAuditResult, getResearchEvidenceRecord, promoteResearchMemory, type ResearchAudit, type ResearchAuditClaim, type ResearchContextMemory, type ResearchEvidenceRecord } from '../api/agent';
 import { showErrorToast, showSuccessToast } from '../utils/toast';
 
 import RobotAvatar from './icons/RobotAvatar.vue';
@@ -777,7 +789,9 @@ const researchCitations = computed(() => {
   return messageContent.value.metadata?.research_assistant?.citations || [];
 });
 const researchContextMemory = computed(() => {
-  return messageContent.value.metadata?.research_assistant?.context_memory || [];
+  return (messageContent.value.metadata?.research_assistant?.context_memory || []).filter(
+    (memory: ResearchContextMemory) => !forgottenMemoryIds.value[memory.memory_id],
+  );
 });
 
 const evidenceDetails = ref<Record<number, ResearchEvidenceRecord>>({});
@@ -787,6 +801,8 @@ const persistedResearchAudit = ref<ResearchAudit | null>(null);
 const auditLoadingKey = ref('');
 const memoryPromotionLoading = ref<Record<string, boolean>>({});
 const promotedMemoryClaims = ref<Record<string, boolean>>({});
+const memoryDeletionLoading = ref<Record<string, boolean>>({});
+const forgottenMemoryIds = ref<Record<string, boolean>>({});
 
 const formatSourceIdentity = (sourceIdentity: Record<string, unknown>): string => {
   const entries = Object.entries(sourceIdentity || {}).filter(([, value]) => value !== null && value !== undefined && value !== '');
@@ -889,6 +905,33 @@ const handlePromoteMemory = async (claim: ResearchAuditClaim) => {
     memoryPromotionLoading.value = {
       ...memoryPromotionLoading.value,
       [key]: false,
+    };
+  }
+};
+
+const handleDeleteMemory = async (memory: ResearchContextMemory) => {
+  if (!props.sessionId || memoryDeletionLoading.value[memory.memory_id]) {
+    return;
+  }
+
+  memoryDeletionLoading.value = {
+    ...memoryDeletionLoading.value,
+    [memory.memory_id]: true,
+  };
+  try {
+    await deleteResearchMemory(props.sessionId, memory.memory_id);
+    forgottenMemoryIds.value = {
+      ...forgottenMemoryIds.value,
+      [memory.memory_id]: true,
+    };
+    showSuccessToast('Context-only memory forgotten');
+  } catch (err) {
+    console.error('[Research] Failed to delete context-only memory:', err);
+    showErrorToast('Failed to forget context-only memory');
+  } finally {
+    memoryDeletionLoading.value = {
+      ...memoryDeletionLoading.value,
+      [memory.memory_id]: false,
     };
   }
 };

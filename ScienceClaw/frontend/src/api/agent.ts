@@ -55,6 +55,14 @@ export interface ResearchPromotedMemory extends ResearchContextMemory {
   duplicate: boolean;
 }
 
+export interface ResearchDeletedMemory {
+  memory_id: string;
+  session_id: string;
+  deleted: boolean;
+  source_type: 'memory';
+  context_only: true;
+}
+
 export interface ResearchEvidenceRecord {
   evidence_id: number;
   evidence_type: 'paper' | 'web' | 'database';
@@ -214,6 +222,16 @@ export async function promoteResearchMemory(
   const response = await apiClient.post<ApiResponse<ResearchPromotedMemory>>(
     `/sessions/${sessionId}/research/memory/promote`,
     payload,
+  );
+  return response.data.data;
+}
+
+export async function deleteResearchMemory(
+  sessionId: string,
+  memoryId: string,
+): Promise<ResearchDeletedMemory> {
+  const response = await apiClient.delete<ApiResponse<ResearchDeletedMemory>>(
+    `/sessions/${sessionId}/research/memory/${encodeURIComponent(memoryId)}`,
   );
   return response.data.data;
 }
