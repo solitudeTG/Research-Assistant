@@ -94,6 +94,7 @@ In Progress。
 | The uploaded-paper loop has a repeatable real-service smoke check. | A smoke script can run ingestion, PostgreSQL/pgvector indexing, hybrid answer, and Markdown report generation against real services, with GROBID required by default and fallback mode explicitly labeled. | Default `python ScienceClaw\backend\scripts\research_smoke.py` passed on 2026-06-19 against healthy Docker GROBID and PostgreSQL/pgvector; output showed `parser=grobid-tei`, `grobid_available=True`, `citations=2`. | Partial |
 | GROBID smoke cannot be satisfied by fallback parsing. | The default smoke path must require GROBID availability and assert the final parser is `grobid-tei`; fallback smoke requires the explicit `--allow-grobid-unavailable` flag. | `research_smoke.py` default path passed with `parser=grobid-tei`; `ScienceClaw\backend\tests\test_research_parsers.py` also asserts GROBID requests ignore environment proxies via `trust_env=False`. | Partial |
 | Full P0 uploaded-paper UI loop works inside ScienceClaw shell. | A browser-level run must use the ScienceClaw UI file input to upload a PDF, wait for GROBID parsing and PostgreSQL/pgvector indexing, ask a paper-grounded question, inspect citation evidence and ActivityPanel steps, generate a Markdown report, and see Markdown plus evidence map files in the file panel. | Browser Playwright E2E for session `MS7Vvi7aSGh8XKEYXLARsv` used `input[type=file]` with `ui-file-picker-evidence-boundaries.pdf`; final status `completed`, error events `[]`, visible citation card and paper chunk, ActivityPanel showed upload/parse/index/retrieval/report steps, and file panel showed `research-report-j3PppgionQCydYPjKGEJ6v.md` plus `.evidence.json`. | Verified |
+| Full P0 uploaded-paper UI loop has a durable checked-in E2E runner. | The repository must include a repeatable browser E2E script that exercises the ScienceClaw UI file input, verifies indexed uploaded-paper evidence, confirms visible citation evidence in Chat, generates a Markdown research report, and asserts real trace/file evidence from the session APIs. | `$env:PYTHONPATH='E:\Self-Project\Research-Assistant\ScienceClaw'; python ScienceClaw\backend\scripts\research_ui_e2e.py --timeout-ms 60000` passed on 2026-06-20 for session `Zuo72SRkrzMnKFc4DF7LsP`, with `citations=1`, `activity_steps=9`, and report files `research-report-8xy8WYgbf6ztbw6uBoVUA6.md` plus `.evidence.json`. | Verified |
 
 ## State Timeline
 
@@ -116,13 +117,14 @@ In Progress。
 | 2026-06-19 | GROBID E2E acceptance tightened. | Default `research_smoke.py` requires `parser=grobid-tei`; compose exposes `GROBID_IMAGE` so environments can use a reachable mirror or preloaded tag without editing project files. |
 | 2026-06-19 | GROBID-backed smoke passed. | `docker pull grobid/grobid:0.8.0`, `docker compose up -d postgres grobid`, and default `research_smoke.py` passed with `parser=grobid-tei`, proving the PDF primary parser path against real services. |
 | 2026-06-19 | Full UI file-input P0 loop verified. | Browser Playwright drove ScienceClaw login, session page, `input[type=file]` upload, research question, citation rendering, ActivityPanel step inspection, Markdown report generation, and round file panel inspection for session `MS7Vvi7aSGh8XKEYXLARsv`. |
+| 2026-06-20 | Durable browser UI E2E runner added. | `ScienceClaw\backend\scripts\research_ui_e2e.py` passed against the running Docker stack and verifies UI upload, citation rendering, report generation, trace steps, and report/evidence files. |
 
 ## Recovery Snapshot
 
 - Current state: ScienceClaw baseline is present; P0 docs/ADR define the intended loop; a Research Assistant ingestion module, GROBID-first PDF parser path with Docling/PyMuPDF fallback, PostgreSQL/pgvector schema, repository writes, local embedding provider, embedding persistence, upload indexing service, hybrid evidence retrieval contract, backend research-answer route, frontend citation rendering, ActivityPanel step mapping, and Markdown research artifact route now exist and have been exercised through the ScienceClaw UI.
 - Verified evidence: focused backend tests, frontend build, Python compile checks, `docker compose config`, Harness strict validation, fallback PostgreSQL smoke, GROBID-backed smoke, API-level uploaded-paper E2E, browser UI recovery checks, and browser-level UI file-input E2E passed on 2026-06-19.
-- Known gaps: P0 uploaded-paper research loop is verified. Remaining quality work is not required for the first loop: Markdown reports are extractive evidence notes rather than polished composed reports; a durable checked-in browser E2E script could make the UI proof easier to rerun.
-- Next safe action: Decide whether to package the browser Playwright UI loop as a committed E2E test/script, then move to report quality, richer evidence inspection, or the next scoped research workflow.
+- Known gaps: P0 uploaded-paper research loop is verified and now has a durable checked-in browser E2E runner. Remaining quality work is not required for the first loop: Markdown reports are extractive evidence notes rather than polished composed reports.
+- Next safe action: Move to report quality, richer evidence inspection, Evidence Audit, or the next scoped research workflow.
 
 ## Patch History
 
@@ -163,6 +165,7 @@ In Progress。
   - ActivityPanel step compatibility patch verification: `npm.cmd run build` passed; focused backend tests passed at `22 passed`; browser UI check showed step-derived task progress.
   - Research-upload session status hardening: focused backend tests passed at `23 passed`; `test_research_upload_marks_session_completed_after_indexing` asserts an indexed research upload closes the session instead of leaving it pending for generic reconnect.
   - Full browser UI file-input E2E: Python Playwright logged into ScienceClaw, created session `MS7Vvi7aSGh8XKEYXLARsv`, drove `input[type=file]` with `ui-file-picker-evidence-boundaries.pdf`, observed session status `completed`, asked `What does the paper say about evidence boundaries?`, saw a visible `Citation evidence` card and paper chunk label, clicked `Generate Markdown research report`, inspected ActivityPanel steps via `.process-indicator`, and opened the round file panel. Final event evidence: upload/parse/index/retrieval/report steps present, `round_files=["research-report-j3PppgionQCydYPjKGEJ6v.evidence.json","research-report-j3PppgionQCydYPjKGEJ6v.md"]`, `error_events=[]`.
+  - Durable browser UI E2E runner: `$env:PYTHONPATH='E:\Self-Project\Research-Assistant\ScienceClaw'; python ScienceClaw\backend\scripts\research_ui_e2e.py --timeout-ms 60000` -> `research UI E2E passed`, session `Zuo72SRkrzMnKFc4DF7LsP`, `citations=1`, `activity_steps=9`, `round_files=["research-report-8xy8WYgbf6ztbw6uBoVUA6.evidence.json","research-report-8xy8WYgbf6ztbw6uBoVUA6.md"]`.
   - Final verification after UI E2E: `npm.cmd run build`, `docker compose config`, default `research_smoke.py` with `parser=grobid-tei`, and Harness strict knowledge check all passed.
 - Baseline verification recorded in [baseline-import-notes.md](../baseline-import-notes.md):
   - `python -m compileall ScienceClaw\backend`
@@ -171,4 +174,4 @@ In Progress。
 
 ## Next Step
 
-Package the browser Playwright UI loop as a durable E2E script if repeated regression checks are desired; otherwise move to the next scoped research workflow or polish Markdown report quality.
+Move to report quality, richer evidence inspection, Evidence Audit, or the next scoped research workflow.
