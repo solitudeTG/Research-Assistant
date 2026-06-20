@@ -137,7 +137,8 @@ def _compose_markdown_report(
                 [
                     f"### {anchor} {citation.citation_label}",
                     "",
-                    f"- Paper: {citation.title}",
+                    f"- Source: {citation.title}",
+                    f"- Source type: `{citation.source_type}`",
                     f"- Section: {citation.section}",
                     f"- Page: {_page_label(citation)}",
                     f"- Chunk: `{citation.chunk_id}`",
@@ -167,8 +168,9 @@ def _compose_markdown_report(
             "## Evidence Boundary",
             "",
             (
-                "This Markdown artifact treats only uploaded paper chunks as citation evidence. "
-                "Memory, model reasoning, process trace, and tool logs are not cited as evidence."
+                "This Markdown artifact can cite paper, web, or database evidence when present. "
+                "This generated report currently used uploaded-paper retrieval. "
+                "Memory, model reasoning, process trace, and tool logs remain context-only and are not cited as evidence."
             ),
             "",
         ]

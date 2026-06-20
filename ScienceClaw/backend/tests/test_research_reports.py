@@ -77,11 +77,18 @@ async def test_generate_markdown_research_report_writes_artifact_and_evidence_ma
     assert "### Claim Checks" in markdown
     assert "| Claim | Status | Support | Evidence IDs | Notes |" in markdown
     assert "| Hybrid retrieval improves recall. [paper-1:Results:4] | `approved` | `1.00` | `17` |  |" in markdown
-    assert "Citation evidence sources: `paper`" in markdown
+    assert "- Source: Hybrid Retrieval" in markdown
+    assert "- Source type: `paper`" in markdown
+    assert "- Paper: Hybrid Retrieval" not in markdown
+    assert "Citation evidence sources: `paper`, `web`, `database`" in markdown
     assert "Context-only sources: `memory`, `model_reasoning`, `process_trace`, `tool_logs`" in markdown
     assert "Hybrid retrieval improves recall. [paper-1:Results:4]" in markdown
-    assert "Memory, model reasoning, process trace, and tool logs are not cited" in markdown
+    assert "This Markdown artifact can cite paper, web, or database evidence when present." in markdown
+    assert "This generated report currently used uploaded-paper retrieval." in markdown
+    assert "only uploaded paper chunks as citation evidence" not in markdown
+    assert "Memory, model reasoning, process trace, and tool logs remain context-only" in markdown
     assert evidence["audit"]["status"] == "approved"
+    assert evidence["audit"]["boundaries"]["citation_evidence"] == ["paper", "web", "database"]
     assert evidence["audit"]["claims"][0]["support_score"] == 1.0
     assert evidence["evidence"][0]["evidence_id"] == 17
     assert evidence["evidence"][0]["claim_text"] == "Hybrid retrieval improves recall. [paper-1:Results:4]"
