@@ -35,6 +35,20 @@ export interface ResearchCitation {
   source_type: 'paper';
 }
 
+export interface ResearchEvidenceRecord {
+  evidence_id: number;
+  evidence_type: 'paper' | 'web' | 'database';
+  chunk_id: string;
+  paper_id: string;
+  title: string;
+  section: string;
+  page_start?: number | null;
+  page_end?: number | null;
+  quote: string;
+  chunk_content: string;
+  source_identity: Record<string, unknown>;
+}
+
 export interface ResearchAuditClaim {
   claim_text: string;
   status: 'approved' | 'unsupported' | 'invalid_source';
@@ -140,6 +154,16 @@ export async function answerResearchQuestion(
 export async function getResearchStatus(sessionId: string): Promise<ResearchSessionStatus> {
   const response = await apiClient.get<ApiResponse<ResearchSessionStatus>>(
     `/sessions/${sessionId}/research/status`,
+  );
+  return response.data.data;
+}
+
+export async function getResearchEvidenceRecord(
+  sessionId: string,
+  evidenceId: number,
+): Promise<ResearchEvidenceRecord> {
+  const response = await apiClient.get<ApiResponse<ResearchEvidenceRecord>>(
+    `/sessions/${sessionId}/research/evidence/${evidenceId}`,
   );
   return response.data.data;
 }

@@ -157,7 +157,7 @@
             </div>
             <ChatMessage v-else-if="group.type === 'single' && group.message" :message="group.message"
               @toolClick="handleToolClick" @suggestionClick="handleSuggestionClick" @convertToPdf="handleConvertToPdf" @generateResearchReport="handleGenerateResearchReport" :mode="mode"
-              :isLast="index === lastProcessGroupIndex" :isLoading="isLoading" />
+              :sessionId="sessionId" :isLast="index === lastProcessGroupIndex" :isLoading="isLoading" />
           </template>
 
           <!-- Loading indicator -->

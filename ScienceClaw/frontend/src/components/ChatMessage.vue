@@ -113,6 +113,7 @@
             v-for="citation in researchCitations"
             :key="citation.evidence_id"
             class="rounded-lg border border-gray-200/80 dark:border-gray-700/80 bg-white/80 dark:bg-[#1e1e1e]/80 px-3 py-2"
+            @toggle="handleCitationToggle(citation, $event)"
           >
             <summary class="cursor-pointer list-none">
               <div class="flex flex-col gap-1">
@@ -134,6 +135,28 @@
             </div>
             <div class="mt-2 text-[11px] text-[var(--text-tertiary)]">
               chunk: {{ citation.chunk_id }}
+            </div>
+            <div class="mt-2 border-t border-gray-100 pt-2 text-[11px] leading-relaxed dark:border-gray-800">
+              <div v-if="evidenceDetailLoading[citation.evidence_id]" class="text-[var(--text-tertiary)]">
+                Loading evidence details...
+              </div>
+              <div v-else-if="evidenceDetailErrors[citation.evidence_id]" class="text-amber-600 dark:text-amber-300">
+                Evidence detail unavailable
+              </div>
+              <div v-else-if="evidenceDetails[citation.evidence_id]" class="space-y-2">
+                <div class="grid gap-x-3 gap-y-1 sm:grid-cols-[max-content_1fr]">
+                  <span class="font-medium text-[var(--text-primary)]">Evidence type</span>
+                  <span class="uppercase tracking-wide text-[var(--text-tertiary)]">{{ evidenceDetails[citation.evidence_id].evidence_type }}</span>
+                  <span class="font-medium text-[var(--text-primary)]">Source identity</span>
+                  <span class="break-words text-[var(--text-secondary)]">{{ formatSourceIdentity(evidenceDetails[citation.evidence_id].source_identity) }}</span>
+                </div>
+                <div>
+                  <div class="mb-1 font-medium text-[var(--text-primary)]">Chunk context</div>
+                  <div class="max-h-32 overflow-y-auto whitespace-pre-wrap rounded-md bg-gray-50 px-2 py-1.5 text-[var(--text-secondary)] dark:bg-gray-900/40">
+                    {{ evidenceDetails[citation.evidence_id].chunk_content }}
+                  </div>
+                </div>
+              </div>
             </div>
           </details>
         </div>
@@ -256,6 +279,7 @@ import { transformSrc, domPurifyConfig } from '../utils/content';
 import { formatMarkdown } from '../utils/markdownFormatter';
 import MarkdownEnhancements from './MarkdownEnhancements.vue';
 import { useFilePanel } from '../composables/useFilePanel';
+import { getResearchEvidenceRecord, type ResearchEvidenceRecord } from '../api/agent';
 
 import RobotAvatar from './icons/RobotAvatar.vue';
 
@@ -711,6 +735,57 @@ const attachmentsContent = computed(() => props.message.content as AttachmentsCo
 const researchCitations = computed(() => {
   return messageContent.value.metadata?.research_assistant?.citations || [];
 });
+
+const evidenceDetails = ref<Record<number, ResearchEvidenceRecord>>({});
+const evidenceDetailLoading = ref<Record<number, boolean>>({});
+const evidenceDetailErrors = ref<Record<number, string>>({});
+
+const formatSourceIdentity = (sourceIdentity: Record<string, unknown>): string => {
+  const entries = Object.entries(sourceIdentity || {}).filter(([, value]) => value !== null && value !== undefined && value !== '');
+  if (entries.length === 0) return 'none';
+  return entries.map(([key, value]) => `${key}: ${String(value)}`).join(', ');
+};
+
+const loadEvidenceDetail = async (evidenceId: number) => {
+  if (!props.sessionId || evidenceDetails.value[evidenceId] || evidenceDetailLoading.value[evidenceId]) {
+    return;
+  }
+
+  evidenceDetailErrors.value = {
+    ...evidenceDetailErrors.value,
+    [evidenceId]: '',
+  };
+  evidenceDetailLoading.value = {
+    ...evidenceDetailLoading.value,
+    [evidenceId]: true,
+  };
+
+  try {
+    const detail = await getResearchEvidenceRecord(props.sessionId, evidenceId);
+    evidenceDetails.value = {
+      ...evidenceDetails.value,
+      [evidenceId]: detail,
+    };
+  } catch (err) {
+    console.error('[Research] Failed to load citation evidence detail:', err);
+    evidenceDetailErrors.value = {
+      ...evidenceDetailErrors.value,
+      [evidenceId]: 'unavailable',
+    };
+  } finally {
+    evidenceDetailLoading.value = {
+      ...evidenceDetailLoading.value,
+      [evidenceId]: false,
+    };
+  }
+};
+
+const handleCitationToggle = (citation: { evidence_id: number }, event: Event) => {
+  const details = event.currentTarget as HTMLDetailsElement | null;
+  if (details?.open) {
+    void loadEvidenceDetail(citation.evidence_id);
+  }
+};
 
 const researchAudit = computed(() => {
   return messageContent.value.metadata?.research_assistant?.audit;
