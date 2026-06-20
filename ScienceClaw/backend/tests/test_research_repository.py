@@ -24,6 +24,8 @@ class RecordingConnection:
     def __init__(self):
         self.executed = []
         self.executemany_calls = []
+        self.fetchrow_calls = []
+        self.fetchrow_result = None
 
     def transaction(self):
         return RecordingTransaction()
@@ -33,6 +35,10 @@ class RecordingConnection:
 
     async def executemany(self, sql, rows):
         self.executemany_calls.append((sql, rows))
+
+    async def fetchrow(self, sql, *args):
+        self.fetchrow_calls.append((sql, args))
+        return self.fetchrow_result
 
 
 @pytest.mark.asyncio
@@ -160,3 +166,53 @@ async def test_persist_audit_result_upserts_claim_boundaries():
     )
     assert '"citation_evidence":["paper"]' in args[9]
     assert '"claim_text":"Hybrid retrieval improves recall."' in args[10]
+
+
+@pytest.mark.asyncio
+async def test_get_audit_result_reads_session_scoped_subject():
+    connection = RecordingConnection()
+    connection.fetchrow_result = {
+        "audit_id": "report-1:audit",
+        "session_id": "session-1",
+        "subject_type": "report",
+        "subject_id": "report-1",
+        "status": "approved",
+        "claim_count": 1,
+        "approved_claim_count": 1,
+        "unsupported_claim_count": 0,
+        "invalid_source_count": 0,
+        "boundaries": '{"citation_evidence":["paper"],"context_only":["memory"]}',
+        "claims": '[{"claim_text":"Claim","status":"approved","evidence_ids":[17],"notes":[]}]',
+    }
+
+    result = await repository.get_audit_result(
+        connection,
+        session_id="session-1",
+        subject_type="report",
+        subject_id="report-1",
+    )
+
+    sql, args = connection.fetchrow_calls[0]
+    assert "from research_audit_results" in sql.lower()
+    assert "session_id = $1" in sql.lower()
+    assert "subject_type = $2" in sql.lower()
+    assert "subject_id = $3" in sql.lower()
+    assert args == ("session-1", "report", "report-1")
+    assert result is not None
+    assert result.audit_id == "report-1:audit"
+    assert result.claims[0]["evidence_ids"] == [17]
+    assert result.to_dict()["boundaries"]["citation_evidence"] == ["paper"]
+
+
+@pytest.mark.asyncio
+async def test_get_audit_result_returns_none_when_missing():
+    connection = RecordingConnection()
+
+    result = await repository.get_audit_result(
+        connection,
+        session_id="session-1",
+        subject_type="answer",
+        subject_id="missing-answer",
+    )
+
+    assert result is None

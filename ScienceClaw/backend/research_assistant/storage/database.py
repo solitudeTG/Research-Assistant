@@ -7,6 +7,8 @@ from backend.research_assistant.models import IngestionResult
 from backend.research_assistant.retrieval import EvidenceHit, hybrid_search_evidence
 from backend.research_assistant.storage.repository import (
     PersistSummary,
+    ResearchAuditResult,
+    get_audit_result,
     persist_chunk_embeddings,
     persist_audit_result,
     persist_ingestion_result,
@@ -129,6 +131,27 @@ async def persist_audit_result_to_database(
             subject_type=subject_type,
             subject_id=subject_id,
             audit=audit,
+        )
+    finally:
+        await connection.close()
+
+
+async def get_audit_result_from_database(
+    database_url: str,
+    *,
+    session_id: str,
+    subject_type: str,
+    subject_id: str,
+) -> ResearchAuditResult | None:
+    import asyncpg
+
+    connection = await asyncpg.connect(database_url)
+    try:
+        return await get_audit_result(
+            connection,
+            session_id=session_id,
+            subject_type=subject_type,
+            subject_id=subject_id,
         )
     finally:
         await connection.close()

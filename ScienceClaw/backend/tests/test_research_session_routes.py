@@ -174,6 +174,77 @@ async def test_research_answer_persists_audit_result(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_get_research_audit_result_for_session_returns_persisted_audit(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession()
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    audit_result = types.SimpleNamespace(
+        to_dict=lambda: {
+            "audit_id": "answer-1:audit",
+            "session_id": "session-1",
+            "subject_type": "answer",
+            "subject_id": "answer-1",
+            "status": "approved",
+            "claim_count": 1,
+            "approved_claim_count": 1,
+            "unsupported_claim_count": 0,
+            "invalid_source_count": 0,
+            "boundaries": {"citation_evidence": ["paper"], "context_only": ["memory"]},
+            "claims": [{"claim_text": "Claim", "status": "approved", "evidence_ids": [31], "notes": []}],
+        }
+    )
+
+    async def fake_get_audit(database_url, *, session_id, subject_type, subject_id):
+        assert database_url == sessions.settings.research_database_url
+        assert session_id == "session-1"
+        assert subject_type == "answer"
+        assert subject_id == "answer-1"
+        return audit_result
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "get_audit_result_from_database", fake_get_audit)
+
+    response = await sessions.get_research_audit_result_for_session(
+        "session-1",
+        "answer",
+        "answer-1",
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    assert response.data["audit_id"] == "answer-1:audit"
+    assert response.data["claims"][0]["evidence_ids"] == [31]
+
+
+@pytest.mark.asyncio
+async def test_get_research_audit_result_for_session_returns_404_when_missing(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession()
+
+    async def fake_get_session(session_id):
+        return session
+
+    async def fake_get_audit(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "get_audit_result_from_database", fake_get_audit)
+
+    with pytest.raises(sessions.HTTPException) as excinfo:
+        await sessions.get_research_audit_result_for_session(
+            "session-1",
+            "report",
+            "missing-report",
+            types.SimpleNamespace(id="user-1"),
+        )
+
+    assert excinfo.value.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_research_report_failure_persists_failed_trace_step(monkeypatch, tmp_path):
     sessions = _load_sessions_module(monkeypatch)
     session = FakeSession(vm_root_dir=tmp_path)

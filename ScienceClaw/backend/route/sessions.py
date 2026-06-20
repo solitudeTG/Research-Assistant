@@ -55,6 +55,7 @@ from backend.research_assistant.ingestion import ingest_uploaded_paper, is_resea
 from backend.research_assistant.parsers import PaperParseError
 from backend.research_assistant.reports import generate_markdown_research_report
 from backend.research_assistant.storage.database import (
+    get_audit_result_from_database,
     get_research_session_status_from_database,
     persist_audit_result_to_database,
 )
@@ -1524,6 +1525,39 @@ async def get_research_status_for_session(
         raise
     except Exception as exc:
         logger.exception("get_research_status_for_session failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/{session_id}/research/audit/{subject_type}/{subject_id}", response_model=ApiResponse)
+async def get_research_audit_result_for_session(
+    session_id: str,
+    subject_type: str,
+    subject_id: str,
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """Return a persisted Evidence Audit result for a session answer or report."""
+    try:
+        if subject_type not in {"answer", "report"}:
+            raise HTTPException(status_code=400, detail="subject_type must be 'answer' or 'report'")
+        session = await async_get_science_session(session_id)
+        if session.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        audit_result = await get_audit_result_from_database(
+            settings.research_database_url,
+            session_id=session_id,
+            subject_type=subject_type,
+            subject_id=subject_id,
+        )
+        if audit_result is None:
+            raise HTTPException(status_code=404, detail="Evidence audit result not found")
+        return ApiResponse(data=audit_result.to_dict())
+    except ScienceSessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("get_research_audit_result_for_session failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 

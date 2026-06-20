@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -12,6 +13,36 @@ class PersistSummary:
     paper_id: str
     chunk_count: int
     evidence_record_count: int
+
+
+@dataclass(frozen=True)
+class ResearchAuditResult:
+    audit_id: str
+    session_id: str
+    subject_type: str
+    subject_id: str
+    status: str
+    claim_count: int
+    approved_claim_count: int
+    unsupported_claim_count: int
+    invalid_source_count: int
+    boundaries: dict[str, Any]
+    claims: list[dict[str, Any]]
+
+    def to_dict(self) -> dict:
+        return {
+            "audit_id": self.audit_id,
+            "session_id": self.session_id,
+            "subject_type": self.subject_type,
+            "subject_id": self.subject_id,
+            "status": self.status,
+            "claim_count": self.claim_count,
+            "approved_claim_count": self.approved_claim_count,
+            "unsupported_claim_count": self.unsupported_claim_count,
+            "invalid_source_count": self.invalid_source_count,
+            "boundaries": self.boundaries,
+            "claims": self.claims,
+        }
 
 
 async def persist_ingestion_result(connection: Any, result: IngestionResult) -> PersistSummary:
@@ -257,10 +288,63 @@ async def persist_audit_result(
     )
 
 
-def _json(value: Any) -> str:
-    import json
+async def get_audit_result(
+    connection: Any,
+    *,
+    session_id: str,
+    subject_type: str,
+    subject_id: str,
+) -> ResearchAuditResult | None:
+    row = await connection.fetchrow(
+        """
+        SELECT
+            audit_id,
+            session_id,
+            subject_type,
+            subject_id,
+            status,
+            claim_count,
+            approved_claim_count,
+            unsupported_claim_count,
+            invalid_source_count,
+            boundaries,
+            claims
+        FROM research_audit_results
+        WHERE session_id = $1
+            AND subject_type = $2
+            AND subject_id = $3
+        """,
+        session_id,
+        subject_type,
+        subject_id,
+    )
+    if row is None:
+        return None
+    return ResearchAuditResult(
+        audit_id=row["audit_id"],
+        session_id=row["session_id"],
+        subject_type=row["subject_type"],
+        subject_id=row["subject_id"],
+        status=row["status"],
+        claim_count=int(row["claim_count"]),
+        approved_claim_count=int(row["approved_claim_count"]),
+        unsupported_claim_count=int(row["unsupported_claim_count"]),
+        invalid_source_count=int(row["invalid_source_count"]),
+        boundaries=_json_value(row["boundaries"], default={}),
+        claims=_json_value(row["claims"], default=[]),
+    )
 
+
+def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _json_value(value: Any, *, default: Any) -> Any:
+    if value is None:
+        return default
+    if isinstance(value, str):
+        return json.loads(value)
+    return value
 
 
 def _vector_literal(values: list[float]) -> str:

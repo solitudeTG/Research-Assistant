@@ -18,6 +18,7 @@ class FakeConnection:
         self.closed = False
         self.executed = []
         self.executemany_calls = []
+        self.fetchrow_result = {"paper_count": 2, "chunk_count": 7}
 
     async def fetch(self, sql, *args):
         return [
@@ -35,7 +36,7 @@ class FakeConnection:
         ]
 
     async def fetchrow(self, sql, *args):
-        return {"paper_count": 2, "chunk_count": 7}
+        return self.fetchrow_result
 
     async def close(self):
         self.closed = True
@@ -165,4 +166,40 @@ async def test_get_research_session_status_from_database_counts_indexed_papers(m
     assert status.chunk_count == 7
     assert status.has_indexed_papers is True
     assert status.to_dict()["has_indexed_papers"] is True
+    assert fake_connection.closed is True
+
+
+@pytest.mark.asyncio
+async def test_get_audit_result_from_database_closes_asyncpg_connection(monkeypatch):
+    fake_connection = FakeConnection()
+    fake_connection.fetchrow_result = {
+        "audit_id": "answer-1:audit",
+        "session_id": "session-1",
+        "subject_type": "answer",
+        "subject_id": "answer-1",
+        "status": "approved",
+        "claim_count": 1,
+        "approved_claim_count": 1,
+        "unsupported_claim_count": 0,
+        "invalid_source_count": 0,
+        "boundaries": {"citation_evidence": ["paper"], "context_only": ["memory"]},
+        "claims": [{"claim_text": "Claim", "status": "approved", "evidence_ids": [3], "notes": []}],
+    }
+
+    async def connect(database_url):
+        assert database_url == "postgresql://test"
+        return fake_connection
+
+    monkeypatch.setitem(sys.modules, "asyncpg", types.SimpleNamespace(connect=connect))
+
+    result = await database.get_audit_result_from_database(
+        "postgresql://test",
+        session_id="session-1",
+        subject_type="answer",
+        subject_id="answer-1",
+    )
+
+    assert result is not None
+    assert result.audit_id == "answer-1:audit"
+    assert result.to_dict()["claims"][0]["evidence_ids"] == [3]
     assert fake_connection.closed is True
