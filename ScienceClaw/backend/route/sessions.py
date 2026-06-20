@@ -1837,7 +1837,7 @@ async def generate_research_report_for_session(
             "timestamp": _now_ts(),
             "content": (
                 f"Generated Markdown research artifact `{report.title}` with "
-                f"{report.citation_count} paper citations."
+                f"{report.citation_count} citation evidence records."
             ),
             "role": "assistant",
             "attachments": [],

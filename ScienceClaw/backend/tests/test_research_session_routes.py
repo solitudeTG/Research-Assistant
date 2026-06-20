@@ -661,6 +661,56 @@ async def test_get_research_evidence_record_for_session_returns_404_when_missing
 
 
 @pytest.mark.asyncio
+async def test_research_report_completion_message_uses_generic_citation_evidence(monkeypatch, tmp_path):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession(vm_root_dir=tmp_path)
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    async def fake_report(*args, **kwargs):
+        return types.SimpleNamespace(
+            report_id="report-1",
+            title="Evidence Boundary Note",
+            question="Summarize the evidence",
+            markdown_path=str(tmp_path / "research_reports" / "report-1.md"),
+            evidence_map_path=str(tmp_path / "research_reports" / "report-1.evidence.json"),
+            citation_count=2,
+            to_dict=lambda: {
+                "report_id": "report-1",
+                "title": "Evidence Boundary Note",
+                "question": "Summarize the evidence",
+                "markdown_path": str(tmp_path / "research_reports" / "report-1.md"),
+                "evidence_map_path": str(tmp_path / "research_reports" / "report-1.evidence.json"),
+                "citation_count": 2,
+            },
+        )
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "generate_markdown_research_report", fake_report)
+    monkeypatch.setattr(sessions, "_publish_session_event", lambda *args, **kwargs: None)
+
+    response = await sessions.generate_research_report_for_session(
+        "session-1",
+        sessions.ResearchReportRequest(question="Summarize the evidence"),
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    assistant_messages = [
+        event["data"]
+        for event in session.events
+        if event.get("event") == "message" and event.get("data", {}).get("role") == "assistant"
+    ]
+    assert assistant_messages[-1]["content"] == (
+        "Generated Markdown research artifact `Evidence Boundary Note` with "
+        "2 citation evidence records."
+    )
+    assert "paper citations" not in assistant_messages[-1]["content"]
+    assert response.data["citation_count"] == 2
+
+
+@pytest.mark.asyncio
 async def test_research_report_failure_persists_failed_trace_step(monkeypatch, tmp_path):
     sessions = _load_sessions_module(monkeypatch)
     session = FakeSession(vm_root_dir=tmp_path)
