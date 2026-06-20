@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from backend.research_assistant.audit import EvidenceAudit
 from backend.research_assistant.models import IngestionResult
 from backend.research_assistant.retrieval import EvidenceHit, hybrid_search_evidence
 from backend.research_assistant.storage.repository import (
     PersistSummary,
     persist_chunk_embeddings,
+    persist_audit_result,
     persist_ingestion_result,
     persist_report_evidence_map,
 )
@@ -102,6 +104,31 @@ async def persist_report_evidence_map_to_database(
             connection,
             report_id=report_id,
             evidence_rows=evidence_rows,
+        )
+    finally:
+        await connection.close()
+
+
+async def persist_audit_result_to_database(
+    database_url: str,
+    *,
+    audit_id: str,
+    session_id: str,
+    subject_type: str,
+    subject_id: str,
+    audit: EvidenceAudit,
+) -> None:
+    import asyncpg
+
+    connection = await asyncpg.connect(database_url)
+    try:
+        await persist_audit_result(
+            connection,
+            audit_id=audit_id,
+            session_id=session_id,
+            subject_type=subject_type,
+            subject_id=subject_id,
+            audit=audit,
         )
     finally:
         await connection.close()

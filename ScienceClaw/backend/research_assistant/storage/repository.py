@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from backend.research_assistant.audit import EvidenceAudit
 from backend.research_assistant.models import IngestionResult
 
 
@@ -201,6 +202,58 @@ async def persist_report_evidence_map(
             )
             for evidence_id, markdown_anchor, claim_text in evidence_rows
         ],
+    )
+
+
+async def persist_audit_result(
+    connection: Any,
+    *,
+    audit_id: str,
+    session_id: str,
+    subject_type: str,
+    subject_id: str,
+    audit: EvidenceAudit,
+) -> None:
+    await connection.execute(
+        """
+        INSERT INTO research_audit_results (
+            audit_id,
+            session_id,
+            subject_type,
+            subject_id,
+            status,
+            claim_count,
+            approved_claim_count,
+            unsupported_claim_count,
+            invalid_source_count,
+            boundaries,
+            claims,
+            updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, now())
+        ON CONFLICT (subject_type, subject_id) DO UPDATE SET
+            audit_id = EXCLUDED.audit_id,
+            session_id = EXCLUDED.session_id,
+            status = EXCLUDED.status,
+            claim_count = EXCLUDED.claim_count,
+            approved_claim_count = EXCLUDED.approved_claim_count,
+            unsupported_claim_count = EXCLUDED.unsupported_claim_count,
+            invalid_source_count = EXCLUDED.invalid_source_count,
+            boundaries = EXCLUDED.boundaries,
+            claims = EXCLUDED.claims,
+            updated_at = now()
+        """,
+        audit_id,
+        session_id,
+        subject_type,
+        subject_id,
+        audit.status,
+        audit.claim_count,
+        audit.approved_claim_count,
+        audit.unsupported_claim_count,
+        audit.invalid_source_count,
+        _json(audit.boundaries),
+        _json([claim.to_dict() for claim in audit.claims]),
     )
 
 

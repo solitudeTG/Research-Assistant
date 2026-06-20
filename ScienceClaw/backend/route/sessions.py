@@ -54,7 +54,10 @@ from backend.research_assistant.indexing import index_ingestion_result
 from backend.research_assistant.ingestion import ingest_uploaded_paper, is_research_document
 from backend.research_assistant.parsers import PaperParseError
 from backend.research_assistant.reports import generate_markdown_research_report
-from backend.research_assistant.storage.database import get_research_session_status_from_database
+from backend.research_assistant.storage.database import (
+    get_research_session_status_from_database,
+    persist_audit_result_to_database,
+)
 from backend.user.dependencies import get_current_user, require_user, User
 from backend.models import get_model_config
 from backend.config import settings
@@ -1442,6 +1445,14 @@ async def answer_research_question_for_session(
                 embedding_dimensions=settings.research_embedding_dimensions,
                 embedding_model=settings.research_embedding_model,
                 limit=body.limit,
+            )
+            await persist_audit_result_to_database(
+                settings.research_database_url,
+                audit_id=f"{answer.answer_id}:audit",
+                session_id=session_id,
+                subject_type="answer",
+                subject_id=answer.answer_id,
+                audit=answer.audit,
             )
         except Exception as exc:
             await _append_save_publish_session_event(

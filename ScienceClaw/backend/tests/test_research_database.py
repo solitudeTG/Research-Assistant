@@ -3,6 +3,8 @@ import types
 
 import pytest
 
+from backend.research_assistant.audit import EvidenceAudit, EvidenceAuditClaim
+from backend.research_assistant.storage import database
 from backend.research_assistant.storage.database import (
     get_research_session_status_from_database,
     hybrid_search_evidence_in_database,
@@ -14,6 +16,7 @@ from backend.research_assistant.storage.database import (
 class FakeConnection:
     def __init__(self):
         self.closed = False
+        self.executed = []
         self.executemany_calls = []
 
     async def fetch(self, sql, *args):
@@ -36,6 +39,9 @@ class FakeConnection:
 
     async def close(self):
         self.closed = True
+
+    async def execute(self, sql, *args):
+        self.executed.append((sql, args))
 
     async def executemany(self, sql, rows):
         self.executemany_calls.append((sql, rows))
@@ -101,6 +107,41 @@ async def test_persist_report_evidence_map_to_database_closes_asyncpg_connection
     )
 
     assert "research_report_evidence_map" in fake_connection.executemany_calls[0][0].lower()
+    assert fake_connection.closed is True
+
+
+@pytest.mark.asyncio
+async def test_persist_audit_result_to_database_closes_asyncpg_connection(monkeypatch):
+    fake_connection = FakeConnection()
+    audit = EvidenceAudit(
+        status="unsupported",
+        claims=[
+            EvidenceAuditClaim(
+                claim_text="No citation evidence was found.",
+                status="unsupported",
+                evidence_ids=[],
+                notes=["No citation evidence was attached to this claim."],
+            )
+        ],
+        boundaries={"citation_evidence": ["paper"], "context_only": ["memory"]},
+    )
+
+    async def connect(database_url):
+        assert database_url == "postgresql://test"
+        return fake_connection
+
+    monkeypatch.setitem(sys.modules, "asyncpg", types.SimpleNamespace(connect=connect))
+
+    await database.persist_audit_result_to_database(
+        "postgresql://test",
+        audit_id="answer-1:audit",
+        session_id="session-1",
+        subject_type="answer",
+        subject_id="answer-1",
+        audit=audit,
+    )
+
+    assert "research_audit_results" in fake_connection.executed[0][0].lower()
     assert fake_connection.closed is True
 
 

@@ -30,16 +30,29 @@ async def test_generate_markdown_research_report_writes_artifact_and_evidence_ma
         )
 
     persisted = {}
+    persisted_audit = {}
 
     async def fake_persist(database_url, *, report_id, evidence_rows):
         persisted["database_url"] = database_url
         persisted["report_id"] = report_id
         persisted["evidence_rows"] = evidence_rows
 
+    async def fake_persist_audit(database_url, *, audit_id, session_id, subject_type, subject_id, audit):
+        persisted_audit["database_url"] = database_url
+        persisted_audit["audit_id"] = audit_id
+        persisted_audit["session_id"] = session_id
+        persisted_audit["subject_type"] = subject_type
+        persisted_audit["subject_id"] = subject_id
+        persisted_audit["status"] = audit.status
+
     monkeypatch.setattr("backend.research_assistant.reports.answer_research_question", fake_answer)
     monkeypatch.setattr(
         "backend.research_assistant.reports.persist_report_evidence_map_to_database",
         fake_persist,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.reports.persist_audit_result_to_database",
+        fake_persist_audit,
     )
 
     report = await generate_markdown_research_report(
@@ -70,3 +83,11 @@ async def test_generate_markdown_research_report_writes_artifact_and_evidence_ma
     assert persisted["database_url"] == "postgresql://test"
     assert persisted["report_id"] == report.report_id
     assert persisted["evidence_rows"] == [(17, "evidence-1", "Hybrid retrieval improves recall.")]
+    assert persisted_audit == {
+        "database_url": "postgresql://test",
+        "audit_id": f"{report.report_id}:audit",
+        "session_id": "session-1",
+        "subject_type": "report",
+        "subject_id": report.report_id,
+        "status": "approved",
+    }

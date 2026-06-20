@@ -81,3 +81,26 @@ CREATE TABLE IF NOT EXISTS research_report_evidence_map (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (report_id, evidence_id, markdown_anchor)
 );
+
+CREATE TABLE IF NOT EXISTS research_audit_results (
+    audit_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    subject_type TEXT NOT NULL CHECK (subject_type IN ('answer', 'report')),
+    subject_id TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('approved', 'partial', 'unsupported', 'invalid_source')),
+    claim_count INTEGER NOT NULL,
+    approved_claim_count INTEGER NOT NULL,
+    unsupported_claim_count INTEGER NOT NULL,
+    invalid_source_count INTEGER NOT NULL,
+    boundaries JSONB NOT NULL DEFAULT '{}'::jsonb,
+    claims JSONB NOT NULL DEFAULT '[]'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (subject_type, subject_id)
+);
+
+CREATE INDEX IF NOT EXISTS research_audit_results_session_id_idx
+    ON research_audit_results (session_id);
+
+CREATE INDEX IF NOT EXISTS research_audit_results_status_idx
+    ON research_audit_results (status);

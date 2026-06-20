@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pytest
 
+from backend.research_assistant.answering import ResearchAnswer, ResearchCitation
+
 
 class FakeSession:
     def __init__(self, *, user_id="user-1", vm_root_dir=None):
@@ -109,6 +111,66 @@ async def test_research_answer_failure_persists_failed_trace_step(monkeypatch):
     assert failed_steps[0]["metadata"]["question"] == "What did the paper find?"
     assert "database unavailable" in failed_steps[0]["metadata"]["error"]
     assert session.save_count == 1
+
+
+@pytest.mark.asyncio
+async def test_research_answer_persists_audit_result(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession()
+    persisted_audit = {}
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    async def fake_answer(*args, **kwargs):
+        return ResearchAnswer(
+            content="Based on uploaded paper evidence:\n1. Citation evidence is bounded. [paper-1:Method:2]",
+            citations=[
+                ResearchCitation(
+                    evidence_id=31,
+                    chunk_id="chunk-31",
+                    paper_id="paper-1",
+                    title="Evidence Boundaries",
+                    section="Method",
+                    page_start=2,
+                    page_end=2,
+                    quote="Citation evidence is bounded.",
+                    citation_label="[paper-1:Method:2]",
+                )
+            ],
+        )
+
+    async def fake_persist_audit(database_url, *, audit_id, session_id, subject_type, subject_id, audit):
+        persisted_audit["database_url"] = database_url
+        persisted_audit["audit_id"] = audit_id
+        persisted_audit["session_id"] = session_id
+        persisted_audit["subject_type"] = subject_type
+        persisted_audit["subject_id"] = subject_id
+        persisted_audit["status"] = audit.status
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "answer_research_question", fake_answer)
+    monkeypatch.setattr(sessions, "persist_audit_result_to_database", fake_persist_audit)
+    monkeypatch.setattr(sessions, "_publish_session_event", lambda *args, **kwargs: None)
+
+    response = await sessions.answer_research_question_for_session(
+        "session-1",
+        sessions.ResearchAnswerRequest(question="What does the paper say about evidence?"),
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    answer_id = response.data["answer_id"]
+    assert answer_id.startswith("research-answer-")
+    assert persisted_audit == {
+        "database_url": sessions.settings.research_database_url,
+        "audit_id": f"{answer_id}:audit",
+        "session_id": "session-1",
+        "subject_type": "answer",
+        "subject_id": answer_id,
+        "status": "approved",
+    }
+    assert session.events[-1]["data"]["metadata"]["research_assistant"]["answer_id"] == answer_id
 
 
 @pytest.mark.asyncio

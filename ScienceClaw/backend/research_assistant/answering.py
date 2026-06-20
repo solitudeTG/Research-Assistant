@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
+
+import shortuuid
 
 from backend.research_assistant.audit import EvidenceAudit, audit_evidence_claims
 from backend.research_assistant.embeddings import HashingEmbeddingProvider
@@ -29,6 +31,7 @@ class ResearchAnswer:
     content: str
     citations: list[ResearchCitation]
     audit: EvidenceAudit | None = None
+    answer_id: str = field(default_factory=lambda: f"research-answer-{shortuuid.uuid()}")
 
     def __post_init__(self) -> None:
         if self.audit is None:
@@ -44,6 +47,7 @@ class ResearchAnswer:
 
     def to_dict(self) -> dict:
         return {
+            "answer_id": self.answer_id,
             "content": self.content,
             "citations": [citation.to_dict() for citation in self.citations],
             "citation_count": self.citation_count,

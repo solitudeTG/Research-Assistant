@@ -2,7 +2,9 @@ from pathlib import Path
 
 import pytest
 
+from backend.research_assistant.audit import EvidenceAudit, EvidenceAuditClaim
 from backend.research_assistant.ingestion import ingest_uploaded_paper
+from backend.research_assistant.storage import repository
 from backend.research_assistant.storage.repository import (
     persist_chunk_embeddings,
     persist_ingestion_result,
@@ -112,3 +114,49 @@ async def test_persist_report_evidence_map_upserts_rows():
     assert "insert into research_report_evidence_map" in sql.lower()
     assert "on conflict" in sql.lower()
     assert rows == [("report-1", 3, "evidence-1", "Claim text")]
+
+
+@pytest.mark.asyncio
+async def test_persist_audit_result_upserts_claim_boundaries():
+    connection = RecordingConnection()
+    audit = EvidenceAudit(
+        status="approved",
+        claims=[
+            EvidenceAuditClaim(
+                claim_text="Hybrid retrieval improves recall.",
+                status="approved",
+                evidence_ids=[17],
+                notes=[],
+            )
+        ],
+        boundaries={
+            "citation_evidence": ["paper"],
+            "context_only": ["memory", "model_reasoning", "process_trace", "tool_logs"],
+        },
+    )
+
+    await repository.persist_audit_result(
+        connection,
+        audit_id="audit-1",
+        session_id="session-1",
+        subject_type="report",
+        subject_id="report-1",
+        audit=audit,
+    )
+
+    sql, args = connection.executed[0]
+    assert "insert into research_audit_results" in sql.lower()
+    assert "on conflict (subject_type, subject_id)" in sql.lower()
+    assert args[0:9] == (
+        "audit-1",
+        "session-1",
+        "report",
+        "report-1",
+        "approved",
+        1,
+        1,
+        0,
+        0,
+    )
+    assert '"citation_evidence":["paper"]' in args[9]
+    assert '"claim_text":"Hybrid retrieval improves recall."' in args[10]

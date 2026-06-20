@@ -20,8 +20,13 @@ def test_research_store_schema_defines_pgvector_and_evidence_tables():
         "research_evidence_records",
         "research_citations",
         "research_report_evidence_map",
+        "research_audit_results",
     ]:
         assert f"create table if not exists {table_name}" in sql
 
     assert "tsvector" in sql
     assert "vector(" in sql
+    assert "subject_type text not null check" in sql
+    assert "subject_id text not null" in sql
+    assert "claims jsonb not null default '[]'::jsonb" in sql
+    assert "unique (subject_type, subject_id)" in sql

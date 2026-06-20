@@ -13,7 +13,10 @@ from backend.research_assistant.answering import (
     ResearchCitation,
     answer_research_question,
 )
-from backend.research_assistant.storage.database import persist_report_evidence_map_to_database
+from backend.research_assistant.storage.database import (
+    persist_audit_result_to_database,
+    persist_report_evidence_map_to_database,
+)
 
 
 @dataclass(frozen=True)
@@ -79,6 +82,14 @@ async def generate_markdown_research_report(
             )
             for item in evidence_map["evidence"]
         ],
+    )
+    await persist_audit_result_to_database(
+        database_url,
+        audit_id=f"{report_id}:audit",
+        session_id=session_id,
+        subject_type="report",
+        subject_id=report_id,
+        audit=answer.audit,
     )
 
     return MarkdownReportArtifact(
