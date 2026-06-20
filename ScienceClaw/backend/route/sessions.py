@@ -56,6 +56,7 @@ from backend.research_assistant.parsers import PaperParseError
 from backend.research_assistant.reports import generate_markdown_research_report
 from backend.research_assistant.storage.database import (
     get_audit_result_from_database,
+    get_evidence_record_from_database,
     get_research_session_status_from_database,
     persist_audit_result_to_database,
 )
@@ -1558,6 +1559,35 @@ async def get_research_audit_result_for_session(
         raise
     except Exception as exc:
         logger.exception("get_research_audit_result_for_session failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/{session_id}/research/evidence/{evidence_id}", response_model=ApiResponse)
+async def get_research_evidence_record_for_session(
+    session_id: str,
+    evidence_id: int,
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """Return inspectable citation evidence details for this session."""
+    try:
+        session = await async_get_science_session(session_id)
+        if session.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        evidence_record = await get_evidence_record_from_database(
+            settings.research_database_url,
+            session_id=session_id,
+            evidence_id=evidence_id,
+        )
+        if evidence_record is None:
+            raise HTTPException(status_code=404, detail="Citation evidence not found")
+        return ApiResponse(data=evidence_record.to_dict())
+    except ScienceSessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("get_research_evidence_record_for_session failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 

@@ -45,6 +45,36 @@ class ResearchAuditResult:
         }
 
 
+@dataclass(frozen=True)
+class ResearchEvidenceRecord:
+    evidence_id: int
+    evidence_type: str
+    chunk_id: str
+    paper_id: str
+    title: str
+    section: str
+    page_start: int | None
+    page_end: int | None
+    quote: str
+    chunk_content: str
+    source_identity: dict[str, Any]
+
+    def to_dict(self) -> dict:
+        return {
+            "evidence_id": self.evidence_id,
+            "evidence_type": self.evidence_type,
+            "chunk_id": self.chunk_id,
+            "paper_id": self.paper_id,
+            "title": self.title,
+            "section": self.section,
+            "page_start": self.page_start,
+            "page_end": self.page_end,
+            "quote": self.quote,
+            "chunk_content": self.chunk_content,
+            "source_identity": self.source_identity,
+        }
+
+
 async def persist_ingestion_result(connection: Any, result: IngestionResult) -> PersistSummary:
     async with connection.transaction():
         await connection.execute(
@@ -332,6 +362,53 @@ async def get_audit_result(
         invalid_source_count=int(row["invalid_source_count"]),
         boundaries=_json_value(row["boundaries"], default={}),
         claims=_json_value(row["claims"], default=[]),
+    )
+
+
+async def get_evidence_record(
+    connection: Any,
+    *,
+    session_id: str,
+    evidence_id: int,
+) -> ResearchEvidenceRecord | None:
+    row = await connection.fetchrow(
+        """
+        SELECT
+            er.evidence_id,
+            er.evidence_type,
+            er.chunk_id,
+            c.paper_id,
+            p.title,
+            er.section,
+            er.page_start,
+            er.page_end,
+            er.quote,
+            c.content AS chunk_content,
+            er.source_identity
+        FROM research_evidence_records er
+        JOIN research_chunks c ON c.chunk_id = er.chunk_id
+        JOIN research_papers p ON p.paper_id = c.paper_id
+        WHERE p.session_id = $1
+            AND er.evidence_id = $2
+            AND er.evidence_type IN ('paper', 'database', 'web')
+        """,
+        session_id,
+        evidence_id,
+    )
+    if row is None:
+        return None
+    return ResearchEvidenceRecord(
+        evidence_id=int(row["evidence_id"]),
+        evidence_type=str(row["evidence_type"]),
+        chunk_id=str(row["chunk_id"]),
+        paper_id=str(row["paper_id"]),
+        title=str(row["title"]),
+        section=str(row["section"]),
+        page_start=row["page_start"],
+        page_end=row["page_end"],
+        quote=str(row["quote"]),
+        chunk_content=str(row["chunk_content"]),
+        source_identity=_json_value(row["source_identity"], default={}),
     )
 
 

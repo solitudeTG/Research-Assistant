@@ -203,3 +203,38 @@ async def test_get_audit_result_from_database_closes_asyncpg_connection(monkeypa
     assert result.audit_id == "answer-1:audit"
     assert result.to_dict()["claims"][0]["evidence_ids"] == [3]
     assert fake_connection.closed is True
+
+
+@pytest.mark.asyncio
+async def test_get_evidence_record_from_database_closes_asyncpg_connection(monkeypatch):
+    fake_connection = FakeConnection()
+    fake_connection.fetchrow_result = {
+        "evidence_id": 17,
+        "evidence_type": "paper",
+        "chunk_id": "chunk-17",
+        "paper_id": "paper-1",
+        "title": "Evidence Boundaries",
+        "section": "Method",
+        "page_start": 2,
+        "page_end": 2,
+        "quote": "Citation evidence is bounded.",
+        "chunk_content": "Citation evidence is bounded. Memory is context-only.",
+        "source_identity": {"paper_id": "paper-1", "file_path": "paper.pdf"},
+    }
+
+    async def connect(database_url):
+        assert database_url == "postgresql://test"
+        return fake_connection
+
+    monkeypatch.setitem(sys.modules, "asyncpg", types.SimpleNamespace(connect=connect))
+
+    result = await database.get_evidence_record_from_database(
+        "postgresql://test",
+        session_id="session-1",
+        evidence_id=17,
+    )
+
+    assert result is not None
+    assert result.evidence_type == "paper"
+    assert result.to_dict()["source_identity"]["file_path"] == "paper.pdf"
+    assert fake_connection.closed is True

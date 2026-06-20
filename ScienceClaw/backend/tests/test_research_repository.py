@@ -216,3 +216,53 @@ async def test_get_audit_result_returns_none_when_missing():
     )
 
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_evidence_record_reads_session_scoped_paper_evidence():
+    connection = RecordingConnection()
+    connection.fetchrow_result = {
+        "evidence_id": 17,
+        "evidence_type": "paper",
+        "chunk_id": "chunk-17",
+        "paper_id": "paper-1",
+        "title": "Evidence Boundaries",
+        "section": "Method",
+        "page_start": 2,
+        "page_end": 3,
+        "quote": "Citation evidence is bounded.",
+        "chunk_content": "Citation evidence is bounded. Memory is context-only.",
+        "source_identity": '{"paper_id":"paper-1","file_path":"paper.pdf","section":"Method","page":2}',
+    }
+
+    result = await repository.get_evidence_record(
+        connection,
+        session_id="session-1",
+        evidence_id=17,
+    )
+
+    sql, args = connection.fetchrow_calls[0]
+    assert "from research_evidence_records" in sql.lower()
+    assert "join research_papers" in sql.lower()
+    assert "p.session_id = $1" in sql.lower()
+    assert "er.evidence_id = $2" in sql.lower()
+    assert args == ("session-1", 17)
+    assert result is not None
+    assert result.evidence_id == 17
+    assert result.evidence_type == "paper"
+    assert result.paper_id == "paper-1"
+    assert result.source_identity["file_path"] == "paper.pdf"
+    assert result.to_dict()["chunk_content"].startswith("Citation evidence")
+
+
+@pytest.mark.asyncio
+async def test_get_evidence_record_returns_none_when_missing():
+    connection = RecordingConnection()
+
+    result = await repository.get_evidence_record(
+        connection,
+        session_id="session-1",
+        evidence_id=999,
+    )
+
+    assert result is None

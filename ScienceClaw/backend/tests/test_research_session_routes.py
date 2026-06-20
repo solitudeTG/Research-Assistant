@@ -245,6 +245,75 @@ async def test_get_research_audit_result_for_session_returns_404_when_missing(mo
 
 
 @pytest.mark.asyncio
+async def test_get_research_evidence_record_for_session_returns_persisted_evidence(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession()
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    evidence = types.SimpleNamespace(
+        to_dict=lambda: {
+            "evidence_id": 17,
+            "evidence_type": "paper",
+            "chunk_id": "chunk-17",
+            "paper_id": "paper-1",
+            "title": "Evidence Boundaries",
+            "section": "Method",
+            "page_start": 2,
+            "page_end": 2,
+            "quote": "Citation evidence is bounded.",
+            "chunk_content": "Citation evidence is bounded. Memory is context-only.",
+            "source_identity": {"paper_id": "paper-1", "file_path": "paper.pdf"},
+        }
+    )
+
+    async def fake_get_evidence(database_url, *, session_id, evidence_id):
+        assert database_url == sessions.settings.research_database_url
+        assert session_id == "session-1"
+        assert evidence_id == 17
+        return evidence
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "get_evidence_record_from_database", fake_get_evidence)
+
+    response = await sessions.get_research_evidence_record_for_session(
+        "session-1",
+        17,
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    assert response.data["evidence_id"] == 17
+    assert response.data["evidence_type"] == "paper"
+    assert response.data["source_identity"]["file_path"] == "paper.pdf"
+
+
+@pytest.mark.asyncio
+async def test_get_research_evidence_record_for_session_returns_404_when_missing(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession()
+
+    async def fake_get_session(session_id):
+        return session
+
+    async def fake_get_evidence(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "get_evidence_record_from_database", fake_get_evidence)
+
+    with pytest.raises(sessions.HTTPException) as excinfo:
+        await sessions.get_research_evidence_record_for_session(
+            "session-1",
+            999,
+            types.SimpleNamespace(id="user-1"),
+        )
+
+    assert excinfo.value.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_research_report_failure_persists_failed_trace_step(monkeypatch, tmp_path):
     sessions = _load_sessions_module(monkeypatch)
     session = FakeSession(vm_root_dir=tmp_path)

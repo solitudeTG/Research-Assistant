@@ -8,7 +8,9 @@ from backend.research_assistant.retrieval import EvidenceHit, hybrid_search_evid
 from backend.research_assistant.storage.repository import (
     PersistSummary,
     ResearchAuditResult,
+    ResearchEvidenceRecord,
     get_audit_result,
+    get_evidence_record,
     persist_chunk_embeddings,
     persist_audit_result,
     persist_ingestion_result,
@@ -152,6 +154,25 @@ async def get_audit_result_from_database(
             session_id=session_id,
             subject_type=subject_type,
             subject_id=subject_id,
+        )
+    finally:
+        await connection.close()
+
+
+async def get_evidence_record_from_database(
+    database_url: str,
+    *,
+    session_id: str,
+    evidence_id: int,
+) -> ResearchEvidenceRecord | None:
+    import asyncpg
+
+    connection = await asyncpg.connect(database_url)
+    try:
+        return await get_evidence_record(
+            connection,
+            session_id=session_id,
+            evidence_id=evidence_id,
         )
     finally:
         await connection.close()
