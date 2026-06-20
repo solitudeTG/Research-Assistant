@@ -144,6 +144,8 @@ def _compose_markdown_report(
             f"- Approved: {answer.audit.approved_claim_count}",
             f"- Unsupported: {answer.audit.unsupported_claim_count}",
             f"- Invalid sources: {answer.audit.invalid_source_count}",
+            f"- Citation evidence sources: {_format_sources(answer.audit.boundaries['citation_evidence'])}",
+            f"- Context-only sources: {_format_sources(answer.audit.boundaries['context_only'])}",
             "",
             "## Evidence Boundary",
             "",
@@ -194,3 +196,7 @@ def _page_label(citation: ResearchCitation) -> str:
     if citation.page_end and citation.page_end != citation.page_start:
         return f"{citation.page_start}-{citation.page_end}"
     return str(citation.page_start)
+
+
+def _format_sources(sources: list[str]) -> str:
+    return ", ".join(f"`{source}`" for source in sources)

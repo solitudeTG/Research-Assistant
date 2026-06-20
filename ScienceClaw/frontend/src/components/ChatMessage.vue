@@ -66,6 +66,38 @@
             <span v-if="researchAudit.invalid_source_count > 0">{{ researchAudit.invalid_source_count }} invalid source</span>
           </div>
         </div>
+        <details class="mt-2 rounded-lg border border-gray-200/80 dark:border-gray-700/80 bg-white/70 dark:bg-[#1e1e1e]/70 px-3 py-2">
+          <summary class="cursor-pointer list-none text-[11px] font-medium text-[var(--text-secondary)]">
+            Evidence boundary and claim checks
+          </summary>
+          <div class="mt-2 space-y-2 text-[11px] leading-relaxed text-[var(--text-secondary)]">
+            <div>
+              <span class="font-medium text-[var(--text-primary)]">Citation evidence:</span>
+              {{ researchAudit.boundaries.citation_evidence.join(', ') || 'none' }}
+            </div>
+            <div>
+              <span class="font-medium text-[var(--text-primary)]">Context only:</span>
+              {{ researchAudit.boundaries.context_only.join(', ') || 'none' }}
+            </div>
+            <div v-if="researchAudit.claims.length > 0" class="space-y-1">
+              <div
+                v-for="(claim, claimIndex) in researchAudit.claims"
+                :key="`${claim.status}-${claimIndex}`"
+                class="rounded-md bg-gray-50 dark:bg-gray-900/40 px-2 py-1.5"
+              >
+                <div class="flex items-center justify-between gap-2">
+                  <span class="truncate">{{ claim.claim_text }}</span>
+                  <span class="shrink-0 uppercase tracking-wide" :class="claim.status === 'approved' ? 'text-emerald-600 dark:text-emerald-300' : 'text-amber-600 dark:text-amber-300'">
+                    {{ claim.status }}
+                  </span>
+                </div>
+                <div v-if="claim.notes.length > 0" class="mt-1 text-[var(--text-tertiary)]">
+                  {{ claim.notes.join(' ') }}
+                </div>
+              </div>
+            </div>
+          </div>
+        </details>
       </div>
       <div v-if="researchCitations.length > 0" class="border-t border-gray-100 dark:border-gray-800 px-4 py-3 bg-gray-50/60 dark:bg-gray-900/30">
         <div class="flex items-center justify-between gap-3 mb-2">

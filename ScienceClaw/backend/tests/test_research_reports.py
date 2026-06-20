@@ -61,6 +61,8 @@ async def test_generate_markdown_research_report_writes_artifact_and_evidence_ma
     assert "Evidence scope: uploaded papers only" in markdown
     assert "Evidence Audit" in markdown
     assert "Status: `approved`" in markdown
+    assert "Citation evidence sources: `paper`" in markdown
+    assert "Context-only sources: `memory`, `model_reasoning`, `process_trace`, `tool_logs`" in markdown
     assert "Hybrid retrieval improves recall. [paper-1:Results:4]" in markdown
     assert "Memory, model reasoning, process trace, and tool logs are not cited" in markdown
     assert evidence["audit"]["status"] == "approved"
