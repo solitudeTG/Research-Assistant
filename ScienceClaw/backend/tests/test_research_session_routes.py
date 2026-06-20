@@ -352,8 +352,12 @@ async def test_promote_research_memory_requires_approved_audit_claim(monkeypatch
     async def fake_persist_memory(database_url, **kwargs):
         persisted_memory.update({"database_url": database_url, **kwargs})
 
+    async def fake_list_memory(*args, **kwargs):
+        return []
+
     monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
     monkeypatch.setattr(sessions, "get_audit_result_from_database", fake_get_audit)
+    monkeypatch.setattr(sessions, "list_memory_entries_from_database", fake_list_memory)
     monkeypatch.setattr(sessions, "persist_memory_entry_to_database", fake_persist_memory)
 
     response = await sessions.promote_research_memory_for_session(
@@ -376,6 +380,81 @@ async def test_promote_research_memory_requires_approved_audit_claim(monkeypatch
     assert persisted_memory["content"] == "Citation evidence is bounded."
     assert persisted_memory["source_subject_type"] == "answer"
     assert persisted_memory["source_subject_id"] == "answer-1"
+    assert response.data["created"] is True
+    assert response.data["duplicate"] is False
+
+
+@pytest.mark.asyncio
+async def test_promote_research_memory_returns_existing_memory_without_duplicate_persist(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession()
+
+    async def fake_get_session(session_id):
+        return session
+
+    audit_result = types.SimpleNamespace(
+        claims=[
+            {
+                "claim_text": "Citation evidence is bounded.",
+                "status": "approved",
+                "evidence_ids": [17],
+                "notes": [],
+            }
+        ]
+    )
+
+    existing_memory = types.SimpleNamespace(
+        memory_id="mem-existing",
+        layer="l2",
+        title="Citation evidence is bounded.",
+        content="Citation evidence is bounded.",
+        source_subject_type="answer",
+        source_subject_id="answer-1",
+        to_context_dict=lambda: {
+            "memory_id": "mem-existing",
+            "layer": "l2",
+            "title": "Citation evidence is bounded.",
+            "content": "Citation evidence is bounded.",
+            "source_type": "memory",
+            "context_only": True,
+            "source_subject_type": "answer",
+            "source_subject_id": "answer-1",
+        },
+    )
+
+    async def fake_get_audit(*args, **kwargs):
+        return audit_result
+
+    async def fake_list_memory(database_url, *, session_id, layer, limit):
+        assert database_url == sessions.settings.research_database_url
+        assert session_id == "session-1"
+        assert layer == "L2"
+        assert limit == 100
+        return [existing_memory]
+
+    async def fail_persist_memory(*args, **kwargs):
+        raise AssertionError("duplicate promotion must return existing memory instead of persisting")
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "get_audit_result_from_database", fake_get_audit)
+    monkeypatch.setattr(sessions, "list_memory_entries_from_database", fake_list_memory)
+    monkeypatch.setattr(sessions, "persist_memory_entry_to_database", fail_persist_memory)
+
+    response = await sessions.promote_research_memory_for_session(
+        "session-1",
+        sessions.ResearchMemoryPromotionRequest(
+            subject_type="answer",
+            subject_id="answer-1",
+            claim_text="Citation evidence is bounded.",
+        ),
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    assert response.data["memory_id"] == "mem-existing"
+    assert response.data["created"] is False
+    assert response.data["duplicate"] is True
+    assert response.data["source_type"] == "memory"
+    assert response.data["context_only"] is True
 
 
 @pytest.mark.asyncio

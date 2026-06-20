@@ -51,6 +51,8 @@ export interface ResearchPromotedMemory extends ResearchContextMemory {
   session_id: string;
   promotion_reason: 'approved_audit_claim' | string;
   evidence_ids: number[];
+  created: boolean;
+  duplicate: boolean;
 }
 
 export interface ResearchEvidenceRecord {

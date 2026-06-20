@@ -58,6 +58,7 @@ from backend.research_assistant.storage.database import (
     get_audit_result_from_database,
     get_evidence_record_from_database,
     get_research_session_status_from_database,
+    list_memory_entries_from_database,
     persist_audit_result_to_database,
     persist_memory_entry_to_database,
 )
@@ -228,6 +229,19 @@ def _memory_title_from_claim(claim_text: str) -> str:
     if len(title) <= 80:
         return title
     return f"{title[:77]}..."
+
+
+def _find_matching_memory_entry(memories: list[Any], *, subject_type: str, subject_id: str, claim_text: str) -> Any | None:
+    target = " ".join(claim_text.strip().split())
+    for memory in memories:
+        content = " ".join(str(getattr(memory, "content", "")).strip().split())
+        if (
+            getattr(memory, "source_subject_type", None) == subject_type
+            and getattr(memory, "source_subject_id", None) == subject_id
+            and content == target
+        ):
+            return memory
+    return None
 
 
 def _publish_session_event(session_id: str, user_id: str, event: Dict[str, Any]) -> None:
@@ -1611,6 +1625,31 @@ async def promote_research_memory_for_session(
         if approved_claim is None:
             raise HTTPException(status_code=400, detail="Only approved audit claims can be promoted to memory")
 
+        existing_memories = await list_memory_entries_from_database(
+            settings.research_database_url,
+            session_id=session_id,
+            layer="L2",
+            limit=100,
+        )
+        existing_memory = _find_matching_memory_entry(
+            existing_memories,
+            subject_type=body.subject_type,
+            subject_id=body.subject_id,
+            claim_text=body.claim_text,
+        )
+        if existing_memory is not None:
+            data = existing_memory.to_context_dict()
+            data.update(
+                {
+                    "session_id": session_id,
+                    "promotion_reason": "approved_audit_claim",
+                    "evidence_ids": approved_claim.get("evidence_ids", []),
+                    "created": False,
+                    "duplicate": True,
+                }
+            )
+            return ApiResponse(data=data)
+
         memory_id = f"research-memory-{_new_event_id()}"
         title = body.title or _memory_title_from_claim(body.claim_text)
         await persist_memory_entry_to_database(
@@ -1636,6 +1675,8 @@ async def promote_research_memory_for_session(
                 "source_subject_id": body.subject_id,
                 "promotion_reason": "approved_audit_claim",
                 "evidence_ids": approved_claim.get("evidence_ids", []),
+                "created": True,
+                "duplicate": False,
             }
         )
     except ScienceSessionNotFoundError as exc:

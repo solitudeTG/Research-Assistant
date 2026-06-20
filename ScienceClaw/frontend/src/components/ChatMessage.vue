@@ -872,7 +872,7 @@ const handlePromoteMemory = async (claim: ResearchAuditClaim) => {
     [key]: true,
   };
   try {
-    await promoteResearchMemory(props.sessionId, {
+    const promoted = await promoteResearchMemory(props.sessionId, {
       subject_type: subject.type,
       subject_id: subject.id,
       claim_text: claim.claim_text,
@@ -881,7 +881,7 @@ const handlePromoteMemory = async (claim: ResearchAuditClaim) => {
       ...promotedMemoryClaims.value,
       [key]: true,
     };
-    showSuccessToast('Saved as context-only memory');
+    showSuccessToast(promoted.duplicate ? 'Already saved as context-only memory' : 'Saved as context-only memory');
   } catch (err) {
     console.error('[Research] Failed to promote audited claim to memory:', err);
     showErrorToast('Failed to save context-only memory');
