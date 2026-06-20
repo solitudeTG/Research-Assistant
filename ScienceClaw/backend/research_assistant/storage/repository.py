@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from backend.research_assistant.audit import EvidenceAudit
@@ -72,6 +73,32 @@ class ResearchEvidenceRecord:
             "quote": self.quote,
             "chunk_content": self.chunk_content,
             "source_identity": self.source_identity,
+        }
+
+
+@dataclass(frozen=True)
+class ResearchMemoryEntry:
+    memory_id: str
+    session_id: str
+    layer: str
+    title: str
+    content: str
+    source_type: str
+    context_only: bool
+    source_subject_type: str | None
+    source_subject_id: str | None
+    created_at: datetime | None = None
+
+    def to_context_dict(self) -> dict:
+        return {
+            "memory_id": self.memory_id,
+            "layer": self.layer,
+            "title": self.title,
+            "content": self.content,
+            "source_type": self.source_type,
+            "context_only": self.context_only,
+            "source_subject_type": self.source_subject_type,
+            "source_subject_id": self.source_subject_id,
         }
 
 
@@ -412,6 +439,103 @@ async def get_evidence_record(
     )
 
 
+async def persist_memory_entry(
+    connection: Any,
+    *,
+    memory_id: str,
+    session_id: str,
+    layer: str,
+    title: str,
+    content: str,
+    source_subject_type: str | None = None,
+    source_subject_id: str | None = None,
+) -> None:
+    await connection.execute(
+        """
+        INSERT INTO research_memory_entries (
+            memory_id,
+            session_id,
+            layer,
+            title,
+            content,
+            source_type,
+            context_only,
+            source_subject_type,
+            source_subject_id,
+            updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, 'memory', true, $6, $7, now())
+        ON CONFLICT (memory_id) DO UPDATE SET
+            session_id = EXCLUDED.session_id,
+            layer = EXCLUDED.layer,
+            title = EXCLUDED.title,
+            content = EXCLUDED.content,
+            source_type = 'memory',
+            context_only = true,
+            source_subject_type = EXCLUDED.source_subject_type,
+            source_subject_id = EXCLUDED.source_subject_id,
+            updated_at = now()
+        """,
+        memory_id,
+        session_id,
+        _normalise_memory_layer(layer),
+        title,
+        content,
+        source_subject_type,
+        source_subject_id,
+    )
+
+
+async def list_memory_entries(
+    connection: Any,
+    *,
+    session_id: str,
+    layer: str | None = None,
+    limit: int = 20,
+) -> list[ResearchMemoryEntry]:
+    row_limit = max(1, min(limit, 100))
+    rows = await connection.fetch(
+        """
+        SELECT
+            memory_id,
+            session_id,
+            layer,
+            title,
+            content,
+            source_type,
+            context_only,
+            source_subject_type,
+            source_subject_id,
+            created_at
+        FROM research_memory_entries
+        WHERE session_id = $1
+            AND ($2::text IS NULL OR layer = $2)
+            AND source_type = 'memory'
+            AND context_only = true
+        ORDER BY created_at DESC
+        LIMIT $3
+        """,
+        session_id,
+        _normalise_memory_layer(layer) if layer else None,
+        row_limit,
+    )
+    return [
+        ResearchMemoryEntry(
+            memory_id=row["memory_id"],
+            session_id=row["session_id"],
+            layer=row["layer"],
+            title=row["title"],
+            content=row["content"],
+            source_type=row["source_type"],
+            context_only=bool(row["context_only"]),
+            source_subject_type=row["source_subject_type"],
+            source_subject_id=row["source_subject_id"],
+            created_at=row["created_at"],
+        )
+        for row in rows
+    ]
+
+
 def _json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
@@ -426,3 +550,10 @@ def _json_value(value: Any, *, default: Any) -> Any:
 
 def _vector_literal(values: list[float]) -> str:
     return "[" + ",".join(str(float(value)) for value in values) + "]"
+
+
+def _normalise_memory_layer(layer: str) -> str:
+    normalised = layer.strip().lower()
+    if normalised not in {"l1", "l2", "l3"}:
+        raise ValueError("memory layer must be one of L1, L2, or L3")
+    return normalised

@@ -9,11 +9,14 @@ from backend.research_assistant.storage.repository import (
     PersistSummary,
     ResearchAuditResult,
     ResearchEvidenceRecord,
+    ResearchMemoryEntry,
     get_audit_result,
     get_evidence_record,
+    list_memory_entries,
     persist_chunk_embeddings,
     persist_audit_result,
     persist_ingestion_result,
+    persist_memory_entry,
     persist_report_evidence_map,
 )
 
@@ -138,6 +141,35 @@ async def persist_audit_result_to_database(
         await connection.close()
 
 
+async def persist_memory_entry_to_database(
+    database_url: str,
+    *,
+    memory_id: str,
+    session_id: str,
+    layer: str,
+    title: str,
+    content: str,
+    source_subject_type: str | None = None,
+    source_subject_id: str | None = None,
+) -> None:
+    import asyncpg
+
+    connection = await asyncpg.connect(database_url)
+    try:
+        await persist_memory_entry(
+            connection,
+            memory_id=memory_id,
+            session_id=session_id,
+            layer=layer,
+            title=title,
+            content=content,
+            source_subject_type=source_subject_type,
+            source_subject_id=source_subject_id,
+        )
+    finally:
+        await connection.close()
+
+
 async def get_audit_result_from_database(
     database_url: str,
     *,
@@ -173,6 +205,27 @@ async def get_evidence_record_from_database(
             connection,
             session_id=session_id,
             evidence_id=evidence_id,
+        )
+    finally:
+        await connection.close()
+
+
+async def list_memory_entries_from_database(
+    database_url: str,
+    *,
+    session_id: str,
+    layer: str | None = None,
+    limit: int = 20,
+) -> list[ResearchMemoryEntry]:
+    import asyncpg
+
+    connection = await asyncpg.connect(database_url)
+    try:
+        return await list_memory_entries(
+            connection,
+            session_id=session_id,
+            layer=layer,
+            limit=limit,
         )
     finally:
         await connection.close()

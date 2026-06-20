@@ -104,3 +104,20 @@ CREATE INDEX IF NOT EXISTS research_audit_results_session_id_idx
 
 CREATE INDEX IF NOT EXISTS research_audit_results_status_idx
     ON research_audit_results (status);
+
+CREATE TABLE IF NOT EXISTS research_memory_entries (
+    memory_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    layer TEXT NOT NULL CHECK (layer IN ('l1', 'l2', 'l3')),
+    title TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL,
+    source_type TEXT NOT NULL DEFAULT 'memory' CHECK (source_type = 'memory'),
+    context_only BOOLEAN NOT NULL DEFAULT true CHECK (context_only = true),
+    source_subject_type TEXT,
+    source_subject_id TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS research_memory_entries_session_layer_created_idx
+    ON research_memory_entries (session_id, layer, created_at DESC);

@@ -19,8 +19,11 @@ class FakeConnection:
         self.executed = []
         self.executemany_calls = []
         self.fetchrow_result = {"paper_count": 2, "chunk_count": 7}
+        self.fetch_result = []
 
     async def fetch(self, sql, *args):
+        if self.fetch_result:
+            return self.fetch_result
         return [
             {
                 "evidence_id": 3,
@@ -147,6 +150,32 @@ async def test_persist_audit_result_to_database_closes_asyncpg_connection(monkey
 
 
 @pytest.mark.asyncio
+async def test_persist_memory_entry_to_database_closes_asyncpg_connection(monkeypatch):
+    fake_connection = FakeConnection()
+
+    async def connect(database_url):
+        assert database_url == "postgresql://test"
+        return fake_connection
+
+    monkeypatch.setitem(sys.modules, "asyncpg", types.SimpleNamespace(connect=connect))
+
+    await database.persist_memory_entry_to_database(
+        "postgresql://test",
+        memory_id="mem-1",
+        session_id="session-1",
+        layer="L3",
+        title="Candidate insight",
+        content="Repeated weak evidence should remain pending.",
+        source_subject_type="report",
+        source_subject_id="report-1",
+    )
+
+    assert "research_memory_entries" in fake_connection.executed[0][0].lower()
+    assert fake_connection.executed[0][1][2] == "l3"
+    assert fake_connection.closed is True
+
+
+@pytest.mark.asyncio
 async def test_get_research_session_status_from_database_counts_indexed_papers(monkeypatch):
     fake_connection = FakeConnection()
 
@@ -237,4 +266,41 @@ async def test_get_evidence_record_from_database_closes_asyncpg_connection(monke
     assert result is not None
     assert result.evidence_type == "paper"
     assert result.to_dict()["source_identity"]["file_path"] == "paper.pdf"
+    assert fake_connection.closed is True
+
+
+@pytest.mark.asyncio
+async def test_list_memory_entries_from_database_returns_context_only_memory(monkeypatch):
+    fake_connection = FakeConnection()
+    fake_connection.fetch_result = [
+        {
+            "memory_id": "mem-1",
+            "session_id": "session-1",
+            "layer": "l1",
+            "title": "Session constraint",
+            "content": "Memory can inform answers but cannot be cited.",
+            "source_type": "memory",
+            "context_only": True,
+            "source_subject_type": None,
+            "source_subject_id": None,
+            "created_at": None,
+        }
+    ]
+
+    async def connect(database_url):
+        assert database_url == "postgresql://test"
+        return fake_connection
+
+    monkeypatch.setitem(sys.modules, "asyncpg", types.SimpleNamespace(connect=connect))
+
+    memories = await database.list_memory_entries_from_database(
+        "postgresql://test",
+        session_id="session-1",
+        layer="L1",
+        limit=3,
+    )
+
+    assert memories[0].source_type == "memory"
+    assert memories[0].context_only is True
+    assert memories[0].to_context_dict()["context_only"] is True
     assert fake_connection.closed is True

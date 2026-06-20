@@ -26,6 +26,8 @@ class RecordingConnection:
         self.executemany_calls = []
         self.fetchrow_calls = []
         self.fetchrow_result = None
+        self.fetch_calls = []
+        self.fetch_result = []
 
     def transaction(self):
         return RecordingTransaction()
@@ -39,6 +41,10 @@ class RecordingConnection:
     async def fetchrow(self, sql, *args):
         self.fetchrow_calls.append((sql, args))
         return self.fetchrow_result
+
+    async def fetch(self, sql, *args):
+        self.fetch_calls.append((sql, args))
+        return self.fetch_result
 
 
 @pytest.mark.asyncio
@@ -266,3 +272,80 @@ async def test_get_evidence_record_returns_none_when_missing():
     )
 
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_persist_memory_entry_forces_context_only_memory_boundary():
+    connection = RecordingConnection()
+
+    await repository.persist_memory_entry(
+        connection,
+        memory_id="mem-1",
+        session_id="session-1",
+        layer="L2",
+        title="Confirmed retrieval preference",
+        content="Prefer hybrid retrieval for scholarly terminology.",
+        source_subject_type="answer",
+        source_subject_id="answer-1",
+    )
+
+    sql, args = connection.executed[0]
+    assert "insert into research_memory_entries" in sql.lower()
+    assert "source_type" in sql.lower()
+    assert "context_only" in sql.lower()
+    assert "on conflict (memory_id)" in sql.lower()
+    assert args == (
+        "mem-1",
+        "session-1",
+        "l2",
+        "Confirmed retrieval preference",
+        "Prefer hybrid retrieval for scholarly terminology.",
+        "answer",
+        "answer-1",
+    )
+
+
+@pytest.mark.asyncio
+async def test_list_memory_entries_returns_context_only_memory_contexts():
+    connection = RecordingConnection()
+    connection.fetch_result = [
+        {
+            "memory_id": "mem-1",
+            "session_id": "session-1",
+            "layer": "l2",
+            "title": "Confirmed retrieval preference",
+            "content": "Prefer hybrid retrieval for scholarly terminology.",
+            "source_type": "memory",
+            "context_only": True,
+            "source_subject_type": "answer",
+            "source_subject_id": "answer-1",
+            "created_at": None,
+        }
+    ]
+
+    memories = await repository.list_memory_entries(
+        connection,
+        session_id="session-1",
+        layer="L2",
+        limit=5,
+    )
+
+    sql, args = connection.fetch_calls[0]
+    assert "from research_memory_entries" in sql.lower()
+    assert "session_id = $1" in sql.lower()
+    assert "layer = $2" in sql.lower()
+    assert "context_only = true" in sql.lower()
+    assert args == ("session-1", "l2", 5)
+    assert len(memories) == 1
+    assert memories[0].source_type == "memory"
+    assert memories[0].context_only is True
+    assert memories[0].to_context_dict() == {
+        "memory_id": "mem-1",
+        "layer": "l2",
+        "title": "Confirmed retrieval preference",
+        "content": "Prefer hybrid retrieval for scholarly terminology.",
+        "source_type": "memory",
+        "context_only": True,
+        "source_subject_type": "answer",
+        "source_subject_id": "answer-1",
+    }
