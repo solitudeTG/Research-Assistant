@@ -99,6 +99,12 @@
                       <SaveIcon v-else class="h-3 w-3" />
                       <span>{{ promotedMemoryClaims[memoryPromotionKey(claim)] ? 'Saved' : 'Memory' }}</span>
                     </button>
+                    <span
+                      v-if="typeof claim.support_score === 'number'"
+                      class="tabular-nums text-[var(--text-tertiary)]"
+                    >
+                      {{ claim.support_score.toFixed(2) }}
+                    </span>
                     <span class="uppercase tracking-wide" :class="claim.status === 'approved' ? 'text-emerald-600 dark:text-emerald-300' : 'text-amber-600 dark:text-amber-300'">
                       {{ claim.status }}
                     </span>

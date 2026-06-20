@@ -25,6 +25,7 @@ def test_audit_evidence_claims_approves_claims_backed_by_paper_citations():
     assert audit.approved_claim_count == 1
     assert audit.claims[0].status == "approved"
     assert audit.claims[0].evidence_ids == [17]
+    assert audit.claims[0].support_score == 1.0
     assert audit.boundaries["citation_evidence"] == ["paper"]
     assert audit.boundaries["context_only"] == ["memory", "model_reasoning", "process_trace", "tool_logs"]
 
@@ -64,3 +65,28 @@ def test_audit_evidence_claims_marks_answer_without_citations_as_unsupported():
     assert audit.claim_count == 1
     assert audit.unsupported_claim_count == 1
     assert audit.claims[0].status == "unsupported"
+    assert audit.claims[0].support_score == 0.0
+
+
+def test_audit_evidence_claims_exposes_nearest_citation_support_score_for_unsupported_claim():
+    audit = audit_evidence_claims(
+        answer_content="Hybrid retrieval proves clinical benefit.",
+        citations=[
+            ResearchCitation(
+                evidence_id=17,
+                chunk_id="chunk-17",
+                paper_id="paper-1",
+                title="Hybrid Retrieval",
+                section="Results",
+                page_start=4,
+                page_end=4,
+                quote="Hybrid retrieval improves recall.",
+                citation_label="[paper-1:Results:4]",
+            )
+        ],
+    )
+
+    assert audit.status == "unsupported"
+    assert audit.claims[0].status == "unsupported"
+    assert 0 < audit.claims[0].support_score < 1
+    assert "Nearest citation evidence: 17" in audit.claims[0].notes[0]

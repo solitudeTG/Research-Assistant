@@ -21,6 +21,7 @@ class EvidenceAuditClaim:
     status: str
     evidence_ids: list[int]
     notes: list[str]
+    support_score: float = 0.0
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -88,6 +89,7 @@ def _audit_claim(claim_text: str, citations: list[CitationLike]) -> EvidenceAudi
             status="unsupported",
             evidence_ids=[],
             notes=["No citation evidence was attached to this claim."],
+            support_score=0.0,
         )
 
     invalid_sources = [
@@ -104,6 +106,7 @@ def _audit_claim(claim_text: str, citations: list[CitationLike]) -> EvidenceAudi
                 f"{source_type} is context-only and cannot be used as citation evidence."
                 for source_type in sorted(set(invalid_sources))
             ],
+            support_score=0.0,
         )
 
     matching = [
@@ -118,13 +121,20 @@ def _audit_claim(claim_text: str, citations: list[CitationLike]) -> EvidenceAudi
             status="approved",
             evidence_ids=matching,
             notes=[],
+            support_score=1.0,
         )
 
+    nearest_evidence_id, nearest_score = _nearest_citation_support(claim_text, citations)
+    notes = []
+    if nearest_evidence_id is not None and nearest_score > 0:
+        notes.append(f"Nearest citation evidence: {nearest_evidence_id} with lexical support {nearest_score:.2f}.")
+    notes.append("No attached citation quote directly supports this claim.")
     return EvidenceAuditClaim(
         claim_text=claim_text,
         status="unsupported",
         evidence_ids=[],
-        notes=["No attached citation quote directly supports this claim."],
+        notes=notes,
+        support_score=nearest_score,
     )
 
 
@@ -152,3 +162,51 @@ def _extract_claim_texts(answer_content: str) -> list[str]:
 
 def _normalise_text(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip().casefold()
+
+
+def _nearest_citation_support(claim_text: str, citations: list[CitationLike]) -> tuple[int | None, float]:
+    scored = [
+        (citation.evidence_id, _lexical_support_score(claim_text, citation.quote))
+        for citation in citations
+    ]
+    if not scored:
+        return None, 0.0
+    evidence_id, score = max(scored, key=lambda item: item[1])
+    return evidence_id, score
+
+
+def _lexical_support_score(claim_text: str, quote: str) -> float:
+    claim_terms = _audit_terms(claim_text)
+    quote_terms = _audit_terms(quote)
+    if not claim_terms or not quote_terms:
+        return 0.0
+    return round(len(claim_terms & quote_terms) / len(claim_terms), 3)
+
+
+def _audit_terms(value: str) -> set[str]:
+    stop_words = {
+        "about",
+        "also",
+        "and",
+        "are",
+        "based",
+        "does",
+        "for",
+        "from",
+        "has",
+        "have",
+        "into",
+        "paper",
+        "say",
+        "says",
+        "the",
+        "this",
+        "uploaded",
+        "what",
+        "with",
+    }
+    return {
+        token
+        for token in re.findall(r"[a-zA-Z0-9]+", value.casefold())
+        if len(token) > 2 and token not in stop_words
+    }

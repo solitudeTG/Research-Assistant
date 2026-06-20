@@ -160,8 +160,8 @@ def _compose_markdown_report(
             "",
             "### Claim Checks",
             "",
-            "| Claim | Status | Evidence IDs | Notes |",
-            "| --- | --- | --- | --- |",
+            "| Claim | Status | Support | Evidence IDs | Notes |",
+            "| --- | --- | --- | --- | --- |",
             *_compose_claim_check_rows(answer),
             "",
             "## Evidence Boundary",
@@ -262,6 +262,7 @@ def _compose_claim_check_rows(answer: ResearchAnswer) -> list[str]:
                 [
                     _table_cell(claim.claim_text),
                     f"`{claim.status}`",
+                    f"`{claim.support_score:.2f}`",
                     _format_evidence_ids(claim.evidence_ids),
                     _table_cell(" ".join(claim.notes)),
                 ]
@@ -269,7 +270,7 @@ def _compose_claim_check_rows(answer: ResearchAnswer) -> list[str]:
             + " |"
         )
     if not rows:
-        return ["| No auditable claims. | `unsupported` |  | No answer content was available. |"]
+        return ["| No auditable claims. | `unsupported` | `0.00` |  | No answer content was available. |"]
     return rows
 
 

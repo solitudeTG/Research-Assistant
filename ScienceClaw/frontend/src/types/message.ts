@@ -55,6 +55,7 @@ export interface ResearchAuditClaimMetadata {
   status: 'approved' | 'unsupported' | 'invalid_source';
   evidence_ids: number[];
   notes: string[];
+  support_score?: number;
 }
 
 export interface ResearchAuditMetadata {

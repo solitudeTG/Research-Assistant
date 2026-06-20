@@ -75,13 +75,14 @@ async def test_generate_markdown_research_report_writes_artifact_and_evidence_ma
     assert "Evidence Audit" in markdown
     assert "Status: `approved`" in markdown
     assert "### Claim Checks" in markdown
-    assert "| Claim | Status | Evidence IDs | Notes |" in markdown
-    assert "| Hybrid retrieval improves recall. [paper-1:Results:4] | `approved` | `17` |  |" in markdown
+    assert "| Claim | Status | Support | Evidence IDs | Notes |" in markdown
+    assert "| Hybrid retrieval improves recall. [paper-1:Results:4] | `approved` | `1.00` | `17` |  |" in markdown
     assert "Citation evidence sources: `paper`" in markdown
     assert "Context-only sources: `memory`, `model_reasoning`, `process_trace`, `tool_logs`" in markdown
     assert "Hybrid retrieval improves recall. [paper-1:Results:4]" in markdown
     assert "Memory, model reasoning, process trace, and tool logs are not cited" in markdown
     assert evidence["audit"]["status"] == "approved"
+    assert evidence["audit"]["claims"][0]["support_score"] == 1.0
     assert evidence["evidence"][0]["evidence_id"] == 17
     assert evidence["evidence"][0]["claim_text"] == "Hybrid retrieval improves recall. [paper-1:Results:4]"
     assert persisted["database_url"] == "postgresql://test"
@@ -151,6 +152,6 @@ async def test_generate_markdown_research_report_keeps_unsupported_claims_out_of
     assert "Hybrid retrieval improves recall. [paper-1:Results:4]" in findings_section
     assert "Hybrid retrieval proves clinical benefit." not in findings_section
     assert (
-        "| Hybrid retrieval proves clinical benefit. | `unsupported` |  | "
-        "No attached citation quote directly supports this claim. |"
+        "| Hybrid retrieval proves clinical benefit. | `unsupported` | `0.40` |  | "
+        "Nearest citation evidence: 17 with lexical support 0.40. No attached citation quote directly supports this claim. |"
     ) in markdown
