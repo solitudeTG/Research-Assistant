@@ -158,6 +158,12 @@ def _compose_markdown_report(
             f"- Citation evidence sources: {_format_sources(answer.audit.boundaries['citation_evidence'])}",
             f"- Context-only sources: {_format_sources(answer.audit.boundaries['context_only'])}",
             "",
+            "### Claim Checks",
+            "",
+            "| Claim | Status | Evidence IDs | Notes |",
+            "| --- | --- | --- | --- |",
+            *_compose_claim_check_rows(answer),
+            "",
             "## Evidence Boundary",
             "",
             (
@@ -211,3 +217,31 @@ def _page_label(citation: ResearchCitation) -> str:
 
 def _format_sources(sources: list[str]) -> str:
     return ", ".join(f"`{source}`" for source in sources)
+
+
+def _compose_claim_check_rows(answer: ResearchAnswer) -> list[str]:
+    rows: list[str] = []
+    for claim in answer.audit.claims:
+        rows.append(
+            "| "
+            + " | ".join(
+                [
+                    _table_cell(claim.claim_text),
+                    f"`{claim.status}`",
+                    _format_evidence_ids(claim.evidence_ids),
+                    _table_cell(" ".join(claim.notes)),
+                ]
+            )
+            + " |"
+        )
+    if not rows:
+        return ["| No auditable claims. | `unsupported` |  | No answer content was available. |"]
+    return rows
+
+
+def _format_evidence_ids(evidence_ids: list[int]) -> str:
+    return ", ".join(f"`{evidence_id}`" for evidence_id in evidence_ids)
+
+
+def _table_cell(value: str) -> str:
+    return value.replace("|", "\\|").replace("\n", "<br>")
