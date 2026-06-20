@@ -34,7 +34,7 @@ export interface ResearchCitationMetadata {
   page_end?: number | null;
   quote: string;
   citation_label: string;
-  source_type: 'paper';
+  source_type: 'paper' | 'web' | 'database';
 }
 
 export interface ResearchContextMemoryMetadata {

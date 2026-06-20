@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass
 from typing import Iterable, Protocol
 
 
-CITATION_EVIDENCE_TYPES = ("paper",)
+CITATION_EVIDENCE_TYPES = ("paper", "web", "database")
 CONTEXT_ONLY_TYPES = ("memory", "model_reasoning", "process_trace", "tool_logs")
 
 
