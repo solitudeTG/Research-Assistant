@@ -87,9 +87,22 @@
               >
                 <div class="flex items-center justify-between gap-2">
                   <span class="truncate">{{ claim.claim_text }}</span>
-                  <span class="shrink-0 uppercase tracking-wide" :class="claim.status === 'approved' ? 'text-emerald-600 dark:text-emerald-300' : 'text-amber-600 dark:text-amber-300'">
-                    {{ claim.status }}
-                  </span>
+                  <div class="flex shrink-0 items-center gap-2">
+                    <button
+                      v-if="canPromoteMemoryClaim(claim)"
+                      class="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300 dark:hover:bg-emerald-900/35"
+                      :disabled="memoryPromotionLoading[memoryPromotionKey(claim)] || promotedMemoryClaims[memoryPromotionKey(claim)]"
+                      :title="promotedMemoryClaims[memoryPromotionKey(claim)] ? 'Saved as context-only memory' : 'Save approved claim as context-only memory'"
+                      @click="handlePromoteMemory(claim)"
+                    >
+                      <CheckIcon v-if="promotedMemoryClaims[memoryPromotionKey(claim)]" class="h-3 w-3" />
+                      <SaveIcon v-else class="h-3 w-3" />
+                      <span>{{ promotedMemoryClaims[memoryPromotionKey(claim)] ? 'Saved' : 'Memory' }}</span>
+                    </button>
+                    <span class="uppercase tracking-wide" :class="claim.status === 'approved' ? 'text-emerald-600 dark:text-emerald-300' : 'text-amber-600 dark:text-amber-300'">
+                      {{ claim.status }}
+                    </span>
+                  </div>
                 </div>
                 <div v-if="claim.notes.length > 0" class="mt-1 text-[var(--text-tertiary)]">
                   {{ claim.notes.join(' ') }}
@@ -298,7 +311,7 @@ import DOMPurify from 'dompurify';
 import hljs from 'highlight.js';
 import katex from 'katex';
 import mermaid from 'mermaid';
-import { CheckIcon, ThumbsUpIcon, ThumbsDownIcon, CopyIcon, ClockIcon, WrenchIcon, ArrowDownIcon, ArrowUpIcon, FolderOpen, FileText } from 'lucide-vue-next';
+import { CheckIcon, ThumbsUpIcon, ThumbsDownIcon, CopyIcon, ClockIcon, WrenchIcon, ArrowDownIcon, ArrowUpIcon, FolderOpen, FileText, SaveIcon } from 'lucide-vue-next';
 import PdfIcon from './icons/PdfIcon.vue';
 import { computed, ref, onMounted, nextTick, watch } from 'vue';
 import { ToolContent } from '../types/message';
@@ -312,7 +325,8 @@ import { transformSrc, domPurifyConfig } from '../utils/content';
 import { formatMarkdown } from '../utils/markdownFormatter';
 import MarkdownEnhancements from './MarkdownEnhancements.vue';
 import { useFilePanel } from '../composables/useFilePanel';
-import { getResearchAuditResult, getResearchEvidenceRecord, type ResearchAudit, type ResearchEvidenceRecord } from '../api/agent';
+import { getResearchAuditResult, getResearchEvidenceRecord, promoteResearchMemory, type ResearchAudit, type ResearchAuditClaim, type ResearchEvidenceRecord } from '../api/agent';
+import { showErrorToast, showSuccessToast } from '../utils/toast';
 
 import RobotAvatar from './icons/RobotAvatar.vue';
 
@@ -771,6 +785,8 @@ const evidenceDetailLoading = ref<Record<number, boolean>>({});
 const evidenceDetailErrors = ref<Record<number, string>>({});
 const persistedResearchAudit = ref<ResearchAudit | null>(null);
 const auditLoadingKey = ref('');
+const memoryPromotionLoading = ref<Record<string, boolean>>({});
+const promotedMemoryClaims = ref<Record<string, boolean>>({});
 
 const formatSourceIdentity = (sourceIdentity: Record<string, unknown>): string => {
   const entries = Object.entries(sourceIdentity || {}).filter(([, value]) => value !== null && value !== undefined && value !== '');
@@ -830,6 +846,52 @@ const researchAuditSubject = computed(() => {
   }
   return null;
 });
+
+const memoryPromotionKey = (claim: ResearchAuditClaim): string => {
+  const subject = researchAuditSubject.value;
+  return `${props.sessionId || ''}:${subject?.type || ''}:${subject?.id || ''}:${claim.claim_text}`;
+};
+
+const canPromoteMemoryClaim = (claim: ResearchAuditClaim): boolean => {
+  return claim.status === 'approved' && Boolean(props.sessionId && researchAuditSubject.value);
+};
+
+const handlePromoteMemory = async (claim: ResearchAuditClaim) => {
+  const subject = researchAuditSubject.value;
+  if (!props.sessionId || !subject || claim.status !== 'approved') {
+    return;
+  }
+
+  const key = memoryPromotionKey(claim);
+  if (memoryPromotionLoading.value[key] || promotedMemoryClaims.value[key]) {
+    return;
+  }
+
+  memoryPromotionLoading.value = {
+    ...memoryPromotionLoading.value,
+    [key]: true,
+  };
+  try {
+    await promoteResearchMemory(props.sessionId, {
+      subject_type: subject.type,
+      subject_id: subject.id,
+      claim_text: claim.claim_text,
+    });
+    promotedMemoryClaims.value = {
+      ...promotedMemoryClaims.value,
+      [key]: true,
+    };
+    showSuccessToast('Saved as context-only memory');
+  } catch (err) {
+    console.error('[Research] Failed to promote audited claim to memory:', err);
+    showErrorToast('Failed to save context-only memory');
+  } finally {
+    memoryPromotionLoading.value = {
+      ...memoryPromotionLoading.value,
+      [key]: false,
+    };
+  }
+};
 
 const loadPersistedResearchAudit = async () => {
   const subject = researchAuditSubject.value;

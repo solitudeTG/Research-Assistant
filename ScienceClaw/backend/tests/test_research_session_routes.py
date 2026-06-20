@@ -316,6 +316,112 @@ async def test_get_research_audit_result_for_session_returns_404_when_missing(mo
 
 
 @pytest.mark.asyncio
+async def test_promote_research_memory_requires_approved_audit_claim(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession()
+    persisted_memory = {}
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    audit_result = types.SimpleNamespace(
+        claims=[
+            {
+                "claim_text": "Citation evidence is bounded.",
+                "status": "approved",
+                "evidence_ids": [17],
+                "notes": [],
+            },
+            {
+                "claim_text": "Memory can be cited.",
+                "status": "invalid_source",
+                "evidence_ids": [],
+                "notes": ["memory is context-only"],
+            },
+        ]
+    )
+
+    async def fake_get_audit(database_url, *, session_id, subject_type, subject_id):
+        assert database_url == sessions.settings.research_database_url
+        assert session_id == "session-1"
+        assert subject_type == "answer"
+        assert subject_id == "answer-1"
+        return audit_result
+
+    async def fake_persist_memory(database_url, **kwargs):
+        persisted_memory.update({"database_url": database_url, **kwargs})
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "get_audit_result_from_database", fake_get_audit)
+    monkeypatch.setattr(sessions, "persist_memory_entry_to_database", fake_persist_memory)
+
+    response = await sessions.promote_research_memory_for_session(
+        "session-1",
+        sessions.ResearchMemoryPromotionRequest(
+            subject_type="answer",
+            subject_id="answer-1",
+            claim_text="Citation evidence is bounded.",
+        ),
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    assert response.data["source_type"] == "memory"
+    assert response.data["context_only"] is True
+    assert response.data["layer"] == "l2"
+    assert response.data["content"] == "Citation evidence is bounded."
+    assert persisted_memory["database_url"] == sessions.settings.research_database_url
+    assert persisted_memory["session_id"] == "session-1"
+    assert persisted_memory["layer"] == "L2"
+    assert persisted_memory["content"] == "Citation evidence is bounded."
+    assert persisted_memory["source_subject_type"] == "answer"
+    assert persisted_memory["source_subject_id"] == "answer-1"
+
+
+@pytest.mark.asyncio
+async def test_promote_research_memory_rejects_unapproved_claim(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession()
+
+    async def fake_get_session(session_id):
+        return session
+
+    audit_result = types.SimpleNamespace(
+        claims=[
+            {
+                "claim_text": "Memory can be cited.",
+                "status": "invalid_source",
+                "evidence_ids": [],
+                "notes": ["memory is context-only"],
+            }
+        ]
+    )
+
+    async def fake_get_audit(*args, **kwargs):
+        return audit_result
+
+    async def fail_persist_memory(*args, **kwargs):
+        raise AssertionError("unapproved claims must not be persisted as memory")
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "get_audit_result_from_database", fake_get_audit)
+    monkeypatch.setattr(sessions, "persist_memory_entry_to_database", fail_persist_memory)
+
+    with pytest.raises(sessions.HTTPException) as excinfo:
+        await sessions.promote_research_memory_for_session(
+            "session-1",
+            sessions.ResearchMemoryPromotionRequest(
+                subject_type="answer",
+                subject_id="answer-1",
+                claim_text="Memory can be cited.",
+            ),
+            types.SimpleNamespace(id="user-1"),
+        )
+
+    assert excinfo.value.status_code == 400
+
+
+@pytest.mark.asyncio
 async def test_get_research_evidence_record_for_session_returns_persisted_evidence(monkeypatch):
     sessions = _load_sessions_module(monkeypatch)
     session = FakeSession()

@@ -59,6 +59,7 @@ from backend.research_assistant.storage.database import (
     get_evidence_record_from_database,
     get_research_session_status_from_database,
     persist_audit_result_to_database,
+    persist_memory_entry_to_database,
 )
 from backend.user.dependencies import get_current_user, require_user, User
 from backend.models import get_model_config
@@ -139,6 +140,13 @@ class ResearchReportRequest(BaseModel):
     limit: int = Field(default=8, ge=1, le=20, description="Maximum evidence chunks to include")
 
 
+class ResearchMemoryPromotionRequest(BaseModel):
+    subject_type: str = Field(..., pattern="^(answer|report)$", description="Audited research subject type")
+    subject_id: str = Field(..., min_length=1, description="Audited answer or report id")
+    claim_text: str = Field(..., min_length=1, description="Approved audit claim to promote into L2 memory")
+    title: Optional[str] = Field(default=None, description="Optional memory title")
+
+
 # ═══════════════════════════════════════════════════════════════════
 # 内部辅助函数
 # ═══════════════════════════════════════════════════════════════════
@@ -205,6 +213,21 @@ def _research_upload_step_event(
     if metadata:
         data["metadata"] = metadata
     return _wrap_event("step", data)
+
+
+def _find_approved_audit_claim(claims: list[dict[str, Any]], claim_text: str) -> dict[str, Any] | None:
+    target = claim_text.strip()
+    for claim in claims:
+        if claim.get("status") == "approved" and str(claim.get("claim_text", "")).strip() == target:
+            return claim
+    return None
+
+
+def _memory_title_from_claim(claim_text: str) -> str:
+    title = " ".join(claim_text.strip().split())
+    if len(title) <= 80:
+        return title
+    return f"{title[:77]}..."
 
 
 def _publish_session_event(session_id: str, user_id: str, event: Dict[str, Any]) -> None:
@@ -1560,6 +1583,67 @@ async def get_research_audit_result_for_session(
         raise
     except Exception as exc:
         logger.exception("get_research_audit_result_for_session failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/{session_id}/research/memory/promote", response_model=ApiResponse)
+async def promote_research_memory_for_session(
+    session_id: str,
+    body: ResearchMemoryPromotionRequest,
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """Promote an approved audited claim into explicit context-only L2 memory."""
+    try:
+        session = await async_get_science_session(session_id)
+        if session.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        audit_result = await get_audit_result_from_database(
+            settings.research_database_url,
+            session_id=session_id,
+            subject_type=body.subject_type,
+            subject_id=body.subject_id,
+        )
+        if audit_result is None:
+            raise HTTPException(status_code=404, detail="Evidence audit result not found")
+
+        approved_claim = _find_approved_audit_claim(audit_result.claims, body.claim_text)
+        if approved_claim is None:
+            raise HTTPException(status_code=400, detail="Only approved audit claims can be promoted to memory")
+
+        memory_id = f"research-memory-{_new_event_id()}"
+        title = body.title or _memory_title_from_claim(body.claim_text)
+        await persist_memory_entry_to_database(
+            settings.research_database_url,
+            memory_id=memory_id,
+            session_id=session_id,
+            layer="L2",
+            title=title,
+            content=body.claim_text,
+            source_subject_type=body.subject_type,
+            source_subject_id=body.subject_id,
+        )
+        return ApiResponse(
+            data={
+                "memory_id": memory_id,
+                "session_id": session_id,
+                "layer": "l2",
+                "title": title,
+                "content": body.claim_text,
+                "source_type": "memory",
+                "context_only": True,
+                "source_subject_type": body.subject_type,
+                "source_subject_id": body.subject_id,
+                "promotion_reason": "approved_audit_claim",
+                "evidence_ids": approved_claim.get("evidence_ids", []),
+            }
+        )
+    except ScienceSessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("promote_research_memory_for_session failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 

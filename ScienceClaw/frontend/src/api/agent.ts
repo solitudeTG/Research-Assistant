@@ -47,6 +47,12 @@ export interface ResearchContextMemory {
   recall_reason?: string;
 }
 
+export interface ResearchPromotedMemory extends ResearchContextMemory {
+  session_id: string;
+  promotion_reason: 'approved_audit_claim' | string;
+  evidence_ids: number[];
+}
+
 export interface ResearchEvidenceRecord {
   evidence_id: number;
   evidence_type: 'paper' | 'web' | 'database';
@@ -190,6 +196,22 @@ export async function getResearchAuditResult(
 ): Promise<ResearchAudit> {
   const response = await apiClient.get<ApiResponse<ResearchAudit>>(
     `/sessions/${sessionId}/research/audit/${subjectType}/${subjectId}`,
+  );
+  return response.data.data;
+}
+
+export async function promoteResearchMemory(
+  sessionId: string,
+  payload: {
+    subject_type: 'answer' | 'report';
+    subject_id: string;
+    claim_text: string;
+    title?: string;
+  },
+): Promise<ResearchPromotedMemory> {
+  const response = await apiClient.post<ApiResponse<ResearchPromotedMemory>>(
+    `/sessions/${sessionId}/research/memory/promote`,
+    payload,
   );
   return response.data.data;
 }
