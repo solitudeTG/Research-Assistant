@@ -174,6 +174,77 @@ async def test_research_answer_persists_audit_result(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_research_answer_trace_and_message_keep_memory_context_separate(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession()
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    async def fake_answer(*args, **kwargs):
+        return ResearchAnswer(
+            content="Based on uploaded paper evidence:\n1. Citation evidence is bounded. [paper-1:Method:2]",
+            citations=[
+                ResearchCitation(
+                    evidence_id=31,
+                    chunk_id="chunk-31",
+                    paper_id="paper-1",
+                    title="Evidence Boundaries",
+                    section="Method",
+                    page_start=2,
+                    page_end=2,
+                    quote="Citation evidence is bounded.",
+                    citation_label="[paper-1:Method:2]",
+                )
+            ],
+            context_memory=[
+                {
+                    "memory_id": "mem-1",
+                    "layer": "l2",
+                    "title": "Evidence boundary rule",
+                    "content": "Memory must stay context-only.",
+                    "source_type": "memory",
+                    "context_only": True,
+                    "source_subject_type": "answer",
+                    "source_subject_id": "answer-1",
+                    "recall_reason": "Stored l2 research memory for this session.",
+                }
+            ],
+        )
+
+    async def fake_persist_audit(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "answer_research_question", fake_answer)
+    monkeypatch.setattr(sessions, "persist_audit_result_to_database", fake_persist_audit)
+    monkeypatch.setattr(sessions, "_publish_session_event", lambda *args, **kwargs: None)
+
+    response = await sessions.answer_research_question_for_session(
+        "session-1",
+        sessions.ResearchAnswerRequest(question="What does the paper say about evidence?"),
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    assert response.data["citation_count"] == 1
+    assert response.data["context_memory_count"] == 1
+    assert response.data["context_memory"][0]["source_type"] == "memory"
+    assert response.data["context_memory"][0]["context_only"] is True
+
+    completed_steps = [
+        event["data"]
+        for event in session.events
+        if event.get("event") == "step" and event.get("data", {}).get("status") == "completed"
+    ]
+    assert completed_steps[-1]["metadata"]["citation_count"] == 1
+    assert completed_steps[-1]["metadata"]["context_memory_count"] == 1
+    assistant_research = session.events[-1]["data"]["metadata"]["research_assistant"]
+    assert assistant_research["citations"][0]["source_type"] == "paper"
+    assert assistant_research["context_memory"][0]["source_type"] == "memory"
+
+
+@pytest.mark.asyncio
 async def test_get_research_audit_result_for_session_returns_persisted_audit(monkeypatch):
     sessions = _load_sessions_module(monkeypatch)
     session = FakeSession()

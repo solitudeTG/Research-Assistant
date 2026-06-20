@@ -1476,6 +1476,7 @@ async def answer_research_question_for_session(
             description="Citation evidence retrieval completed",
             metadata={
                 "citation_count": answer.citation_count,
+                "context_memory_count": answer.context_memory_count,
                 "embedding_model": settings.research_embedding_model,
             },
         )

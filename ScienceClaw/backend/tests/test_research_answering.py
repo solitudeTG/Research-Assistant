@@ -27,9 +27,16 @@ async def test_answer_research_question_uses_only_citation_evidence(monkeypatch)
             )
         ]
 
+    async def fake_list_memory(*args, **kwargs):
+        return []
+
     monkeypatch.setattr(
         "backend.research_assistant.answering.hybrid_search_evidence_in_database",
         fake_search,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_memory_entries_from_database",
+        fake_list_memory,
     )
 
     answer = await answer_research_question(
@@ -58,9 +65,16 @@ async def test_answer_research_question_refuses_when_no_paper_evidence(monkeypat
     async def fake_search(*args, **kwargs):
         return []
 
+    async def fake_list_memory(*args, **kwargs):
+        return []
+
     monkeypatch.setattr(
         "backend.research_assistant.answering.hybrid_search_evidence_in_database",
         fake_search,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_memory_entries_from_database",
+        fake_list_memory,
     )
 
     answer = await answer_research_question(
@@ -76,3 +90,79 @@ async def test_answer_research_question_refuses_when_no_paper_evidence(monkeypat
     assert "No citation evidence" in answer.content
     assert answer.audit.status == "unsupported"
     assert answer.to_dict()["audit"]["unsupported_claim_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_answer_research_question_returns_context_only_memory_separate_from_citations(monkeypatch):
+    async def fake_search(*args, **kwargs):
+        return [
+            EvidenceHit(
+                evidence_id=11,
+                chunk_id="chunk-1",
+                paper_id="paper-1",
+                title="Hybrid Retrieval for Papers",
+                section="Method",
+                page_start=2,
+                page_end=2,
+                quote="Hybrid retrieval combines lexical matching with vector search.",
+                rank_score=0.9,
+            )
+        ]
+
+    async def fake_list_memory(database_url, *, session_id, layer=None, limit=20):
+        assert database_url == "postgresql://test"
+        assert session_id == "session-1"
+        assert layer is None
+        assert limit == 5
+
+        class Memory:
+            memory_id = "mem-1"
+            layer = "l2"
+            title = "Retrieval preference"
+            content = "Prefer hybrid retrieval for scholarly terminology."
+            source_type = "memory"
+            context_only = True
+            source_subject_type = "answer"
+            source_subject_id = "answer-1"
+
+            def to_context_dict(self):
+                return {
+                    "memory_id": self.memory_id,
+                    "layer": self.layer,
+                    "title": self.title,
+                    "content": self.content,
+                    "source_type": self.source_type,
+                    "context_only": self.context_only,
+                    "source_subject_type": self.source_subject_type,
+                    "source_subject_id": self.source_subject_id,
+                }
+
+        return [Memory()]
+
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.hybrid_search_evidence_in_database",
+        fake_search,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_memory_entries_from_database",
+        fake_list_memory,
+    )
+
+    answer = await answer_research_question(
+        database_url="postgresql://test",
+        session_id="session-1",
+        question="How does hybrid retrieval work?",
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=3,
+    )
+
+    payload = answer.to_dict()
+    assert answer.citation_count == 1
+    assert payload["citation_count"] == 1
+    assert payload["context_memory_count"] == 1
+    assert payload["context_memory"][0]["source_type"] == "memory"
+    assert payload["context_memory"][0]["context_only"] is True
+    assert payload["context_memory"][0]["recall_reason"] == "Stored l2 research memory for this session."
+    assert all(citation["source_type"] == "paper" for citation in payload["citations"])
+    assert answer.audit.status == "approved"

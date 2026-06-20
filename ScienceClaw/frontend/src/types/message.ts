@@ -37,6 +37,18 @@ export interface ResearchCitationMetadata {
   source_type: 'paper';
 }
 
+export interface ResearchContextMemoryMetadata {
+  memory_id: string;
+  layer: 'l1' | 'l2' | 'l3' | string;
+  title: string;
+  content: string;
+  source_type: 'memory';
+  context_only: true;
+  source_subject_type?: string | null;
+  source_subject_id?: string | null;
+  recall_reason?: string;
+}
+
 export interface ResearchAuditClaimMetadata {
   claim_text: string;
   status: 'approved' | 'unsupported' | 'invalid_source';
@@ -63,6 +75,8 @@ export interface ResearchAnswerMetadata {
   question?: string;
   citations?: ResearchCitationMetadata[];
   citation_count?: number;
+  context_memory?: ResearchContextMemoryMetadata[];
+  context_memory_count?: number;
   audit?: ResearchAuditMetadata;
   report?: {
     report_id: string;

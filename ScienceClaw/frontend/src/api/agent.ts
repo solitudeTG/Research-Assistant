@@ -35,6 +35,18 @@ export interface ResearchCitation {
   source_type: 'paper';
 }
 
+export interface ResearchContextMemory {
+  memory_id: string;
+  layer: 'l1' | 'l2' | 'l3' | string;
+  title: string;
+  content: string;
+  source_type: 'memory';
+  context_only: true;
+  source_subject_type?: string | null;
+  source_subject_id?: string | null;
+  recall_reason?: string;
+}
+
 export interface ResearchEvidenceRecord {
   evidence_id: number;
   evidence_type: 'paper' | 'web' | 'database';
@@ -74,6 +86,8 @@ export interface ResearchAnswer {
   content: string;
   citations: ResearchCitation[];
   citation_count: number;
+  context_memory?: ResearchContextMemory[];
+  context_memory_count?: number;
   audit?: ResearchAudit;
   question?: string;
 }

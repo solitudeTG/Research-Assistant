@@ -99,6 +99,40 @@
           </div>
         </details>
       </div>
+      <div v-if="researchContextMemory.length > 0" class="border-t border-gray-100 dark:border-gray-800 px-4 py-3 bg-gray-50/60 dark:bg-gray-900/30">
+        <div class="flex items-center justify-between gap-3 mb-2">
+          <div class="text-xs font-semibold text-[var(--text-secondary)]">
+            Context-only memory
+          </div>
+          <div class="text-[11px] text-[var(--text-tertiary)] tabular-nums">
+            {{ researchContextMemory.length }}
+          </div>
+        </div>
+        <div class="flex flex-col gap-2">
+          <div
+            v-for="memory in researchContextMemory"
+            :key="memory.memory_id"
+            class="rounded-lg border border-gray-200/80 dark:border-gray-700/80 bg-white/80 dark:bg-[#1e1e1e]/80 px-3 py-2"
+          >
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-xs font-semibold text-[var(--text-primary)] truncate">
+                {{ memory.title || memory.memory_id }}
+              </span>
+              <span class="text-[10px] uppercase tracking-wide text-[var(--text-tertiary)]">
+                {{ memory.layer }} memory
+              </span>
+            </div>
+            <div class="mt-1 text-xs leading-relaxed text-[var(--text-secondary)] whitespace-pre-wrap">
+              {{ memory.content }}
+            </div>
+            <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-tertiary)]">
+              <span>contextOnly=true</span>
+              <span>source=memory</span>
+              <span v-if="memory.recall_reason">{{ memory.recall_reason }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
       <div v-if="researchCitations.length > 0" class="border-t border-gray-100 dark:border-gray-800 px-4 py-3 bg-gray-50/60 dark:bg-gray-900/30">
         <div class="flex items-center justify-between gap-3 mb-2">
           <div class="text-xs font-semibold text-[var(--text-secondary)]">
@@ -727,6 +761,9 @@ const messageContent = computed(() => props.message.content as MessageContent);
 const attachmentsContent = computed(() => props.message.content as AttachmentsContent);
 const researchCitations = computed(() => {
   return messageContent.value.metadata?.research_assistant?.citations || [];
+});
+const researchContextMemory = computed(() => {
+  return messageContent.value.metadata?.research_assistant?.context_memory || [];
 });
 
 const evidenceDetails = ref<Record<number, ResearchEvidenceRecord>>({});
