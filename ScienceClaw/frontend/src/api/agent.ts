@@ -356,6 +356,34 @@ export async function readToolFile(toolName: string): Promise<{file: string, con
   return response.data.data;
 }
 
+export async function validateToolFromSession(
+  sessionId: string,
+  toolName: string,
+  exampleArgs: Record<string, unknown> = {}
+): Promise<{
+  tool_name: string,
+  status: string,
+  checks: string[],
+  validated_at: string,
+  return_schema?: Record<string, unknown>,
+  example_output?: unknown,
+  error?: string
+}> {
+  const response = await apiClient.post<ApiResponse<{
+    tool_name: string,
+    status: string,
+    checks: string[],
+    validated_at: string,
+    return_schema?: Record<string, unknown>,
+    example_output?: unknown,
+    error?: string
+  }>>(`/sessions/${sessionId}/tools/validate`, {
+    tool_name: toolName,
+    example_args: exampleArgs,
+  });
+  return response.data.data;
+}
+
 export async function saveToolFromSession(
   sessionId: string,
   toolName: string,

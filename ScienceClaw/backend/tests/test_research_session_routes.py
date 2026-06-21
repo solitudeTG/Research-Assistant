@@ -1016,6 +1016,51 @@ async def test_save_tool_from_session_requires_return_schema_validation(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_validate_tool_from_session_generates_validation_sidecar(monkeypatch, tmp_path):
+    sessions = _load_sessions_module(monkeypatch)
+    workspace = tmp_path / "workspace"
+    staging = workspace / "session-1" / "tools_staging"
+    staging.mkdir(parents=True)
+    (staging / "paper_lookup.py").write_text(
+        '@tool\n'
+        'def paper_lookup(query: str) -> dict:\n'
+        '    """Look up paper metadata."""\n'
+        '    return {"title": query, "doi": "10.1234/example"}\n',
+        encoding="utf-8",
+    )
+    session = FakeSession(vm_root_dir=workspace / "session-1")
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    monkeypatch.setattr(sessions, "_WORKSPACE_DIR", str(workspace))
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+
+    response = await sessions.validate_tool_from_session(
+        "session-1",
+        sessions.ValidateToolRequest(
+            tool_name="paper_lookup",
+            example_args={"query": "evidence boundaries"},
+        ),
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    assert response.data["tool_name"] == "paper_lookup"
+    assert response.data["status"] == "passed"
+    assert response.data["return_schema"] == {
+        "type": "object",
+        "properties": {
+            "title": {"type": "string"},
+            "doi": {"type": "string"},
+        },
+        "required": ["title", "doi"],
+    }
+    sidecar = json.loads((staging / "paper_lookup.validation.json").read_text(encoding="utf-8"))
+    assert sidecar == response.data
+
+
+@pytest.mark.asyncio
 async def test_research_upload_marks_session_completed_after_indexing(monkeypatch, tmp_path):
     sessions = _load_sessions_module(monkeypatch)
     session = FakeSession(vm_root_dir=tmp_path)

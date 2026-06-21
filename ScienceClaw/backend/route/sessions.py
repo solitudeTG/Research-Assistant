@@ -54,6 +54,7 @@ from backend.research_assistant.indexing import index_ingestion_result
 from backend.research_assistant.ingestion import ingest_uploaded_paper, is_research_document
 from backend.research_assistant.parsers import PaperParseError
 from backend.research_assistant.reports import generate_markdown_research_report
+from backend.research_assistant.tool_validation import validate_staged_tool
 from backend.research_assistant.storage.database import (
     delete_memory_entry_from_database,
     get_audit_result_from_database,
@@ -1243,6 +1244,39 @@ async def read_tool_file(
 class SaveToolRequest(BaseModel):
     tool_name: str = Field(..., description="Name of the tool to save (without .py extension)")
     replaces: str = Field("", description="If this tool replaces an existing tool with a different name, specify the old tool name here")
+
+
+class ValidateToolRequest(BaseModel):
+    tool_name: str = Field(..., description="Name of the staged tool to validate (without .py extension)")
+    example_args: Dict[str, Any] = Field(default_factory=dict, description="Example keyword arguments for a sandbox validation call")
+
+
+@router.post("/{session_id}/tools/validate", response_model=ApiResponse)
+async def validate_tool_from_session(
+    session_id: str,
+    body: ValidateToolRequest,
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """Run a reproducible validation check for a staged session tool."""
+    try:
+        session = await async_get_science_session(session_id)
+        if session.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        tool_name = body.tool_name.strip()
+        if not tool_name or "/" in tool_name or "\\" in tool_name:
+            raise HTTPException(status_code=400, detail="Invalid tool name")
+
+        staging_dir = _Path(_WORKSPACE_DIR) / session_id / "tools_staging"
+        payload = validate_staged_tool(staging_dir, tool_name, example_args=body.example_args)
+        return ApiResponse(data=payload)
+    except ScienceSessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("validate_tool_from_session failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.post("/{session_id}/tools/save", response_model=ApiResponse)
