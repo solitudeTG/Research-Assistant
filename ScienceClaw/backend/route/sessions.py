@@ -172,6 +172,17 @@ class DatabaseEvidenceIngestRequest(BaseModel):
     chunks: List[DatabaseEvidenceChunkRequest] = Field(..., min_length=1, description="Source-identified database evidence chunks")
 
 
+def _source_quality(source_type: str, identity: dict[str, Any]) -> dict[str, Any]:
+    identity_fields = list(identity.keys())
+    missing_fields = [field for field, value in identity.items() if not str(value or "").strip()]
+    return {
+        "status": "citation_grade" if not missing_fields else "identity_incomplete",
+        "source_type": source_type,
+        "identity_fields": identity_fields,
+        "missing_fields": missing_fields,
+    }
+
+
 class ResearchMemoryPromotionRequest(BaseModel):
     subject_type: str = Field(..., pattern="^(answer|report)$", description="Audited research subject type")
     subject_id: str = Field(..., min_length=1, description="Audited answer or report id")
@@ -1659,6 +1670,11 @@ async def ingest_web_evidence_for_session(
             raise HTTPException(status_code=400, detail="At least one evidence chunk is required")
 
         retrieved_at = body.retrieved_at or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        source_quality = _source_quality("web", {
+            "url": url,
+            "title": title,
+            "retrieved_at": retrieved_at,
+        })
         source_id = f"web-{_new_event_id()}"
         chunks = [
             {
@@ -1683,6 +1699,7 @@ async def ingest_web_evidence_for_session(
                 "url": url,
                 "title": title,
                 "chunk_count": len(chunks),
+                "source_quality": source_quality,
             },
         )
         _append_session_event(session, started_event)
@@ -1714,6 +1731,7 @@ async def ingest_web_evidence_for_session(
                         "url": url,
                         "title": title,
                         "chunk_count": len(chunks),
+                        "source_quality": source_quality,
                         "error": str(exc),
                     },
                 ),
@@ -1728,6 +1746,7 @@ async def ingest_web_evidence_for_session(
             "retrieved_at": retrieved_at,
             "chunk_count": summary.chunk_count,
             "evidence_record_count": summary.evidence_record_count,
+            "source_quality": source_quality,
         }
         setattr(session, "status", SessionStatus.COMPLETED)
         await _append_save_publish_session_event(
@@ -1745,6 +1764,7 @@ async def ingest_web_evidence_for_session(
                     "title": title,
                     "chunk_count": summary.chunk_count,
                     "evidence_record_count": summary.evidence_record_count,
+                    "source_quality": source_quality,
                 },
             ),
         )
@@ -1783,6 +1803,12 @@ async def ingest_database_evidence_for_session(
             raise HTTPException(status_code=400, detail="At least one evidence chunk is required")
 
         retrieved_at = body.retrieved_at or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        source_quality = _source_quality("database", {
+            "database_name": database_name,
+            "query": query,
+            "title": title,
+            "retrieved_at": retrieved_at,
+        })
         source_id = f"database-{_new_event_id()}"
         chunks = [
             {
@@ -1808,6 +1834,7 @@ async def ingest_database_evidence_for_session(
                 "query": query,
                 "title": title,
                 "chunk_count": len(chunks),
+                "source_quality": source_quality,
             },
         )
         _append_session_event(session, started_event)
@@ -1841,6 +1868,7 @@ async def ingest_database_evidence_for_session(
                         "query": query,
                         "title": title,
                         "chunk_count": len(chunks),
+                        "source_quality": source_quality,
                         "error": str(exc),
                     },
                 ),
@@ -1856,6 +1884,7 @@ async def ingest_database_evidence_for_session(
             "retrieved_at": retrieved_at,
             "chunk_count": summary.chunk_count,
             "evidence_record_count": summary.evidence_record_count,
+            "source_quality": source_quality,
         }
         setattr(session, "status", SessionStatus.COMPLETED)
         await _append_save_publish_session_event(
@@ -1874,6 +1903,7 @@ async def ingest_database_evidence_for_session(
                     "title": title,
                     "chunk_count": summary.chunk_count,
                     "evidence_record_count": summary.evidence_record_count,
+                    "source_quality": source_quality,
                 },
             ),
         )

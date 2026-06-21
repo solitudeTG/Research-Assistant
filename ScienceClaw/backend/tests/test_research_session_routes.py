@@ -132,6 +132,12 @@ async def test_research_web_evidence_ingest_persists_source_and_trace(monkeypatc
     assert response.data["title"] == "External Research Note"
     assert response.data["chunk_count"] == 1
     assert response.data["evidence_record_count"] == 1
+    assert response.data["source_quality"] == {
+        "status": "citation_grade",
+        "source_type": "web",
+        "identity_fields": ["url", "title", "retrieved_at"],
+        "missing_fields": [],
+    }
 
     assert persisted["database_url"] == sessions.settings.research_database_url
     assert persisted["session_id"] == "session-1"
@@ -161,6 +167,7 @@ async def test_research_web_evidence_ingest_persists_source_and_trace(monkeypatc
         "title": "External Research Note",
         "chunk_count": 1,
         "evidence_record_count": 1,
+        "source_quality": response.data["source_quality"],
     }
     assert published[-1] == ("session-1", "user-1", session.events[-1])
 
@@ -209,6 +216,12 @@ async def test_research_web_evidence_ingest_failure_persists_failed_trace(monkey
     assert failed_steps[0]["metadata"]["source_type"] == "web"
     assert failed_steps[0]["metadata"]["url"] == "https://example.com/research"
     assert failed_steps[0]["metadata"]["title"] == "External Research Note"
+    assert failed_steps[0]["metadata"]["source_quality"] == {
+        "status": "citation_grade",
+        "source_type": "web",
+        "identity_fields": ["url", "title", "retrieved_at"],
+        "missing_fields": [],
+    }
     assert "database unavailable" in failed_steps[0]["metadata"]["error"]
     assert session.save_count == 1
 
@@ -262,6 +275,12 @@ async def test_research_database_evidence_ingest_persists_source_and_trace(monke
     assert response.data["title"] == "OpenAlex Evidence Boundary Results"
     assert response.data["chunk_count"] == 1
     assert response.data["evidence_record_count"] == 1
+    assert response.data["source_quality"] == {
+        "status": "citation_grade",
+        "source_type": "database",
+        "identity_fields": ["database_name", "query", "title", "retrieved_at"],
+        "missing_fields": [],
+    }
 
     assert persisted["database_url"] == sessions.settings.research_database_url
     assert persisted["session_id"] == "session-1"
@@ -293,6 +312,7 @@ async def test_research_database_evidence_ingest_persists_source_and_trace(monke
         "title": "OpenAlex Evidence Boundary Results",
         "chunk_count": 1,
         "evidence_record_count": 1,
+        "source_quality": response.data["source_quality"],
     }
     assert published[-1] == ("session-1", "user-1", session.events[-1])
 
@@ -342,6 +362,12 @@ async def test_research_database_evidence_ingest_failure_persists_failed_trace(m
     assert failed_steps[0]["metadata"]["source_type"] == "database"
     assert failed_steps[0]["metadata"]["database_name"] == "OpenAlex"
     assert failed_steps[0]["metadata"]["title"] == "OpenAlex Evidence Boundary Results"
+    assert failed_steps[0]["metadata"]["source_quality"] == {
+        "status": "citation_grade",
+        "source_type": "database",
+        "identity_fields": ["database_name", "query", "title", "retrieved_at"],
+        "missing_fields": [],
+    }
     assert "database unavailable" in failed_steps[0]["metadata"]["error"]
     assert session.save_count == 1
 
