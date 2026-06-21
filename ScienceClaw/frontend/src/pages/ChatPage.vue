@@ -435,6 +435,8 @@ const {
 
 const { groupedMessages } = useMessageGrouper(messages);
 
+const activeResearchToolPacks = computed<string[]>(() => []);
+
 // 最后一个 process 组的索引（推理失败时会先 push 一条 assistant 消息，此时最后一组不是 process，需用此判断当前轮次的 process 组）
 const lastProcessGroupIndex = computed(() => {
   const groups = groupedMessages.value;
@@ -1297,6 +1299,7 @@ const chat = async (message: string = '', files: FileInfo[] = [], reconnect: boo
         attachments: files.map((file: FileInfo) => file.file_id),
         language: locale.value,
         model_config_id: selectedModelId.value || undefined,
+        active_tool_packs: activeResearchToolPacks.value,
       },
       {
         onOpen: () => {

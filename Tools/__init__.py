@@ -161,11 +161,22 @@ def _parse_tool_file(file_path: str) -> Optional[Dict[str, Any]]:
             pdefault = _resolve_default(args_node.defaults[default_idx]) if default_idx >= 0 else ...
             params.append({"name": arg.arg, "type": ptype, "default": pdefault})
 
+        metadata_path = Path(file_path).with_suffix(".meta.json")
+        metadata: dict[str, Any] = {}
+        if metadata_path.is_file():
+            try:
+                raw_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                if isinstance(raw_metadata, dict):
+                    metadata = raw_metadata
+            except Exception as exc:
+                logger.warning(f"[Tools] Metadata parse failed for {metadata_path.name}: {exc}")
+
         return {
             "func_name": func_name,
             "docstring": docstring,
             "params": params,
             "file_path": file_path,
+            "metadata": metadata,
         }
 
     return None
@@ -239,6 +250,7 @@ def _create_proxy_tool(meta: Dict[str, Any]) -> StructuredTool:
         description=docstring,
         func=_proxy_run,
         args_schema=input_model,
+        metadata=meta.get("metadata") or None,
     )
 
 

@@ -94,3 +94,12 @@ def test_tools_page_surfaces_external_tool_packs():
     assert "tool.tool_pack?.label" in tools_page
     assert "tool.tool_pack?.id === selectedToolPack" in tools_page
     assert "Research workflow" in tools_page
+
+
+def test_chat_request_can_activate_research_tool_packs():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    agent_api = (frontend_root / "api" / "agent.ts").read_text(encoding="utf-8")
+    chat_page = (frontend_root / "pages" / "ChatPage.vue").read_text(encoding="utf-8")
+
+    assert "active_tool_packs?: string[]" in agent_api
+    assert "active_tool_packs: activeResearchToolPacks.value" in chat_page

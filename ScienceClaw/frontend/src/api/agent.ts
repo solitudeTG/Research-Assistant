@@ -20,6 +20,7 @@ export interface ChatRequest {
   attachments?: string[];
   language?: string;
   model_config_id?: string;
+  active_tool_packs?: string[];
 }
 
 export interface ResearchCitation {

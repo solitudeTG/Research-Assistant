@@ -241,12 +241,29 @@ _STATIC_TOOLS = [
 ]
 
 
-def _collect_tools(blocked_tools: Set[str] | None = None) -> List:
+def _tool_pack_id(tool: Any) -> str | None:
+    metadata = getattr(tool, "metadata", None)
+    if not isinstance(metadata, dict):
+        return None
+    tool_pack = metadata.get("tool_pack")
+    if not isinstance(tool_pack, dict):
+        return None
+    pack_id = tool_pack.get("id")
+    if not isinstance(pack_id, str) or not pack_id.strip():
+        return None
+    return pack_id.strip()
+
+
+def _collect_tools(
+    blocked_tools: Set[str] | None = None,
+    active_tool_packs: Set[str] | None = None,
+) -> List:
     """合并内置工具与外部扩展工具，去重并过滤屏蔽项。
 
     通过 DirWatcher 检测 Tools/ 目录变更，仅在变更时才重新 import 模块。
     """
     blocked = blocked_tools or set()
+    active_packs = {pack.strip() for pack in (active_tool_packs or set()) if pack.strip()}
     seen_names: set[str] = set()
     all_tools: List = []
 
@@ -257,9 +274,23 @@ def _collect_tools(blocked_tools: Set[str] | None = None) -> List:
         except Exception:
             logger.warning("[Agent] 动态加载外部工具失败", exc_info=True)
 
-    for t in _STATIC_TOOLS + ext_tools:
+    for t in _STATIC_TOOLS:
         if t.name in blocked:
             logger.info(f"[Agent] 工具已屏蔽，跳过: {t.name}")
+            continue
+        if t.name not in seen_names:
+            all_tools.append(t)
+            seen_names.add(t.name)
+        else:
+            logger.warning(f"[Agent] 工具名称重复，跳过: {t.name}")
+
+    for t in ext_tools:
+        if t.name in blocked:
+            logger.info(f"[Agent] 工具已屏蔽，跳过: {t.name}")
+            continue
+        pack_id = _tool_pack_id(t)
+        if pack_id not in active_packs:
+            logger.info(f"[Agent] 外部工具未激活，跳过: {t.name} (tool_pack={pack_id or 'missing'})")
             continue
         if t.name not in seen_names:
             all_tools.append(t)
@@ -319,6 +350,7 @@ async def deep_agent(
     task_settings: Optional["TaskSettings"] = None,
     diagnostic_enabled: bool = False,
     language: Optional[str] = None,
+    active_tool_packs: Optional[Set[str]] = None,
 ) -> Tuple[Any, SSEMonitoringMiddleware, int, Optional[DiagnosticLogger]]:
     """
     创建一个完整的 DeepAgent 实例（会话级隔离），并注入 SSE 监控中间件。
@@ -344,7 +376,7 @@ async def deep_agent(
     # ── 检测 Tools/Skills 目录变更并按需重新加载 ──
     _dir_watcher.has_changed(_EXTERNAL_SKILLS_DIR)
 
-    tools = _collect_tools(blocked_tools=blocked_tools)
+    tools = _collect_tools(blocked_tools=blocked_tools, active_tool_packs=active_tool_packs)
 
     sse_middleware = SSEMonitoringMiddleware(
         agent_name="DeepAgent",

@@ -135,6 +135,7 @@ class ChatRequest(BaseModel):
     attachments: Optional[List[str]] = Field(default=None, description="Attachment path list")
     language: Optional[str] = Field(default=None, description="User interface language (e.g. 'zh', 'en')")
     model_config_id: Optional[str] = Field(default=None, description="Model config ID to use (overrides session default)")
+    active_tool_packs: Optional[List[str]] = Field(default=None, description="Research tool packs explicitly enabled for this turn")
 
 
 class ResearchAnswerRequest(BaseModel):
@@ -1143,6 +1144,21 @@ def _normalize_research_tool_pack(tool_pack: str | None) -> Dict[str, str]:
             detail="Tool save requires a research tool pack",
         )
     return dict(pack)
+
+
+def _normalize_active_tool_packs(tool_packs: List[str] | None) -> set[str]:
+    active: set[str] = set()
+    for tool_pack in tool_packs or []:
+        pack_id = str(tool_pack or "").strip()
+        if not pack_id:
+            continue
+        if pack_id not in _RESEARCH_TOOL_PACKS:
+            raise HTTPException(
+                status_code=400,
+                detail="Active tools require a research tool pack",
+            )
+        active.add(pack_id)
+    return active
 
 
 def _extract_tool_description(py_file: _Path) -> str:
@@ -2807,6 +2823,7 @@ async def _agent_background_worker(
     event_id: Optional[str] = None,
     timestamp: Optional[int] = None,
     language: Optional[str] = None,
+    active_tool_packs: Optional[set[str]] = None,
 ) -> None:
     """Run agent in a background task. Results are saved to DB and pushed to SSE."""
     from backend.notifications import publish as _notify
@@ -2872,6 +2889,7 @@ async def _agent_background_worker(
         async for evt in arun_science_task_stream(
             session=session, query=message or "", attachments=user_attachments,
             language=language,
+            active_tool_packs=active_tool_packs,
         ):
             if session.is_cancelled():
                 _emit("error", _json_dumps({
@@ -3079,12 +3097,14 @@ async def chat_with_session(
     _agent_queues[session_id] = queue
 
     if not is_reconnect:
+        active_tool_packs = _normalize_active_tool_packs(body.active_tool_packs)
         task = _asyncio.create_task(
             _agent_background_worker(
                 session, session_id,
                 body.message or "", body.attachments or [],
                 event_id=body.event_id, timestamp=body.timestamp,
                 language=body.language,
+                active_tool_packs=active_tool_packs,
             )
         )
         _agent_tasks[session_id] = task

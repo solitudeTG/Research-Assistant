@@ -384,6 +384,7 @@ def _todos_to_plan_steps(todos: List[Dict]) -> List[dict]:
 async def _arun_deep_agent_stream(
     session: ScienceSession, query: str, attachments: Optional[List[str]] = None,
     language: Optional[str] = None,
+    active_tool_packs: Optional[set[str]] = None,
 ) -> AsyncGenerator[dict, None]:
     """
     使用 deep_agent 执行对话，以 SSE 事件格式 yield。
@@ -408,6 +409,7 @@ async def _arun_deep_agent_stream(
         task_settings=task_cfg,
         diagnostic_enabled=DIAGNOSTIC_ENABLED,
         language=language,
+        active_tool_packs=active_tool_packs,
     )
     middleware.clear()  # 确保干净状态
 
@@ -890,7 +892,14 @@ async def run_eval_task(
 async def arun_science_task_stream(
     session: ScienceSession, query: str, attachments: Optional[List[str]] = None,
     language: Optional[str] = None,
+    active_tool_packs: Optional[set[str]] = None,
 ) -> AsyncGenerator[dict, None]:
     """对话任务流入口，所有模式统一走 DeepAgent。"""
-    async for evt in _arun_deep_agent_stream(session, query, attachments, language=language):
+    async for evt in _arun_deep_agent_stream(
+        session,
+        query,
+        attachments,
+        language=language,
+        active_tool_packs=active_tool_packs,
+    ):
         yield evt
