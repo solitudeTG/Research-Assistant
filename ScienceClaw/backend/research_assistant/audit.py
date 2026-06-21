@@ -93,10 +93,11 @@ def _audit_claim(claim_text: str, citations: list[CitationLike]) -> EvidenceAudi
             support_score=0.0,
         )
 
+    claim_body = _remove_citation_labels(claim_text, citations)
     cited_labels = _citation_labels_in_claim(claim_text, citations)
     labeled_citations = [citation for citation in citations if getattr(citation, "citation_label", "")]
     if labeled_citations and not cited_labels:
-        nearest_evidence_id, nearest_score = _nearest_citation_support(claim_text, citations)
+        nearest_evidence_id, nearest_score = _nearest_citation_support(claim_body, citations)
         notes = []
         if nearest_evidence_id is not None and nearest_score > 0:
             notes.append(f"Nearest citation evidence: {nearest_evidence_id} with lexical support {nearest_score:.2f}.")
@@ -134,8 +135,7 @@ def _audit_claim(claim_text: str, citations: list[CitationLike]) -> EvidenceAudi
     matching = [
         citation.evidence_id
         for citation in citation_candidates
-        if _normalise_text(citation.quote) in _normalise_text(claim_text)
-        or citation.quote.strip() == claim_text.strip()
+        if _citation_directly_supports_claim(claim_body, citation.quote)
     ]
     if matching:
         return EvidenceAuditClaim(
@@ -146,7 +146,7 @@ def _audit_claim(claim_text: str, citations: list[CitationLike]) -> EvidenceAudi
             support_score=1.0,
         )
 
-    nearest_evidence_id, nearest_score = _nearest_citation_support(claim_text, citations)
+    nearest_evidence_id, nearest_score = _nearest_citation_support(claim_body, citations)
     notes = []
     if nearest_evidence_id is not None and nearest_score > 0:
         notes.append(f"Nearest citation evidence: {nearest_evidence_id} with lexical support {nearest_score:.2f}.")
@@ -186,12 +186,31 @@ def _normalise_text(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip().casefold()
 
 
+def _remove_citation_labels(claim_text: str, citations: list[CitationLike]) -> str:
+    claim_body = claim_text
+    for citation in citations:
+        label = getattr(citation, "citation_label", "")
+        if label:
+            claim_body = claim_body.replace(label, "")
+    return _normalise_text(claim_body)
+
+
 def _citation_labels_in_claim(claim_text: str, citations: list[CitationLike]) -> set[str]:
     return {
         citation.citation_label
         for citation in citations
         if getattr(citation, "citation_label", "") and citation.citation_label in claim_text
     }
+
+
+def _citation_directly_supports_claim(claim_body: str, quote: str) -> bool:
+    normalised_quote = _normalise_text(quote)
+    if claim_body == normalised_quote:
+        return True
+
+    claim_terms = _audit_terms(claim_body)
+    quote_terms = _audit_terms(quote)
+    return bool(claim_terms) and claim_terms <= quote_terms
 
 
 def _nearest_citation_support(claim_text: str, citations: list[CitationLike]) -> tuple[int | None, float]:

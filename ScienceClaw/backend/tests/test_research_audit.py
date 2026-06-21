@@ -214,3 +214,31 @@ def test_audit_evidence_claims_exposes_nearest_citation_support_score_for_unsupp
     assert audit.claims[0].status == "unsupported"
     assert 0 < audit.claims[0].support_score < 1
     assert "Nearest citation evidence: 17" in audit.claims[0].notes[0]
+
+
+def test_audit_evidence_claims_rejects_overclaim_even_with_valid_citation_label():
+    audit = audit_evidence_claims(
+        answer_content=(
+            "Based on uploaded paper evidence:\n"
+            "1. Hybrid retrieval improves recall. This proves clinical benefit. [paper-1:Results:4]"
+        ),
+        citations=[
+            ResearchCitation(
+                evidence_id=17,
+                chunk_id="chunk-17",
+                paper_id="paper-1",
+                title="Hybrid Retrieval",
+                section="Results",
+                page_start=4,
+                page_end=4,
+                quote="Hybrid retrieval improves recall.",
+                citation_label="[paper-1:Results:4]",
+            )
+        ],
+    )
+
+    assert audit.status == "unsupported"
+    assert audit.claims[0].status == "unsupported"
+    assert audit.claims[0].evidence_ids == []
+    assert 0 < audit.claims[0].support_score < 1
+    assert "No attached citation quote directly supports this claim." in audit.claims[0].notes[-1]
