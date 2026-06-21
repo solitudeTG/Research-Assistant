@@ -196,6 +196,75 @@ async def test_answer_research_question_returns_context_only_memory_separate_fro
 
 
 @pytest.mark.asyncio
+async def test_answer_research_question_marks_conflicting_context_memory(monkeypatch):
+    async def fake_search(*args, **kwargs):
+        return []
+
+    async def fake_list_memory(*args, **kwargs):
+        class Memory:
+            def __init__(self, *, memory_id, content):
+                self.memory_id = memory_id
+                self.layer = "l2"
+                self.title = "Hybrid retrieval preference"
+                self.content = content
+                self.source_type = "memory"
+                self.context_only = True
+                self.source_subject_type = "answer"
+                self.source_subject_id = memory_id.replace("mem-", "answer-")
+
+            def to_context_dict(self):
+                return {
+                    "memory_id": self.memory_id,
+                    "layer": self.layer,
+                    "title": self.title,
+                    "content": self.content,
+                    "source_type": self.source_type,
+                    "context_only": self.context_only,
+                    "source_subject_type": self.source_subject_type,
+                    "source_subject_id": self.source_subject_id,
+                }
+
+        return [
+            Memory(
+                memory_id="mem-prefer",
+                content="Prefer hybrid retrieval for literature review synthesis.",
+            ),
+            Memory(
+                memory_id="mem-avoid",
+                content="Do not prefer hybrid retrieval for literature review synthesis.",
+            ),
+        ]
+
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.hybrid_search_evidence_in_database",
+        fake_search,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_memory_entries_from_database",
+        fake_list_memory,
+    )
+
+    answer = await answer_research_question(
+        database_url="postgresql://test",
+        session_id="session-1",
+        question="Should we prefer hybrid retrieval for literature review synthesis?",
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=3,
+    )
+
+    memories = {memory["memory_id"]: memory for memory in answer.to_dict()["context_memory"]}
+    assert memories["mem-prefer"]["memory_status"] == "conflict"
+    assert memories["mem-prefer"]["conflicts_with"] == ["mem-avoid"]
+    assert memories["mem-avoid"]["memory_status"] == "conflict"
+    assert memories["mem-avoid"]["conflicts_with"] == ["mem-prefer"]
+    assert "conflicts with context-only memory" in memories["mem-prefer"]["recall_reason"]
+    assert "conflicts with context-only memory" in memories["mem-avoid"]["recall_reason"]
+    assert answer.citation_count == 0
+    assert answer.audit.status == "unsupported"
+
+
+@pytest.mark.asyncio
 async def test_answer_research_question_preserves_web_citation_source_type(monkeypatch):
     async def fake_search(*args, **kwargs):
         return [

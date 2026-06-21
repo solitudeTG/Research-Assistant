@@ -37,6 +37,7 @@ _RECALL_STOP_WORDS = {
     "with",
     "work",
 }
+_MEMORY_NEGATION_TERMS = {"avoid", "cannot", "don't", "dont", "never", "no", "not", "reject", "without"}
 
 
 @dataclass(frozen=True)
@@ -187,6 +188,7 @@ async def _load_context_memory(
             }
         )
     context_rows.sort(key=lambda row: (-row["relevance_score"], row["_recall_order"]))
+    _mark_conflicting_context_memory(context_rows)
     return [{key: value for key, value in row.items() if key != "_recall_order"} for row in context_rows]
 
 
@@ -207,6 +209,53 @@ def _recall_terms(text: str) -> set[str]:
         for token in re.findall(r"[a-zA-Z0-9]+", text.lower())
         if len(token) > 2 and token not in _RECALL_STOP_WORDS
     }
+
+
+def _mark_conflicting_context_memory(rows: list[dict]) -> None:
+    conflicts: dict[str, set[str]] = {}
+    for left_index, left in enumerate(rows):
+        left_id = str(left.get("memory_id") or "")
+        if not left_id:
+            continue
+        for right in rows[left_index + 1 :]:
+            right_id = str(right.get("memory_id") or "")
+            if not right_id:
+                continue
+            if not _context_memory_conflicts(left, right):
+                continue
+            conflicts.setdefault(left_id, set()).add(right_id)
+            conflicts.setdefault(right_id, set()).add(left_id)
+
+    for row in rows:
+        memory_id = str(row.get("memory_id") or "")
+        row_conflicts = sorted(conflicts.get(memory_id, set()))
+        if not row_conflicts:
+            row.setdefault("memory_status", "active")
+            continue
+        row["memory_status"] = "conflict"
+        row["conflicts_with"] = row_conflicts
+        row["recall_reason"] = (
+            f"{row.get('recall_reason', '').rstrip()} "
+            f"conflicts with context-only memory: {', '.join(row_conflicts)}."
+        ).strip()
+
+
+def _context_memory_conflicts(left: dict, right: dict) -> bool:
+    left_terms = _memory_topic_terms(left)
+    right_terms = _memory_topic_terms(right)
+    shared_terms = left_terms & right_terms
+    if len(shared_terms) < 3:
+        return False
+    return _has_memory_negation(left) != _has_memory_negation(right)
+
+
+def _memory_topic_terms(context: dict) -> set[str]:
+    return _recall_terms(" ".join([str(context.get("title") or ""), str(context.get("content") or "")]))
+
+
+def _has_memory_negation(context: dict) -> bool:
+    tokens = set(re.findall(r"[a-zA-Z0-9']+", str(context.get("content") or "").lower()))
+    return bool(tokens & _MEMORY_NEGATION_TERMS)
 
 
 def _memory_recall_reason(*, context: dict, matched_terms: list[str]) -> str:
