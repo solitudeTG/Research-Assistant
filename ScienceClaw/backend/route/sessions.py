@@ -62,6 +62,7 @@ from backend.research_assistant.storage.database import (
     get_research_session_status_from_database,
     list_memory_entries_from_database,
     persist_audit_result_to_database,
+    persist_database_evidence_source_to_database,
     persist_memory_entry_to_database,
     persist_web_evidence_source_to_database,
 )
@@ -155,6 +156,20 @@ class WebEvidenceIngestRequest(BaseModel):
     title: str = Field(..., min_length=1, description="Source title")
     retrieved_at: Optional[str] = Field(default=None, description="ISO timestamp when the source was retrieved")
     chunks: List[WebEvidenceChunkRequest] = Field(..., min_length=1, description="Source-identified web evidence chunks")
+
+
+class DatabaseEvidenceChunkRequest(BaseModel):
+    section: str = Field(default="Database", min_length=1, description="Section or result grouping for this database evidence chunk")
+    content: str = Field(..., min_length=1, description="Database evidence chunk content")
+    quote: Optional[str] = Field(default=None, description="Citation quote to persist; defaults to content")
+
+
+class DatabaseEvidenceIngestRequest(BaseModel):
+    database_name: str = Field(..., min_length=1, description="Research database name")
+    query: str = Field(..., min_length=1, description="Query or lookup that produced this source")
+    title: str = Field(..., min_length=1, description="Source title")
+    retrieved_at: Optional[str] = Field(default=None, description="ISO timestamp when the source was retrieved")
+    chunks: List[DatabaseEvidenceChunkRequest] = Field(..., min_length=1, description="Source-identified database evidence chunks")
 
 
 class ResearchMemoryPromotionRequest(BaseModel):
@@ -1728,6 +1743,135 @@ async def ingest_web_evidence_for_session(
         raise
     except Exception as exc:
         logger.exception("ingest_web_evidence_for_session failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/{session_id}/research/database-evidence", response_model=ApiResponse)
+async def ingest_database_evidence_for_session(
+    session_id: str,
+    body: DatabaseEvidenceIngestRequest,
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """Persist source-identified database result chunks as citation evidence for a research session."""
+    try:
+        session = await async_get_science_session(session_id)
+        if session.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        database_name = body.database_name.strip()
+        query = body.query.strip()
+        title = body.title.strip()
+        if not database_name:
+            raise HTTPException(status_code=400, detail="database_name is required")
+        if not query:
+            raise HTTPException(status_code=400, detail="query is required")
+        if not title:
+            raise HTTPException(status_code=400, detail="title is required")
+        if not body.chunks:
+            raise HTTPException(status_code=400, detail="At least one evidence chunk is required")
+
+        retrieved_at = body.retrieved_at or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        source_id = f"database-{_new_event_id()}"
+        chunks = [
+            {
+                "chunk_id": f"{source_id}:chunk-{index}",
+                "section": chunk.section.strip() or "Database",
+                "content": chunk.content.strip(),
+                "quote": (chunk.quote.strip() if chunk.quote else chunk.content.strip()),
+            }
+            for index, chunk in enumerate(body.chunks, start=1)
+        ]
+        if any(not chunk["content"] for chunk in chunks):
+            raise HTTPException(status_code=400, detail="Evidence chunk content is required")
+
+        step_id = f"research-database-evidence-{_new_event_id()}"
+        started_event = _research_upload_step_event(
+            step_id=step_id,
+            status="running",
+            description="Indexing database citation evidence",
+            metadata={
+                "source_type": "database",
+                "source_id": source_id,
+                "database_name": database_name,
+                "query": query,
+                "title": title,
+                "chunk_count": len(chunks),
+            },
+        )
+        _append_session_event(session, started_event)
+        _publish_session_event(session_id, current_user.id, started_event)
+
+        try:
+            summary = await persist_database_evidence_source_to_database(
+                settings.research_database_url,
+                session_id=session_id,
+                user_id=current_user.id,
+                source_id=source_id,
+                database_name=database_name,
+                query=query,
+                title=title,
+                retrieved_at=retrieved_at,
+                chunks=chunks,
+            )
+        except Exception as exc:
+            await _append_save_publish_session_event(
+                session,
+                session_id=session_id,
+                user_id=current_user.id,
+                event=_research_upload_step_event(
+                    step_id=step_id,
+                    status="failed",
+                    description="Database citation evidence indexing failed",
+                    metadata={
+                        "source_type": "database",
+                        "source_id": source_id,
+                        "database_name": database_name,
+                        "query": query,
+                        "title": title,
+                        "chunk_count": len(chunks),
+                        "error": str(exc),
+                    },
+                ),
+            )
+            raise
+
+        data = {
+            "source_type": "database",
+            "source_id": source_id,
+            "database_name": database_name,
+            "query": query,
+            "title": title,
+            "retrieved_at": retrieved_at,
+            "chunk_count": summary.chunk_count,
+            "evidence_record_count": summary.evidence_record_count,
+        }
+        setattr(session, "status", SessionStatus.COMPLETED)
+        await _append_save_publish_session_event(
+            session,
+            session_id=session_id,
+            user_id=current_user.id,
+            event=_research_upload_step_event(
+                step_id=step_id,
+                status="completed",
+                description="Database citation evidence indexed",
+                metadata={
+                    "source_type": "database",
+                    "source_id": source_id,
+                    "database_name": database_name,
+                    "query": query,
+                    "title": title,
+                    "chunk_count": summary.chunk_count,
+                    "evidence_record_count": summary.evidence_record_count,
+                },
+            ),
+        )
+        return ApiResponse(data=data)
+    except ScienceSessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("ingest_database_evidence_for_session failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 

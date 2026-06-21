@@ -378,6 +378,150 @@ async def persist_web_evidence_source(
     )
 
 
+async def persist_database_evidence_source(
+    connection: Any,
+    *,
+    session_id: str,
+    user_id: str,
+    source_id: str,
+    database_name: str,
+    query: str,
+    title: str,
+    retrieved_at: str,
+    chunks: list[dict[str, Any]],
+) -> PersistSummary:
+    async with connection.transaction():
+        source_identity = {
+            "source_type": "database",
+            "database_name": database_name,
+            "query": query,
+            "retrieved_at": retrieved_at,
+        }
+        await connection.execute(
+            """
+            INSERT INTO research_papers (
+                paper_id,
+                session_id,
+                user_id,
+                title,
+                authors,
+                abstract,
+                source_path,
+                parser,
+                source_identity,
+                updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9::jsonb, now())
+            ON CONFLICT (paper_id) DO UPDATE SET
+                session_id = EXCLUDED.session_id,
+                user_id = EXCLUDED.user_id,
+                title = EXCLUDED.title,
+                authors = EXCLUDED.authors,
+                abstract = EXCLUDED.abstract,
+                source_path = EXCLUDED.source_path,
+                parser = EXCLUDED.parser,
+                source_identity = EXCLUDED.source_identity,
+                updated_at = now()
+            """,
+            source_id,
+            session_id,
+            user_id,
+            title,
+            _json([]),
+            "",
+            f"database:{database_name}",
+            "database-source",
+            _json(source_identity),
+        )
+
+        chunk_rows = [
+            (
+                str(chunk["chunk_id"]),
+                source_id,
+                str(chunk.get("section") or "Database"),
+                None,
+                None,
+                index,
+                str(chunk.get("content") or ""),
+                _json(
+                    {
+                        **source_identity,
+                        "source_id": source_id,
+                        "section": str(chunk.get("section") or "Database"),
+                    }
+                ),
+            )
+            for index, chunk in enumerate(chunks, start=1)
+        ]
+        await connection.executemany(
+            """
+            INSERT INTO research_chunks (
+                chunk_id,
+                paper_id,
+                section,
+                page_start,
+                page_end,
+                chunk_index,
+                content,
+                source_identity
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
+            ON CONFLICT (chunk_id) DO UPDATE SET
+                section = EXCLUDED.section,
+                page_start = EXCLUDED.page_start,
+                page_end = EXCLUDED.page_end,
+                chunk_index = EXCLUDED.chunk_index,
+                content = EXCLUDED.content,
+                source_identity = EXCLUDED.source_identity
+            """,
+            chunk_rows,
+        )
+
+        evidence_rows = [
+            (
+                str(chunk["chunk_id"]),
+                str(chunk.get("quote") or chunk.get("content") or ""),
+                str(chunk.get("section") or "Database"),
+                None,
+                None,
+                _json(
+                    {
+                        **source_identity,
+                        "source_id": source_id,
+                        "section": str(chunk.get("section") or "Database"),
+                    }
+                ),
+            )
+            for chunk in chunks
+        ]
+        await connection.executemany(
+            """
+            INSERT INTO research_evidence_records (
+                chunk_id,
+                evidence_type,
+                quote,
+                section,
+                page_start,
+                page_end,
+                source_identity
+            )
+            VALUES ($1, 'database', $2, $3, $4, $5, $6::jsonb)
+            ON CONFLICT (chunk_id, evidence_type, quote) DO UPDATE SET
+                section = EXCLUDED.section,
+                page_start = EXCLUDED.page_start,
+                page_end = EXCLUDED.page_end,
+                source_identity = EXCLUDED.source_identity
+            """,
+            evidence_rows,
+        )
+
+    return PersistSummary(
+        paper_id=source_id,
+        chunk_count=len(chunks),
+        evidence_record_count=len(chunks),
+    )
+
+
 async def persist_chunk_embeddings(
     connection: Any,
     *,

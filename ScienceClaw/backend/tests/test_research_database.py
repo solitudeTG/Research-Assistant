@@ -9,6 +9,7 @@ from backend.research_assistant.storage.database import (
     get_research_session_status_from_database,
     hybrid_search_evidence_in_database,
     persist_chunk_embeddings_to_database,
+    persist_database_evidence_source_to_database,
     persist_web_evidence_source_to_database,
     persist_report_evidence_map_to_database,
 )
@@ -136,6 +137,41 @@ async def test_persist_web_evidence_source_to_database_closes_asyncpg_connection
     )
 
     assert summary.paper_id == "web-source-1"
+    assert "insert into research_papers" in fake_connection.executed[0][0].lower()
+    assert "research_evidence_records" in fake_connection.executemany_calls[1][0].lower()
+    assert fake_connection.closed is True
+
+
+@pytest.mark.asyncio
+async def test_persist_database_evidence_source_to_database_closes_asyncpg_connection(monkeypatch):
+    fake_connection = FakeConnection()
+
+    async def connect(database_url):
+        assert database_url == "postgresql://test"
+        return fake_connection
+
+    monkeypatch.setitem(sys.modules, "asyncpg", types.SimpleNamespace(connect=connect))
+
+    summary = await persist_database_evidence_source_to_database(
+        "postgresql://test",
+        session_id="session-1",
+        user_id="user-1",
+        source_id="database-source-1",
+        database_name="OpenAlex",
+        query="topic:evidence-boundaries",
+        title="Evidence Boundaries",
+        retrieved_at="2026-06-21T00:00:00Z",
+        chunks=[
+            {
+                "chunk_id": "database-source-1:chunk-1",
+                "section": "Result row",
+                "content": "Database citation evidence has source identity.",
+                "quote": "Database citation evidence has source identity.",
+            }
+        ],
+    )
+
+    assert summary.paper_id == "database-source-1"
     assert "insert into research_papers" in fake_connection.executed[0][0].lower()
     assert "research_evidence_records" in fake_connection.executemany_calls[1][0].lower()
     assert fake_connection.closed is True
