@@ -13,6 +13,7 @@ class CitationLike(Protocol):
     evidence_id: int
     quote: str
     source_type: str
+    citation_label: str
 
 
 @dataclass(frozen=True)
@@ -109,9 +110,30 @@ def _audit_claim(claim_text: str, citations: list[CitationLike]) -> EvidenceAudi
             support_score=0.0,
         )
 
+    cited_labels = _citation_labels_in_claim(claim_text, citations)
+    labeled_citations = [citation for citation in citations if getattr(citation, "citation_label", "")]
+    if labeled_citations and not cited_labels:
+        nearest_evidence_id, nearest_score = _nearest_citation_support(claim_text, citations)
+        notes = []
+        if nearest_evidence_id is not None and nearest_score > 0:
+            notes.append(f"Nearest citation evidence: {nearest_evidence_id} with lexical support {nearest_score:.2f}.")
+        notes.append("No explicit citation label was attached to this claim.")
+        return EvidenceAuditClaim(
+            claim_text=claim_text,
+            status="unsupported",
+            evidence_ids=[],
+            notes=notes,
+            support_score=nearest_score,
+        )
+
+    citation_candidates = [
+        citation for citation in citations
+        if not labeled_citations or getattr(citation, "citation_label", "") in cited_labels
+    ]
+
     matching = [
         citation.evidence_id
-        for citation in citations
+        for citation in citation_candidates
         if _normalise_text(citation.quote) in _normalise_text(claim_text)
         or citation.quote.strip() == claim_text.strip()
     ]
@@ -162,6 +184,14 @@ def _extract_claim_texts(answer_content: str) -> list[str]:
 
 def _normalise_text(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip().casefold()
+
+
+def _citation_labels_in_claim(claim_text: str, citations: list[CitationLike]) -> set[str]:
+    return {
+        citation.citation_label
+        for citation in citations
+        if getattr(citation, "citation_label", "") and citation.citation_label in claim_text
+    }
 
 
 def _nearest_citation_support(claim_text: str, citations: list[CitationLike]) -> tuple[int | None, float]:

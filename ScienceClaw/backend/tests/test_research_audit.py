@@ -96,6 +96,47 @@ def test_audit_evidence_claims_accepts_web_and_database_citation_evidence():
     assert [claim.evidence_ids for claim in audit.claims] == [[101], [102]]
 
 
+def test_audit_evidence_claims_rejects_claim_without_explicit_citation_label():
+    audit = audit_evidence_claims(
+        answer_content=(
+            "Based on uploaded paper evidence:\n"
+            "1. Hybrid retrieval improves recall. [paper-1:Results:4]\n"
+            "2. Unlabeled database result is reproducible."
+        ),
+        citations=[
+            ResearchCitation(
+                evidence_id=17,
+                chunk_id="chunk-17",
+                paper_id="paper-1",
+                title="Hybrid Retrieval",
+                section="Results",
+                page_start=4,
+                page_end=4,
+                quote="Hybrid retrieval improves recall.",
+                citation_label="[paper-1:Results:4]",
+            ),
+            ResearchCitation(
+                evidence_id=101,
+                chunk_id="db-row-1",
+                paper_id="database-source",
+                title="Benchmark Registry",
+                section="Rows",
+                page_start=None,
+                page_end=None,
+                quote="Unlabeled database result is reproducible.",
+                citation_label="[db-1]",
+                source_type="database",
+            ),
+        ],
+    )
+
+    assert audit.status == "partial"
+    assert [claim.status for claim in audit.claims] == ["approved", "unsupported"]
+    assert audit.claims[0].evidence_ids == [17]
+    assert audit.claims[1].evidence_ids == []
+    assert "No explicit citation label was attached to this claim." in audit.claims[1].notes
+
+
 def test_audit_evidence_claims_marks_answer_without_citations_as_unsupported():
     audit = audit_evidence_claims(
         answer_content="No citation evidence was found in the uploaded papers for this question.",

@@ -182,5 +182,5 @@ async def test_generate_markdown_research_report_keeps_unsupported_claims_out_of
     assert "Hybrid retrieval proves clinical benefit." not in findings_section
     assert (
         "| Hybrid retrieval proves clinical benefit. | `unsupported` | `0.40` |  | "
-        "Nearest citation evidence: 17 with lexical support 0.40. No attached citation quote directly supports this claim. |"
+        "Nearest citation evidence: 17 with lexical support 0.40. No explicit citation label was attached to this claim. |"
     ) in markdown
