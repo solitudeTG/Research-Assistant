@@ -30,6 +30,13 @@ class FakeUpload:
         return b"%PDF-1.4\nfake"
 
 
+class FakeStorageSummary:
+    def __init__(self, *, paper_id="web-source-1", chunk_count=1, evidence_record_count=1):
+        self.paper_id = paper_id
+        self.chunk_count = chunk_count
+        self.evidence_record_count = evidence_record_count
+
+
 def _load_sessions_module(monkeypatch):
     async def unused_async(*args, **kwargs):
         raise AssertionError("unexpected ScienceClaw session dependency call")
@@ -76,6 +83,134 @@ def _load_sessions_module(monkeypatch):
     )
     sys.modules.pop("backend.route.sessions", None)
     return importlib.import_module("backend.route.sessions")
+
+
+@pytest.mark.asyncio
+async def test_research_web_evidence_ingest_persists_source_and_trace(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession()
+    persisted = {}
+    published = []
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    async def fake_persist_web_evidence_source(database_url, **kwargs):
+        persisted["database_url"] = database_url
+        persisted.update(kwargs)
+        return FakeStorageSummary(
+            paper_id=kwargs["source_id"],
+            chunk_count=len(kwargs["chunks"]),
+            evidence_record_count=len(kwargs["chunks"]),
+        )
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "persist_web_evidence_source_to_database", fake_persist_web_evidence_source)
+    monkeypatch.setattr(sessions, "_publish_session_event", lambda *args: published.append(args))
+
+    response = await sessions.ingest_web_evidence_for_session(
+        "session-1",
+        sessions.WebEvidenceIngestRequest(
+            url="https://example.com/research",
+            title="External Research Note",
+            retrieved_at="2026-06-21T00:00:00Z",
+            chunks=[
+                sessions.WebEvidenceChunkRequest(
+                    section="Findings",
+                    content="Only source-identified web evidence can be cited.",
+                    quote="source-identified web evidence",
+                )
+            ],
+        ),
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    assert response.data["source_type"] == "web"
+    assert response.data["source_id"].startswith("web-")
+    assert response.data["url"] == "https://example.com/research"
+    assert response.data["title"] == "External Research Note"
+    assert response.data["chunk_count"] == 1
+    assert response.data["evidence_record_count"] == 1
+
+    assert persisted["database_url"] == sessions.settings.research_database_url
+    assert persisted["session_id"] == "session-1"
+    assert persisted["user_id"] == "user-1"
+    assert persisted["source_id"] == response.data["source_id"]
+    assert persisted["url"] == "https://example.com/research"
+    assert persisted["title"] == "External Research Note"
+    assert persisted["retrieved_at"] == "2026-06-21T00:00:00Z"
+    assert persisted["chunks"] == [
+        {
+            "chunk_id": f"{response.data['source_id']}:chunk-1",
+            "section": "Findings",
+            "content": "Only source-identified web evidence can be cited.",
+            "quote": "source-identified web evidence",
+        }
+    ]
+
+    assert session.status == sessions.SessionStatus.COMPLETED
+    completed_step = session.events[-1]["data"]
+    assert completed_step["status"] == "completed"
+    assert completed_step["id"].startswith("research-web-evidence-")
+    assert completed_step["description"] == "Web citation evidence indexed"
+    assert completed_step["metadata"] == {
+        "source_type": "web",
+        "source_id": response.data["source_id"],
+        "url": "https://example.com/research",
+        "title": "External Research Note",
+        "chunk_count": 1,
+        "evidence_record_count": 1,
+    }
+    assert published[-1] == ("session-1", "user-1", session.events[-1])
+
+
+@pytest.mark.asyncio
+async def test_research_web_evidence_ingest_failure_persists_failed_trace(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession()
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    async def fail_persist_web_evidence_source(*args, **kwargs):
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "persist_web_evidence_source_to_database", fail_persist_web_evidence_source)
+    monkeypatch.setattr(sessions, "_publish_session_event", lambda *args, **kwargs: None)
+
+    with pytest.raises(sessions.HTTPException) as excinfo:
+        await sessions.ingest_web_evidence_for_session(
+            "session-1",
+            sessions.WebEvidenceIngestRequest(
+                url="https://example.com/research",
+                title="External Research Note",
+                chunks=[
+                    sessions.WebEvidenceChunkRequest(
+                        section="Findings",
+                        content="Only source-identified web evidence can be cited.",
+                    )
+                ],
+            ),
+            types.SimpleNamespace(id="user-1"),
+        )
+
+    assert excinfo.value.status_code == 500
+    failed_steps = [
+        event["data"]
+        for event in session.events
+        if event.get("event") == "step" and event.get("data", {}).get("status") == "failed"
+    ]
+    assert len(failed_steps) == 1
+    assert failed_steps[0]["id"].startswith("research-web-evidence-")
+    assert failed_steps[0]["description"] == "Web citation evidence indexing failed"
+    assert failed_steps[0]["metadata"]["source_type"] == "web"
+    assert failed_steps[0]["metadata"]["url"] == "https://example.com/research"
+    assert failed_steps[0]["metadata"]["title"] == "External Research Note"
+    assert "database unavailable" in failed_steps[0]["metadata"]["error"]
+    assert session.save_count == 1
 
 
 @pytest.mark.asyncio

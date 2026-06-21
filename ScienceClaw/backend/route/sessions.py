@@ -63,6 +63,7 @@ from backend.research_assistant.storage.database import (
     list_memory_entries_from_database,
     persist_audit_result_to_database,
     persist_memory_entry_to_database,
+    persist_web_evidence_source_to_database,
 )
 from backend.user.dependencies import get_current_user, require_user, User
 from backend.models import get_model_config
@@ -141,6 +142,19 @@ class ResearchAnswerRequest(BaseModel):
 class ResearchReportRequest(BaseModel):
     question: str = Field(..., description="Research question or note topic grounded in uploaded papers")
     limit: int = Field(default=8, ge=1, le=20, description="Maximum evidence chunks to include")
+
+
+class WebEvidenceChunkRequest(BaseModel):
+    section: str = Field(default="Web", min_length=1, description="Section or heading for this web evidence chunk")
+    content: str = Field(..., min_length=1, description="Web evidence chunk content")
+    quote: Optional[str] = Field(default=None, description="Citation quote to persist; defaults to content")
+
+
+class WebEvidenceIngestRequest(BaseModel):
+    url: str = Field(..., min_length=1, description="Source URL")
+    title: str = Field(..., min_length=1, description="Source title")
+    retrieved_at: Optional[str] = Field(default=None, description="ISO timestamp when the source was retrieved")
+    chunks: List[WebEvidenceChunkRequest] = Field(..., min_length=1, description="Source-identified web evidence chunks")
 
 
 class ResearchMemoryPromotionRequest(BaseModel):
@@ -1595,6 +1609,127 @@ async def upload_session_file(
 # ═══════════════════════════════════════════════════════════════════
 # Real-time session notifications (SSE)
 # ═══════════════════════════════════════════════════════════════════
+
+@router.post("/{session_id}/research/web-evidence", response_model=ApiResponse)
+async def ingest_web_evidence_for_session(
+    session_id: str,
+    body: WebEvidenceIngestRequest,
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """Persist source-identified web chunks as citation evidence for a research session."""
+    try:
+        session = await async_get_science_session(session_id)
+        if session.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        url = body.url.strip()
+        title = body.title.strip()
+        if not url:
+            raise HTTPException(status_code=400, detail="url is required")
+        if not title:
+            raise HTTPException(status_code=400, detail="title is required")
+        if not body.chunks:
+            raise HTTPException(status_code=400, detail="At least one evidence chunk is required")
+
+        retrieved_at = body.retrieved_at or datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        source_id = f"web-{_new_event_id()}"
+        chunks = [
+            {
+                "chunk_id": f"{source_id}:chunk-{index}",
+                "section": chunk.section.strip() or "Web",
+                "content": chunk.content.strip(),
+                "quote": (chunk.quote.strip() if chunk.quote else chunk.content.strip()),
+            }
+            for index, chunk in enumerate(body.chunks, start=1)
+        ]
+        if any(not chunk["content"] for chunk in chunks):
+            raise HTTPException(status_code=400, detail="Evidence chunk content is required")
+
+        step_id = f"research-web-evidence-{_new_event_id()}"
+        started_event = _research_upload_step_event(
+            step_id=step_id,
+            status="running",
+            description="Indexing web citation evidence",
+            metadata={
+                "source_type": "web",
+                "source_id": source_id,
+                "url": url,
+                "title": title,
+                "chunk_count": len(chunks),
+            },
+        )
+        _append_session_event(session, started_event)
+        _publish_session_event(session_id, current_user.id, started_event)
+
+        try:
+            summary = await persist_web_evidence_source_to_database(
+                settings.research_database_url,
+                session_id=session_id,
+                user_id=current_user.id,
+                source_id=source_id,
+                url=url,
+                title=title,
+                retrieved_at=retrieved_at,
+                chunks=chunks,
+            )
+        except Exception as exc:
+            await _append_save_publish_session_event(
+                session,
+                session_id=session_id,
+                user_id=current_user.id,
+                event=_research_upload_step_event(
+                    step_id=step_id,
+                    status="failed",
+                    description="Web citation evidence indexing failed",
+                    metadata={
+                        "source_type": "web",
+                        "source_id": source_id,
+                        "url": url,
+                        "title": title,
+                        "chunk_count": len(chunks),
+                        "error": str(exc),
+                    },
+                ),
+            )
+            raise
+
+        data = {
+            "source_type": "web",
+            "source_id": source_id,
+            "url": url,
+            "title": title,
+            "retrieved_at": retrieved_at,
+            "chunk_count": summary.chunk_count,
+            "evidence_record_count": summary.evidence_record_count,
+        }
+        setattr(session, "status", SessionStatus.COMPLETED)
+        await _append_save_publish_session_event(
+            session,
+            session_id=session_id,
+            user_id=current_user.id,
+            event=_research_upload_step_event(
+                step_id=step_id,
+                status="completed",
+                description="Web citation evidence indexed",
+                metadata={
+                    "source_type": "web",
+                    "source_id": source_id,
+                    "url": url,
+                    "title": title,
+                    "chunk_count": summary.chunk_count,
+                    "evidence_record_count": summary.evidence_record_count,
+                },
+            ),
+        )
+        return ApiResponse(data=data)
+    except ScienceSessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("ingest_web_evidence_for_session failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
 
 @router.post("/{session_id}/research/answer", response_model=ApiResponse)
 async def answer_research_question_for_session(
