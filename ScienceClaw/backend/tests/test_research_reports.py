@@ -102,7 +102,9 @@ async def test_generate_markdown_research_report_writes_artifact_and_evidence_ma
     assert "- Paper: Hybrid Retrieval" not in markdown
     assert "Citation evidence sources: `paper`, `web`, `database`" in markdown
     assert "Context-only sources: `memory`, `model_reasoning`, `process_trace`, `tool_logs`" in markdown
-    assert "Hybrid retrieval improves recall. [paper-1:Results:4]" in markdown
+    findings_section = markdown.split("## Citation Evidence", maxsplit=1)[0]
+    assert "1. Hybrid retrieval improves recall." in findings_section
+    assert "1. Hybrid retrieval improves recall. [paper-1:Results:4]" not in findings_section
     assert "## Context-Only Memory" in markdown
     assert "| Memory | Layer | Score | Reason |" in markdown
     assert "| Retrieval preference | `l2` | `0.67` | matched question terms: hybrid, retrieval; source answer answer-1. |" in markdown
@@ -129,10 +131,10 @@ async def test_generate_markdown_research_report_writes_artifact_and_evidence_ma
     assert evidence["context_memory"][0]["context_only"] is True
     assert evidence["audit"]["claims"][0]["support_score"] == 1.0
     assert evidence["evidence"][0]["evidence_id"] == 17
-    assert evidence["evidence"][0]["claim_text"] == "Hybrid retrieval improves recall. [paper-1:Results:4]"
+    assert evidence["evidence"][0]["claim_text"] == "Hybrid retrieval improves recall."
     assert persisted["database_url"] == "postgresql://test"
     assert persisted["report_id"] == report.report_id
-    assert persisted["evidence_rows"] == [(17, "evidence-1", "Hybrid retrieval improves recall. [paper-1:Results:4]")]
+    assert persisted["evidence_rows"] == [(17, "evidence-1", "Hybrid retrieval improves recall.")]
     assert persisted_audit == {
         "database_url": "postgresql://test",
         "audit_id": f"{report.report_id}:audit",
@@ -194,7 +196,8 @@ async def test_generate_markdown_research_report_keeps_unsupported_claims_out_of
     findings_section = markdown.split("## Citation Evidence", maxsplit=1)[0]
 
     assert "Status: `partial`" in markdown
-    assert "Hybrid retrieval improves recall. [paper-1:Results:4]" in findings_section
+    assert "Hybrid retrieval improves recall." in findings_section
+    assert "Hybrid retrieval improves recall. [paper-1:Results:4]" not in findings_section
     assert "Hybrid retrieval proves clinical benefit." not in findings_section
     assert (
         "| Hybrid retrieval proves clinical benefit. | `unsupported` | `0.40` |  | "

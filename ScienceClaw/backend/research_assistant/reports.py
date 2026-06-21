@@ -265,7 +265,7 @@ def _build_approved_claim_evidence_rows(
                 {
                     "evidence_id": citation.evidence_id,
                     "markdown_anchor": _citation_anchor(citation_index),
-                    "claim_text": claim.claim_text,
+                    "claim_text": _reader_claim_text(claim.claim_text, answer.citations),
                     "citation": citation.to_dict(),
                 }
             )
@@ -274,7 +274,7 @@ def _build_approved_claim_evidence_rows(
 
 def _compose_audited_answer_lines(answer: ResearchAnswer) -> list[str]:
     approved_claims = [
-        claim.claim_text
+        _reader_claim_text(claim.claim_text, answer.citations)
         for claim in answer.audit.claims
         if claim.status == "approved"
     ]
@@ -308,6 +308,15 @@ def _compose_claim_check_rows(answer: ResearchAnswer) -> list[str]:
     if not rows:
         return ["| No auditable claims. | `unsupported` | `0.00` |  | No answer content was available. |"]
     return rows
+
+
+def _reader_claim_text(claim_text: str, citations: list[ResearchCitation]) -> str:
+    cleaned = claim_text
+    for citation in citations:
+        if citation.citation_label:
+            cleaned = cleaned.replace(citation.citation_label, "")
+    cleaned = re.sub(r"\s+([,.;:!?])", r"\1", cleaned)
+    return re.sub(r"\s+", " ", cleaned).strip()
 
 
 def _compose_context_memory_lines(answer: ResearchAnswer) -> list[str]:
