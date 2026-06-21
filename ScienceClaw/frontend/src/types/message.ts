@@ -1,5 +1,5 @@
 import type { FileInfo } from '../api/file';
-import type { ToolMetaData, StatisticsData, RoundFileInfo } from './event';
+import type { ToolMetaData, StatisticsData, RoundFileInfo, ResearchToolPackMetadata, ToolResultContract } from './event';
 
 export type MessageType = "user" | "assistant" | "tool" | "step" | "attachments" | "thinking";
 
@@ -103,6 +103,8 @@ export interface ToolContent extends BaseContent {
   duration_ms?: number;
   /** 工具元数据（图标、分类、描述） */
   tool_meta?: ToolMetaData;
+  result_contract?: ToolResultContract;
+  tool_pack?: ResearchToolPackMetadata;
 }
 
 export interface StepContent extends BaseContent {

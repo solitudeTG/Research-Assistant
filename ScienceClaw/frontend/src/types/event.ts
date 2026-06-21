@@ -18,6 +18,19 @@ export interface ToolMetaData {
   sandbox?: boolean;
 }
 
+export interface ResearchToolPackMetadata {
+  id: string;
+  label: string;
+  research_workflow?: string;
+}
+
+export interface ToolResultContract {
+  kind: string;
+  schema: Record<string, any>;
+  example_preview?: any;
+  truncated?: boolean;
+}
+
 export interface ToolEventData extends BaseEventData {
   tool_call_id: string;
   name: string;
@@ -29,6 +42,8 @@ export interface ToolEventData extends BaseEventData {
   duration_ms?: number;
   /** 工具元数据（图标、分类、描述） */
   tool_meta?: ToolMetaData;
+  result_contract?: ToolResultContract;
+  tool_pack?: ResearchToolPackMetadata;
 }
 
 export interface StepEventData extends BaseEventData {

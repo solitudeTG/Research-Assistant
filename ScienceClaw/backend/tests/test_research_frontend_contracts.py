@@ -113,6 +113,18 @@ def test_chat_request_can_activate_research_tool_packs():
     assert "computed<string[]>(() => [])" not in chat_page
 
 
+def test_frontend_tool_trace_types_accept_result_contract_metadata():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    event_types = (frontend_root / "types" / "event.ts").read_text(encoding="utf-8")
+    message_types = (frontend_root / "types" / "message.ts").read_text(encoding="utf-8")
+
+    assert "result_contract?: ToolResultContract" in event_types
+    assert "tool_pack?: ResearchToolPackMetadata" in event_types
+    assert "export interface ToolResultContract" in event_types
+    assert "result_contract?: ToolResultContract" in message_types
+    assert "tool_pack?: ResearchToolPackMetadata" in message_types
+
+
 def test_chat_answer_error_uses_citation_evidence_wording():
     chat_page = (
         Path(__file__).resolve().parents[2]
