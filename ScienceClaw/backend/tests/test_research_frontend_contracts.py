@@ -124,3 +124,16 @@ def test_chat_answer_error_uses_citation_evidence_wording():
 
     assert "Failed to answer from citation evidence" in chat_page
     assert "Failed to answer from paper evidence" not in chat_page
+
+
+def test_chat_research_mode_tooltip_uses_citation_evidence_wording():
+    chat_page = (
+        Path(__file__).resolve().parents[2]
+        / "frontend"
+        / "src"
+        / "pages"
+        / "ChatPage.vue"
+    ).read_text(encoding="utf-8")
+
+    assert "Citation evidence mode" in chat_page
+    assert "Paper evidence mode" not in chat_page

@@ -50,6 +50,7 @@ def test_research_answer_and_report_routes_use_citation_evidence_wording():
     assert 'description="Retrieving citation evidence"' in sessions_source
     assert "Generate a Markdown research artifact using citation evidence and context memory." in sessions_source
     assert 'description="Generating Markdown research artifact from citation evidence"' in sessions_source
+    assert '"mode": "citation_evidence"' in sessions_source
 
     assert "Research question grounded in uploaded papers" not in sessions_source
     assert "Research question or note topic grounded in uploaded papers" not in sessions_source
@@ -57,6 +58,7 @@ def test_research_answer_and_report_routes_use_citation_evidence_wording():
     assert "Retrieving citation evidence from uploaded papers" not in sessions_source
     assert "using only uploaded paper evidence" not in sessions_source
     assert "Generating Markdown research artifact from uploaded paper evidence" not in sessions_source
+    assert '"mode": "paper_evidence"' not in sessions_source
 
 
 def _load_sessions_module(monkeypatch):

@@ -2133,7 +2133,7 @@ async def answer_research_question_for_session(
             "content": body.question,
             "role": "user",
             "attachments": [],
-            "metadata": {"research_assistant": {"mode": "paper_evidence"}},
+            "metadata": {"research_assistant": {"mode": "citation_evidence"}},
         })
         _append_session_event(session, user_event)
         _publish_session_event(session_id, current_user.id, user_event)

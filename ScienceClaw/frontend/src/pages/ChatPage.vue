@@ -203,7 +203,7 @@
                 :class="researchModeEnabled
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300'
                   : 'border-gray-200 bg-white text-[var(--text-secondary)] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'"
-                :title="researchModeEnabled ? 'Paper evidence mode' : 'General agent mode'">
+                :title="researchModeEnabled ? 'Citation evidence mode' : 'General agent mode'">
                 <FileText :size="14" />
                 <span class="hidden sm:inline">{{ researchModeEnabled ? 'Research' : 'General' }}</span>
               </button>
