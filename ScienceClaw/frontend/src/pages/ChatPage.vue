@@ -1565,6 +1565,7 @@ const handleSaveTool = async () => {
     await agentApi.saveToolFromSession(
       sessionId.value,
       pendingToolSave.value,
+      true,
       pendingToolReplaces.value || undefined,
     );
     showSuccessToast(t('Tool "{name}" saved successfully', { name: pendingToolSave.value }));

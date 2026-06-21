@@ -1313,6 +1313,7 @@ async def read_tool_file(
 class SaveToolRequest(BaseModel):
     tool_name: str = Field(..., description="Name of the tool to save (without .py extension)")
     replaces: str = Field("", description="If this tool replaces an existing tool with a different name, specify the old tool name here")
+    user_confirmed: bool = Field(False, description="Whether the user explicitly confirmed permanent tool persistence")
 
 
 class ValidateToolRequest(BaseModel):
@@ -1388,6 +1389,8 @@ async def save_tool_from_session(
         tool_name = body.tool_name.strip()
         if not tool_name or "/" in tool_name or "\\" in tool_name:
             raise HTTPException(status_code=400, detail="Invalid tool name")
+        if body.user_confirmed is not True:
+            raise HTTPException(status_code=400, detail="Tool save requires explicit user confirmation")
 
         staging_dir = _Path(_WORKSPACE_DIR) / session_id / "tools_staging"
         src = staging_dir / f"{tool_name}.py"

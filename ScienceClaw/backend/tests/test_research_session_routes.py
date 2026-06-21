@@ -1159,7 +1159,7 @@ async def test_save_tool_from_session_requires_passed_sandbox_validation(monkeyp
     with pytest.raises(sessions.HTTPException) as excinfo:
         await sessions.save_tool_from_session(
             "session-1",
-            sessions.SaveToolRequest(tool_name="paper_lookup"),
+            sessions.SaveToolRequest(tool_name="paper_lookup", user_confirmed=True),
             types.SimpleNamespace(id="user-1"),
         )
 
@@ -1226,7 +1226,7 @@ async def test_save_tool_from_session_persists_only_validated_tool(monkeypatch, 
 
     response = await sessions.save_tool_from_session(
         "session-1",
-        sessions.SaveToolRequest(tool_name="paper_lookup"),
+        sessions.SaveToolRequest(tool_name="paper_lookup", user_confirmed=True),
         types.SimpleNamespace(id="user-1"),
     )
 
@@ -1258,6 +1258,67 @@ async def test_save_tool_from_session_persists_only_validated_tool(monkeypatch, 
             "required": ["title"],
         },
     }
+
+
+@pytest.mark.asyncio
+async def test_save_tool_from_session_requires_explicit_user_confirmation(monkeypatch, tmp_path):
+    sessions = _load_sessions_module(monkeypatch)
+    workspace = tmp_path / "workspace"
+    tools_dir = tmp_path / "Tools"
+    staging = workspace / "session-1" / "tools_staging"
+    staging.mkdir(parents=True)
+    tools_dir.mkdir()
+    tool_source = (
+        '@tool\n'
+        'def paper_lookup(query: str) -> str:\n'
+        '    """Look up paper metadata."""\n'
+        '    return query\n'
+    )
+    (staging / "paper_lookup.py").write_text(tool_source, encoding="utf-8")
+    (staging / "paper_lookup.validation.json").write_text(
+        json.dumps(
+            {
+                "tool_name": "paper_lookup",
+                "status": "passed",
+                "checks": ["python_syntax", "tool_function", "example_call", "input_schema", "return_schema"],
+                "validated_at": "2026-06-21T00:00:00Z",
+                "execution_environment": {
+                    "type": "local_restricted",
+                    "imports_allowed": False,
+                },
+                "source_sha256": hashlib.sha256(tool_source.encode("utf-8")).hexdigest(),
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                    },
+                    "required": ["query"],
+                },
+                "return_schema": {"type": "string"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    session = FakeSession(vm_root_dir=workspace / "session-1")
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    monkeypatch.setattr(sessions, "_WORKSPACE_DIR", str(workspace))
+    monkeypatch.setattr(sessions, "_TOOLS_DIR", str(tools_dir))
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+
+    with pytest.raises(sessions.HTTPException) as excinfo:
+        await sessions.save_tool_from_session(
+            "session-1",
+            sessions.SaveToolRequest(tool_name="paper_lookup"),
+            types.SimpleNamespace(id="user-1"),
+        )
+
+    assert excinfo.value.status_code == 400
+    assert "user confirmation" in excinfo.value.detail
+    assert not (tools_dir / "paper_lookup.py").exists()
 
 
 @pytest.mark.asyncio
@@ -1322,7 +1383,7 @@ async def test_save_tool_from_session_rejects_stale_validation_source(monkeypatc
     with pytest.raises(sessions.HTTPException) as excinfo:
         await sessions.save_tool_from_session(
             "session-1",
-            sessions.SaveToolRequest(tool_name="paper_lookup"),
+            sessions.SaveToolRequest(tool_name="paper_lookup", user_confirmed=True),
             types.SimpleNamespace(id="user-1"),
         )
 
@@ -1370,7 +1431,7 @@ async def test_save_tool_from_session_requires_return_schema_validation(monkeypa
     with pytest.raises(sessions.HTTPException) as excinfo:
         await sessions.save_tool_from_session(
             "session-1",
-            sessions.SaveToolRequest(tool_name="paper_lookup"),
+            sessions.SaveToolRequest(tool_name="paper_lookup", user_confirmed=True),
             types.SimpleNamespace(id="user-1"),
         )
 
@@ -1424,7 +1485,7 @@ async def test_save_tool_from_session_requires_input_schema_validation(monkeypat
     with pytest.raises(sessions.HTTPException) as excinfo:
         await sessions.save_tool_from_session(
             "session-1",
-            sessions.SaveToolRequest(tool_name="paper_lookup"),
+            sessions.SaveToolRequest(tool_name="paper_lookup", user_confirmed=True),
             types.SimpleNamespace(id="user-1"),
         )
 

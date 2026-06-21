@@ -58,3 +58,13 @@ def test_chat_message_surfaces_context_memory_conflicts():
     assert "conflicts_with?: string[]" in message_types
     assert "memory_status?: 'active' | 'conflict'" in agent_api
     assert "conflicts_with?: string[]" in agent_api
+
+
+def test_chat_page_sends_user_confirmation_for_tool_save():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    chat_page = (frontend_root / "pages" / "ChatPage.vue").read_text(encoding="utf-8")
+    agent_api = (frontend_root / "api" / "agent.ts").read_text(encoding="utf-8")
+
+    assert "saveToolFromSession(" in chat_page
+    assert "pendingToolSave.value,\n      true,\n      pendingToolReplaces.value || undefined" in chat_page
+    assert "user_confirmed: userConfirmed" in agent_api

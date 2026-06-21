@@ -444,6 +444,7 @@ export async function validateToolFromSession(
 export async function saveToolFromSession(
   sessionId: string,
   toolName: string,
+  userConfirmed: boolean,
   replaces?: string
 ): Promise<{
   tool_name: string,
@@ -451,7 +452,7 @@ export async function saveToolFromSession(
   replaced?: string,
   validation: { status: string, checks: string[], validated_at: string, return_schema: Record<string, unknown> }
 }> {
-  const payload: Record<string, string> = { tool_name: toolName };
+  const payload: Record<string, string | boolean> = { tool_name: toolName, user_confirmed: userConfirmed };
   if (replaces && replaces !== toolName) {
     payload.replaces = replaces;
   }
