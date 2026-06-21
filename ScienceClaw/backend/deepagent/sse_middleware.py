@@ -151,17 +151,20 @@ class SSEMonitoringMiddleware(AgentMiddleware):
 
         if tool_name:
             result_summary = self._extract_result_summary(result)
+            result_metadata = self._extract_result_metadata(result)
+            event_data = {
+                "tool_call_id": tool_call_id,
+                "function": tool_name,
+                "duration_ms": duration_ms,
+                "tool_meta": tool_meta,
+                "result_summary": result_summary,
+                "timestamp": time.time(),
+            }
+            event_data.update(result_metadata)
             with self._events_lock:
                 self.sse_events.append(MiddlewareEvent(
                     event="middleware_tool_complete",
-                    data={
-                        "tool_call_id": tool_call_id,
-                        "function": tool_name,
-                        "duration_ms": duration_ms,
-                        "tool_meta": tool_meta,
-                        "result_summary": result_summary,
-                        "timestamp": time.time(),
-                    },
+                    data=event_data,
                 ))
             self.tool_calls_log.append({
                 "agent": self.agent_name,
@@ -246,6 +249,19 @@ class SSEMonitoringMiddleware(AgentMiddleware):
             return str(result)[:200]
         except Exception:
             return "(error extracting result)"
+
+    def _extract_result_metadata(self, result: Any) -> Dict[str, Any]:
+        """Extract structured custom-tool result boundary metadata for trace events."""
+        metadata: Dict[str, Any] = {}
+        if not isinstance(result, dict):
+            return metadata
+        result_contract = result.get("result_contract")
+        if isinstance(result_contract, dict):
+            metadata["result_contract"] = result_contract
+        tool_pack = result.get("tool_pack")
+        if isinstance(tool_pack, dict):
+            metadata["tool_pack"] = tool_pack
+        return metadata
 
     def _handle_todos_change(self, tool_args: Optional[Dict[str, Any]]):
         """

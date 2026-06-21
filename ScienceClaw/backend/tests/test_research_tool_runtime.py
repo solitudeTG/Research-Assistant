@@ -6,6 +6,7 @@ import types
 
 import Tools
 from backend.deepagent import agent
+from backend.deepagent.sse_middleware import SSEMonitoringMiddleware
 
 
 def _tool(name: str, pack_id: str | None = None):
@@ -114,6 +115,40 @@ def test_external_tool_runtime_result_carries_contract_metadata(monkeypatch, tmp
     assert result["result_contract"]["kind"] == "object"
     assert result["result_contract"]["schema"]["properties"]["title"]["type"] == "string"
     assert result["tool_pack"]["id"] == "literature"
+
+
+def test_tool_complete_trace_carries_runtime_result_contract_metadata():
+    middleware = SSEMonitoringMiddleware(agent_name="DeepAgent")
+    result_contract = {
+        "kind": "object",
+        "schema": {
+            "type": "object",
+            "properties": {"title": {"type": "string"}},
+            "required": ["title"],
+        },
+        "example_preview": {"title": "evidence boundaries"},
+        "truncated": False,
+    }
+    tool_pack = {"id": "literature", "label": "Literature"}
+
+    middleware._after_tool(
+        {
+            "result": {"title": "evidence boundaries"},
+            "result_contract": result_contract,
+            "tool_pack": tool_pack,
+        },
+        "paper_lookup",
+        {"query": "evidence boundaries"},
+        "call-1",
+        0,
+        {"category": "custom"},
+    )
+
+    events = middleware.drain_events()
+    complete_event = next(event for event in events if event["event"] == "middleware_tool_complete")
+
+    assert complete_event["data"]["result_contract"] == result_contract
+    assert complete_event["data"]["tool_pack"] == tool_pack
 
 
 def test_chat_active_tool_packs_accept_only_research_packs(monkeypatch):
