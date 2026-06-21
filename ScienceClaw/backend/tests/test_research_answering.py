@@ -311,6 +311,56 @@ async def test_answer_research_question_preserves_web_citation_source_type(monke
 
 
 @pytest.mark.asyncio
+async def test_answer_research_question_preserves_citation_source_identity(monkeypatch):
+    async def fake_search(*args, **kwargs):
+        return [
+            EvidenceHit(
+                evidence_id=21,
+                chunk_id="web-source-1:chunk-1",
+                paper_id="web-source-1",
+                title="Evidence Boundaries",
+                source_type="web",
+                section="Main",
+                page_start=None,
+                page_end=None,
+                quote="Web citation evidence needs a source URL.",
+                rank_score=0.8,
+                source_identity={
+                    "url": "https://example.org/evidence-boundaries",
+                    "retrieved_at": "2026-06-21T10:00:00Z",
+                },
+            )
+        ]
+
+    async def fake_list_memory(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.hybrid_search_evidence_in_database",
+        fake_search,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_memory_entries_from_database",
+        fake_list_memory,
+    )
+
+    answer = await answer_research_question(
+        database_url="postgresql://test",
+        session_id="session-1",
+        question="What does the web source say about citations?",
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=3,
+    )
+
+    assert answer.citations[0].source_identity == {
+        "url": "https://example.org/evidence-boundaries",
+        "retrieved_at": "2026-06-21T10:00:00Z",
+    }
+    assert answer.to_dict()["citations"][0]["source_identity"]["url"] == "https://example.org/evidence-boundaries"
+
+
+@pytest.mark.asyncio
 async def test_answer_research_question_passes_user_id_to_memory_lookup(monkeypatch):
     async def fake_search(*args, **kwargs):
         return []

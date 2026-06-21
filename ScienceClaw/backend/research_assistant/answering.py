@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from typing import Any
 import re
 
 import shortuuid
@@ -52,6 +53,7 @@ class ResearchCitation:
     quote: str
     citation_label: str
     source_type: str = "paper"
+    source_identity: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -127,6 +129,7 @@ async def answer_research_question(
             quote=hit.quote,
             citation_label=hit.citation_label,
             source_type=hit.source_type,
+            source_identity=hit.source_identity,
         )
         for hit in hits
     ]

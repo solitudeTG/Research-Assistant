@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, field
 from typing import Any, Sequence
 
 
@@ -16,6 +17,7 @@ class EvidenceHit:
     quote: str
     rank_score: float
     source_type: str = "paper"
+    source_identity: dict[str, Any] = field(default_factory=dict)
 
     @property
     def citation_label(self) -> str:
@@ -80,6 +82,7 @@ async def hybrid_search_evidence(
             er.page_start,
             er.page_end,
             er.quote,
+            er.source_identity,
             fc.rank_score
         FROM fused_candidates fc
         JOIN research_evidence_records er ON er.chunk_id = fc.chunk_id
@@ -110,8 +113,28 @@ def _row_to_hit(row: Any) -> EvidenceHit:
         page_end=row["page_end"],
         quote=str(row["quote"]),
         rank_score=float(row["rank_score"]),
+        source_identity=_json_value(_row_value(row, "source_identity")),
     )
 
 
 def _vector_literal(values: Sequence[float]) -> str:
     return "[" + ",".join(str(float(value)) for value in values) + "]"
+
+
+def _json_value(value: Any) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        return json.loads(value)
+    return dict(value)
+
+
+def _row_value(row: Any, key: str) -> Any:
+    if isinstance(row, dict):
+        return row.get(key)
+    try:
+        return row[key]
+    except KeyError:
+        return None

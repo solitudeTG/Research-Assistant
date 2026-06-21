@@ -371,6 +371,11 @@ async def test_generate_markdown_research_report_describes_actual_source_scope(t
                     quote="OpenAlex records track citation counts.",
                     citation_label="[db-1]",
                     source_type="database",
+                    source_identity={
+                        "database_name": "OpenAlex",
+                        "query": "works?filter=doi:10.123/example",
+                        "retrieved_at": "2026-06-21T10:00:00Z",
+                    },
                 ),
                 ResearchCitation(
                     evidence_id=22,
@@ -383,6 +388,10 @@ async def test_generate_markdown_research_report_describes_actual_source_scope(t
                     quote="The project page documents the benchmark release.",
                     citation_label="[web-1]",
                     source_type="web",
+                    source_identity={
+                        "url": "https://example.org/benchmark",
+                        "retrieved_at": "2026-06-21T10:05:00Z",
+                    },
                 ),
             ],
         )
@@ -417,6 +426,10 @@ async def test_generate_markdown_research_report_describes_actual_source_scope(t
 
     assert "- Evidence scope: database and web citation evidence" in markdown
     assert "This generated report used database and web citation evidence." in markdown
+    assert "- Database: OpenAlex" in markdown
+    assert "- Query: `works?filter=doi:10.123/example`" in markdown
+    assert "- URL: https://example.org/benchmark" in markdown
+    assert "- Retrieved at: `2026-06-21T10:05:00Z`" in markdown
     assert "uploaded-paper retrieval" not in markdown
     assert evidence["evidence_scope"] == "database_and_web_citation_evidence"
     assert evidence["citation_source_types"] == ["database", "web"]

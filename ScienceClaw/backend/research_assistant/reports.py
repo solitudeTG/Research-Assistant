@@ -145,6 +145,7 @@ def _compose_markdown_report(
                     "",
                     f"- Source: {citation.title}",
                     f"- Source type: `{citation.source_type}`",
+                    *_compose_source_identity_lines(citation),
                     f"- Section: {citation.section}",
                     f"- Page: {_page_label(citation)}",
                     f"- Chunk: `{citation.chunk_id}`",
@@ -286,6 +287,22 @@ def _page_label(citation: ResearchCitation) -> str:
     if citation.page_end and citation.page_end != citation.page_start:
         return f"{citation.page_start}-{citation.page_end}"
     return str(citation.page_start)
+
+
+def _compose_source_identity_lines(citation: ResearchCitation) -> list[str]:
+    identity = citation.source_identity or {}
+    lines: list[str] = []
+    if identity.get("url"):
+        lines.append(f"- URL: {identity['url']}")
+    if identity.get("database_name"):
+        lines.append(f"- Database: {identity['database_name']}")
+    if identity.get("query"):
+        lines.append(f"- Query: `{identity['query']}`")
+    if identity.get("file_path"):
+        lines.append(f"- File: `{identity['file_path']}`")
+    if identity.get("retrieved_at"):
+        lines.append(f"- Retrieved at: `{identity['retrieved_at']}`")
+    return lines
 
 
 def _format_sources(sources: list[str]) -> str:
