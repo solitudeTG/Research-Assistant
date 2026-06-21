@@ -129,6 +129,7 @@ def _compose_markdown_report(
         "",
         *_compose_audited_answer_lines(answer),
         "",
+        *_compose_evidence_gap_lines(answer),
         "## Citation Evidence",
         "",
     ]
@@ -219,6 +220,7 @@ def _build_evidence_map(*, report_id: str, answer: ResearchAnswer) -> dict:
         "citation_count": answer.citation_count,
         "context_memory_count": answer.context_memory_count,
         "context_memory": answer.context_memory,
+        "evidence_gaps": _build_evidence_gaps(answer),
         "audit": answer.audit.to_dict(),
         "evidence": _build_approved_claim_evidence_rows(answer, citations_by_id),
     }
@@ -326,6 +328,37 @@ def _compose_audited_answer_lines(answer: ResearchAnswer) -> list[str]:
         ]
     return [
         "No claims passed Evidence Audit for this report. See Claim Checks before using this output.",
+    ]
+
+
+def _compose_evidence_gap_lines(answer: ResearchAnswer) -> list[str]:
+    gaps = _build_evidence_gaps(answer)
+    if not gaps:
+        return []
+    return [
+        "## Evidence Gaps",
+        "",
+        *[
+            (
+                f"- `{gap['support_score']:.2f}` {gap['claim_text']} - "
+                f"{' '.join(gap['notes']) if gap['notes'] else 'No supporting citation evidence was attached.'}"
+            )
+            for gap in gaps
+        ],
+        "",
+    ]
+
+
+def _build_evidence_gaps(answer: ResearchAnswer) -> list[dict]:
+    return [
+        {
+            "claim_text": _reader_claim_text(claim.claim_text, answer.citations),
+            "status": claim.status,
+            "support_score": claim.support_score,
+            "notes": claim.notes,
+        }
+        for claim in answer.audit.claims
+        if claim.status in {"unsupported", "invalid_source"}
     ]
 
 

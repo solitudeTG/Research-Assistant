@@ -102,7 +102,7 @@ async def test_generate_markdown_research_report_writes_artifact_and_evidence_ma
     assert "- Paper: Hybrid Retrieval" not in markdown
     assert "Citation evidence sources: `paper`, `web`, `database`" in markdown
     assert "Context-only sources: `memory`, `model_reasoning`, `process_trace`, `tool_logs`" in markdown
-    findings_section = markdown.split("## Citation Evidence", maxsplit=1)[0]
+    findings_section = markdown.split("## Evidence Gaps", maxsplit=1)[0]
     assert "1. Hybrid retrieval improves recall." in findings_section
     assert "1. Hybrid retrieval improves recall. [paper-1:Results:4]" not in findings_section
     assert "## Context-Only Memory" in markdown
@@ -250,16 +250,35 @@ async def test_generate_markdown_research_report_keeps_unsupported_claims_out_of
     )
 
     markdown = (tmp_path / "research_reports" / f"{report.report_id}.md").read_text(encoding="utf-8")
-    findings_section = markdown.split("## Citation Evidence", maxsplit=1)[0]
+    evidence = json.loads(
+        (tmp_path / "research_reports" / f"{report.report_id}.evidence.json").read_text(encoding="utf-8")
+    )
+    findings_section = markdown.split("## Evidence Gaps", maxsplit=1)[0]
 
     assert "Status: `partial`" in markdown
     assert "Hybrid retrieval improves recall." in findings_section
     assert "Hybrid retrieval improves recall. [paper-1:Results:4]" not in findings_section
     assert "Hybrid retrieval proves clinical benefit." not in findings_section
+    assert "## Evidence Gaps" in markdown
+    assert (
+        "- `0.40` Hybrid retrieval proves clinical benefit. - "
+        "Nearest citation evidence: 17 with lexical support 0.40. No explicit citation label was attached to this claim."
+    ) in markdown
     assert (
         "| Hybrid retrieval proves clinical benefit. | `unsupported` | `0.40` |  | "
         "Nearest citation evidence: 17 with lexical support 0.40. No explicit citation label was attached to this claim. |"
     ) in markdown
+    assert evidence["evidence_gaps"] == [
+        {
+            "claim_text": "Hybrid retrieval proves clinical benefit.",
+            "status": "unsupported",
+            "support_score": 0.4,
+            "notes": [
+                "Nearest citation evidence: 17 with lexical support 0.40.",
+                "No explicit citation label was attached to this claim.",
+            ],
+        }
+    ]
 
 
 @pytest.mark.asyncio
