@@ -15,6 +15,7 @@ class FetchingConnection:
                 "chunk_id": "chunk-1",
                 "paper_id": "paper-1",
                 "title": "Hybrid Retrieval for Papers",
+                "evidence_type": "web",
                 "section": "Method",
                 "page_start": 3,
                 "page_end": 4,
@@ -42,12 +43,12 @@ async def test_hybrid_search_evidence_returns_citable_paper_chunks():
     assert hits[0].paper_id == "paper-1"
     assert hits[0].section == "Method"
     assert hits[0].quote.startswith("PostgreSQL full-text search")
+    assert hits[0].source_type == "web"
     assert hits[0].citation_label == "[paper-1:Method:3-4]"
 
     sql, args = connection.calls[0]
     normalized_sql = sql.lower()
-    assert "evidence_type = 'paper'" in normalized_sql
-    assert "evidence_type = 'web'" not in normalized_sql
+    assert "evidence_type in ('paper', 'database', 'web')" in normalized_sql
     assert "content_tsv @@ websearch_to_tsquery" in normalized_sql
     assert "embedding <=> $3::vector" in normalized_sql
     assert "research_evidence_records" in normalized_sql

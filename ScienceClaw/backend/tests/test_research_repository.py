@@ -7,6 +7,7 @@ from backend.research_assistant.ingestion import ingest_uploaded_paper
 from backend.research_assistant.storage import repository
 from backend.research_assistant.storage.repository import (
     persist_chunk_embeddings,
+    persist_web_evidence_source,
     persist_ingestion_result,
     persist_report_evidence_map,
 )
@@ -88,6 +89,69 @@ async def test_persist_ingestion_result_writes_paper_chunks_and_evidence(tmp_pat
         if "insert into research_evidence_records" in sql.lower()
     )
     assert "on conflict" in evidence_sql
+
+
+@pytest.mark.asyncio
+async def test_persist_web_evidence_source_writes_source_chunks_and_web_evidence():
+    connection = RecordingConnection()
+
+    summary = await persist_web_evidence_source(
+        connection,
+        session_id="session-1",
+        user_id="user-1",
+        source_id="web-source-1",
+        url="https://example.org/evidence-boundaries",
+        title="Evidence Boundaries on the Web",
+        retrieved_at="2026-06-21T00:00:00Z",
+        chunks=[
+            {
+                "chunk_id": "web-source-1:chunk-1",
+                "section": "Main",
+                "content": "Web evidence must preserve source identity.",
+                "quote": "Web evidence must preserve source identity.",
+            }
+        ],
+    )
+
+    assert summary.paper_id == "web-source-1"
+    assert summary.chunk_count == 1
+    assert summary.evidence_record_count == 1
+    assert any("insert into research_papers" in sql.lower() for sql, _ in connection.executed)
+    paper_sql, paper_args = connection.executed[0]
+    assert "parser" in paper_sql.lower()
+    assert paper_args[0:8] == (
+        "web-source-1",
+        "session-1",
+        "user-1",
+        "Evidence Boundaries on the Web",
+        "[]",
+        "",
+        "https://example.org/evidence-boundaries",
+        "web-source",
+    )
+    assert '"source_type":"web"' in paper_args[8]
+    chunk_sql, chunk_rows = connection.executemany_calls[0]
+    assert "insert into research_chunks" in chunk_sql.lower()
+    assert chunk_rows[0][0:7] == (
+        "web-source-1:chunk-1",
+        "web-source-1",
+        "Main",
+        None,
+        None,
+        1,
+        "Web evidence must preserve source identity.",
+    )
+    assert '"url":"https://example.org/evidence-boundaries"' in chunk_rows[0][7]
+    evidence_sql, evidence_rows = connection.executemany_calls[1]
+    assert "insert into research_evidence_records" in evidence_sql.lower()
+    assert "'web'" in evidence_sql.lower()
+    assert evidence_rows[0][0:5] == (
+        "web-source-1:chunk-1",
+        "Web evidence must preserve source identity.",
+        "Main",
+        None,
+        None,
+    )
 
 
 @pytest.mark.asyncio

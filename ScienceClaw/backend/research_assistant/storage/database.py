@@ -16,6 +16,7 @@ from backend.research_assistant.storage.repository import (
     list_memory_entries,
     persist_chunk_embeddings,
     persist_audit_result,
+    persist_web_evidence_source,
     persist_ingestion_result,
     persist_memory_entry,
     persist_report_evidence_map,
@@ -93,6 +94,35 @@ async def persist_chunk_embeddings_to_database(
             connection,
             embeddings=embeddings,
             embedding_model=embedding_model,
+        )
+    finally:
+        await connection.close()
+
+
+async def persist_web_evidence_source_to_database(
+    database_url: str,
+    *,
+    session_id: str,
+    user_id: str,
+    source_id: str,
+    url: str,
+    title: str,
+    retrieved_at: str,
+    chunks: list[dict],
+) -> PersistSummary:
+    import asyncpg
+
+    connection = await asyncpg.connect(database_url)
+    try:
+        return await persist_web_evidence_source(
+            connection,
+            session_id=session_id,
+            user_id=user_id,
+            source_id=source_id,
+            url=url,
+            title=title,
+            retrieved_at=retrieved_at,
+            chunks=chunks,
         )
     finally:
         await connection.close()

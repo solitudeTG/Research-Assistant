@@ -9,8 +9,17 @@ from backend.research_assistant.storage.database import (
     get_research_session_status_from_database,
     hybrid_search_evidence_in_database,
     persist_chunk_embeddings_to_database,
+    persist_web_evidence_source_to_database,
     persist_report_evidence_map_to_database,
 )
+
+
+class FakeTransaction:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
 
 
 class FakeConnection:
@@ -30,6 +39,7 @@ class FakeConnection:
                 "chunk_id": "chunk-3",
                 "paper_id": "paper-3",
                 "title": "Paper",
+                "evidence_type": "paper",
                 "section": "Results",
                 "page_start": None,
                 "page_end": None,
@@ -37,6 +47,9 @@ class FakeConnection:
                 "rank_score": 0.5,
             }
         ]
+
+    def transaction(self):
+        return FakeTransaction()
 
     async def fetchrow(self, sql, *args):
         return self.fetchrow_result
@@ -91,6 +104,40 @@ async def test_persist_chunk_embeddings_to_database_closes_asyncpg_connection(mo
     )
 
     assert "insert into research_embeddings" in fake_connection.executemany_calls[0][0].lower()
+    assert fake_connection.closed is True
+
+
+@pytest.mark.asyncio
+async def test_persist_web_evidence_source_to_database_closes_asyncpg_connection(monkeypatch):
+    fake_connection = FakeConnection()
+
+    async def connect(database_url):
+        assert database_url == "postgresql://test"
+        return fake_connection
+
+    monkeypatch.setitem(sys.modules, "asyncpg", types.SimpleNamespace(connect=connect))
+
+    summary = await persist_web_evidence_source_to_database(
+        "postgresql://test",
+        session_id="session-1",
+        user_id="user-1",
+        source_id="web-source-1",
+        url="https://example.org/evidence-boundaries",
+        title="Evidence Boundaries",
+        retrieved_at="2026-06-21T00:00:00Z",
+        chunks=[
+            {
+                "chunk_id": "web-source-1:chunk-1",
+                "section": "Main",
+                "content": "Web citation evidence has source identity.",
+                "quote": "Web citation evidence has source identity.",
+            }
+        ],
+    )
+
+    assert summary.paper_id == "web-source-1"
+    assert "insert into research_papers" in fake_connection.executed[0][0].lower()
+    assert "research_evidence_records" in fake_connection.executemany_calls[1][0].lower()
     assert fake_connection.closed is True
 
 

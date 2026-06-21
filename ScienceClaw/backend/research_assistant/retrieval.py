@@ -15,6 +15,7 @@ class EvidenceHit:
     page_end: int | None
     quote: str
     rank_score: float
+    source_type: str = "paper"
 
     @property
     def citation_label(self) -> str:
@@ -72,6 +73,7 @@ async def hybrid_search_evidence(
         SELECT
             er.evidence_id,
             er.chunk_id,
+            er.evidence_type,
             c.paper_id,
             p.title,
             er.section,
@@ -83,7 +85,7 @@ async def hybrid_search_evidence(
         JOIN research_evidence_records er ON er.chunk_id = fc.chunk_id
         JOIN research_chunks c ON c.chunk_id = er.chunk_id
         JOIN research_papers p ON p.paper_id = c.paper_id
-        WHERE er.evidence_type = 'paper'
+        WHERE er.evidence_type IN ('paper', 'database', 'web')
         ORDER BY fc.rank_score DESC, er.evidence_id ASC
         LIMIT $5
         """,
@@ -102,6 +104,7 @@ def _row_to_hit(row: Any) -> EvidenceHit:
         chunk_id=str(row["chunk_id"]),
         paper_id=str(row["paper_id"]),
         title=str(row["title"]),
+        source_type=str(row["evidence_type"]),
         section=str(row["section"]),
         page_start=row["page_start"],
         page_end=row["page_end"],

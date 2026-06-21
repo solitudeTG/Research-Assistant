@@ -125,6 +125,7 @@ async def answer_research_question(
             page_end=hit.page_end,
             quote=hit.quote,
             citation_label=hit.citation_label,
+            source_type=hit.source_type,
         )
         for hit in hits
     ]
@@ -149,7 +150,7 @@ def _compose_extractive_answer(citations: list[ResearchCitation]) -> str:
             "No citation evidence was found in the uploaded papers for this question. "
             "I cannot answer it as a cited research claim yet."
         )
-    lines = ["Based on uploaded paper evidence:"]
+    lines = ["Based on citation evidence:"]
     for index, citation in enumerate(citations, start=1):
         lines.append(f"{index}. {citation.quote} {citation.citation_label}")
     return "\n".join(lines)

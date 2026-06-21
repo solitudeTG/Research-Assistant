@@ -19,6 +19,7 @@ async def test_answer_research_question_uses_only_citation_evidence(monkeypatch)
                 chunk_id="chunk-1",
                 paper_id="paper-1",
                 title="Hybrid Retrieval for Papers",
+                source_type="paper",
                 section="Method",
                 page_start=2,
                 page_end=3,
@@ -101,6 +102,7 @@ async def test_answer_research_question_returns_context_only_memory_separate_fro
                 chunk_id="chunk-1",
                 paper_id="paper-1",
                 title="Hybrid Retrieval for Papers",
+                source_type="paper",
                 section="Method",
                 page_start=2,
                 page_end=2,
@@ -190,6 +192,52 @@ async def test_answer_research_question_returns_context_only_memory_separate_fro
     assert "matched question terms: hybrid, retrieval" in payload["context_memory"][0]["recall_reason"]
     assert "source answer answer-1" in payload["context_memory"][0]["recall_reason"]
     assert all(citation["source_type"] == "paper" for citation in payload["citations"])
+    assert answer.audit.status == "approved"
+
+
+@pytest.mark.asyncio
+async def test_answer_research_question_preserves_web_citation_source_type(monkeypatch):
+    async def fake_search(*args, **kwargs):
+        return [
+            EvidenceHit(
+                evidence_id=21,
+                chunk_id="web-source-1:chunk-1",
+                paper_id="web-source-1",
+                title="Evidence Boundaries",
+                source_type="web",
+                section="Main",
+                page_start=None,
+                page_end=None,
+                quote="Web citation evidence needs a source URL.",
+                rank_score=0.8,
+            )
+        ]
+
+    async def fake_list_memory(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.hybrid_search_evidence_in_database",
+        fake_search,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_memory_entries_from_database",
+        fake_list_memory,
+    )
+
+    answer = await answer_research_question(
+        database_url="postgresql://test",
+        session_id="session-1",
+        question="What does the web source say about citations?",
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=3,
+    )
+
+    assert answer.content.startswith("Based on citation evidence:")
+    assert "uploaded paper evidence" not in answer.content
+    assert answer.citations[0].source_type == "web"
+    assert answer.to_dict()["citations"][0]["source_type"] == "web"
     assert answer.audit.status == "approved"
 
 
