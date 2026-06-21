@@ -64,6 +64,58 @@ def test_external_tool_proxy_carries_research_tool_pack_metadata(monkeypatch, tm
     assert proxies[0].metadata["tool_pack"]["id"] == "literature"
 
 
+def test_external_tool_runtime_result_carries_contract_metadata(monkeypatch, tmp_path):
+    tools_dir = tmp_path / "Tools"
+    tools_dir.mkdir()
+    (tools_dir / "paper_lookup.py").write_text(
+        '@tool\n'
+        'def paper_lookup(query: str) -> dict:\n'
+        '    """Look up paper metadata."""\n'
+        '    return {"title": query}\n',
+        encoding="utf-8",
+    )
+    (tools_dir / "paper_lookup.meta.json").write_text(
+        """
+{
+  "tool_name": "paper_lookup",
+  "tool_pack": {"id": "literature", "label": "Literature"},
+  "validation": {
+    "result_contract": {
+      "kind": "object",
+      "schema": {
+        "type": "object",
+        "properties": {"title": {"type": "string"}},
+        "required": ["title"]
+      },
+      "example_preview": {"title": "evidence boundaries"},
+      "truncated": false
+    }
+  }
+}
+""".strip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(Tools, "_package_dir", str(tools_dir))
+    monkeypatch.setattr(
+        Tools,
+        "_execute_in_sandbox",
+        lambda command: (
+            "sandbox trace\n"
+            f"{Tools._START_MARKER}\n"
+            '{"title": "evidence boundaries"}\n'
+            f"{Tools._END_MARKER}\n"
+        ),
+    )
+
+    proxy = Tools._scan_and_create_proxies()[0]
+    result = proxy.func(query="evidence boundaries")
+
+    assert result["result"] == {"title": "evidence boundaries"}
+    assert result["result_contract"]["kind"] == "object"
+    assert result["result_contract"]["schema"]["properties"]["title"]["type"] == "string"
+    assert result["tool_pack"]["id"] == "literature"
+
+
 def test_chat_active_tool_packs_accept_only_research_packs(monkeypatch):
     async def unused_async(*args, **kwargs):
         raise AssertionError("unexpected ScienceClaw session dependency call")

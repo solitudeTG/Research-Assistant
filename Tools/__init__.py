@@ -189,6 +189,14 @@ def _create_proxy_tool(meta: Dict[str, Any]) -> StructuredTool:
     docstring: str = meta["docstring"]
     params: list[dict] = meta["params"]
     file_path: str = meta["file_path"]
+    metadata = meta.get("metadata") or {}
+    tool_pack = metadata.get("tool_pack") if isinstance(metadata.get("tool_pack"), dict) else None
+    validation = metadata.get("validation") if isinstance(metadata.get("validation"), dict) else {}
+    result_contract = (
+        validation.get("result_contract")
+        if isinstance(validation.get("result_contract"), dict)
+        else None
+    )
 
     fields: dict = {}
     for p in params:
@@ -237,10 +245,15 @@ def _create_proxy_tool(meta: Dict[str, Any]) -> StructuredTool:
             except json.JSONDecodeError:
                 parsed = {"error": "Invalid JSON in tool result", "raw": json_str[:500]}
 
-            return {
+            envelope = {
                 "_sandbox_exec": {"command": cmd, "output": pre_output},
                 "result": parsed,
             }
+            if result_contract:
+                envelope["result_contract"] = result_contract
+            if tool_pack:
+                envelope["tool_pack"] = tool_pack
+            return envelope
         return _proxy_run
 
     _proxy_run = _make_proxy(func_name, sandbox_tool_path)
