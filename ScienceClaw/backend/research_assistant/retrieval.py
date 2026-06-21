@@ -89,6 +89,18 @@ async def hybrid_search_evidence(
         JOIN research_chunks c ON c.chunk_id = er.chunk_id
         JOIN research_papers p ON p.paper_id = c.paper_id
         WHERE er.evidence_type IN ('paper', 'database', 'web')
+          AND (
+              er.evidence_type = 'paper'
+              OR (
+                  er.evidence_type = 'web'
+                  AND NULLIF(BTRIM(er.source_identity->>'url'), '') IS NOT NULL
+              )
+              OR (
+                  er.evidence_type = 'database'
+                  AND NULLIF(BTRIM(er.source_identity->>'database_name'), '') IS NOT NULL
+                  AND NULLIF(BTRIM(er.source_identity->>'query'), '') IS NOT NULL
+              )
+          )
         ORDER BY fc.rank_score DESC, er.evidence_id ASC
         LIMIT $5
         """,

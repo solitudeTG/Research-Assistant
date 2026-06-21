@@ -49,6 +49,11 @@ async def test_hybrid_search_evidence_returns_citable_paper_chunks():
     sql, args = connection.calls[0]
     normalized_sql = sql.lower()
     assert "evidence_type in ('paper', 'database', 'web')" in normalized_sql
+    assert "er.evidence_type = 'web'" in normalized_sql
+    assert "er.source_identity->>'url'" in normalized_sql
+    assert "er.evidence_type = 'database'" in normalized_sql
+    assert "er.source_identity->>'database_name'" in normalized_sql
+    assert "er.source_identity->>'query'" in normalized_sql
     assert "content_tsv @@ websearch_to_tsquery" in normalized_sql
     assert "embedding <=> $3::vector" in normalized_sql
     assert "research_evidence_records" in normalized_sql
