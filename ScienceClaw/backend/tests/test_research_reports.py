@@ -203,3 +203,45 @@ async def test_generate_markdown_research_report_keeps_unsupported_claims_out_of
         "| Hybrid retrieval proves clinical benefit. | `unsupported` | `0.40` |  | "
         "Nearest citation evidence: 17 with lexical support 0.40. No explicit citation label was attached to this claim. |"
     ) in markdown
+
+
+@pytest.mark.asyncio
+async def test_generate_markdown_research_report_uses_generic_no_citation_evidence_wording(tmp_path, monkeypatch):
+    async def fake_answer(**kwargs):
+        return ResearchAnswer(
+            content=(
+                "No citation evidence was found in the uploaded papers for this question. "
+                "I cannot answer it as a cited research claim yet."
+            ),
+            citations=[],
+        )
+
+    async def fake_persist(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr("backend.research_assistant.reports.answer_research_question", fake_answer)
+    monkeypatch.setattr(
+        "backend.research_assistant.reports.persist_report_evidence_map_to_database",
+        fake_persist,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.reports.persist_audit_result_to_database",
+        fake_persist,
+    )
+
+    report = await generate_markdown_research_report(
+        database_url="postgresql://test",
+        session_id="session-1",
+        question="What does the paper say about retrieval?",
+        workspace_dir=tmp_path,
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=5,
+    )
+
+    markdown = (tmp_path / "research_reports" / f"{report.report_id}.md").read_text(encoding="utf-8")
+    citation_section = markdown.split("## Evidence Audit", maxsplit=1)[0]
+
+    assert "No citation evidence was found for this report." in citation_section
+    assert "No paper citation evidence was found for this report." not in citation_section
+    assert "Citation evidence sources: `paper`, `web`, `database`" in markdown

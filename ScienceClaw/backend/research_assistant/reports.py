@@ -133,7 +133,7 @@ def _compose_markdown_report(
         "",
     ]
     if not answer.citations:
-        lines.append("No paper citation evidence was found for this report.")
+        lines.append("No citation evidence was found for this report.")
     else:
         for index, citation in enumerate(answer.citations, start=1):
             anchor = _citation_anchor(index)
