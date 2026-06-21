@@ -1080,7 +1080,7 @@ def _extract_tool_description(py_file: _Path) -> str:
     return ""
 
 
-def _read_passed_tool_validation(staging_dir: _Path, tool_name: str) -> Dict[str, Any] | None:
+def _read_tool_validation_payload(staging_dir: _Path, tool_name: str) -> Dict[str, Any] | None:
     validation_path = staging_dir / f"{tool_name}.validation.json"
     if not validation_path.is_file():
         return None
@@ -1092,19 +1092,42 @@ def _read_passed_tool_validation(staging_dir: _Path, tool_name: str) -> Dict[str
         return None
     if payload.get("tool_name") != tool_name:
         return None
+    return payload
+
+
+def _normalize_passed_tool_validation(payload: Dict[str, Any]) -> Dict[str, Any] | None:
     if payload.get("status") != "passed":
+        return None
+    return_schema = payload.get("return_schema")
+    if return_schema is None:
+        return_schema = payload.get("result_schema")
+    if not isinstance(return_schema, dict) or not return_schema:
         return None
     checks = payload.get("checks")
     return {
         "status": "passed",
         "checks": checks if isinstance(checks, list) else [],
         "validated_at": str(payload.get("validated_at") or ""),
+        "return_schema": return_schema,
     }
 
 
+def _read_passed_tool_validation(staging_dir: _Path, tool_name: str) -> Dict[str, Any] | None:
+    payload = _read_tool_validation_payload(staging_dir, tool_name)
+    if payload is None:
+        return None
+    return _normalize_passed_tool_validation(payload)
+
+
 def _require_passed_tool_validation(staging_dir: _Path, tool_name: str) -> Dict[str, Any]:
-    validation = _read_passed_tool_validation(staging_dir, tool_name)
+    payload = _read_tool_validation_payload(staging_dir, tool_name)
+    validation = _normalize_passed_tool_validation(payload) if payload is not None else None
     if validation is None:
+        if payload is not None and payload.get("status") == "passed":
+            raise HTTPException(
+                status_code=400,
+                detail="Tool validation must include a non-empty return schema before it can be saved",
+            )
         raise HTTPException(
             status_code=400,
             detail="Tool must pass sandbox validation before it can be saved",

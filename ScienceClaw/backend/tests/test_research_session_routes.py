@@ -921,6 +921,14 @@ async def test_save_tool_from_session_persists_only_validated_tool(monkeypatch, 
                 "status": "passed",
                 "checks": ["sandbox_import", "example_call"],
                 "validated_at": "2026-06-21T00:00:00Z",
+                "return_schema": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "doi": {"type": "string"},
+                    },
+                    "required": ["title"],
+                },
             }
         ),
         encoding="utf-8",
@@ -948,7 +956,63 @@ async def test_save_tool_from_session_persists_only_validated_tool(monkeypatch, 
         "status": "passed",
         "checks": ["sandbox_import", "example_call"],
         "validated_at": "2026-06-21T00:00:00Z",
+        "return_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "doi": {"type": "string"},
+            },
+            "required": ["title"],
+        },
     }
+
+
+@pytest.mark.asyncio
+async def test_save_tool_from_session_requires_return_schema_validation(monkeypatch, tmp_path):
+    sessions = _load_sessions_module(monkeypatch)
+    workspace = tmp_path / "workspace"
+    tools_dir = tmp_path / "Tools"
+    staging = workspace / "session-1" / "tools_staging"
+    staging.mkdir(parents=True)
+    tools_dir.mkdir()
+    (staging / "paper_lookup.py").write_text(
+        '@tool\n'
+        'def paper_lookup(query: str) -> str:\n'
+        '    """Look up paper metadata."""\n'
+        '    return query\n',
+        encoding="utf-8",
+    )
+    (staging / "paper_lookup.validation.json").write_text(
+        json.dumps(
+            {
+                "tool_name": "paper_lookup",
+                "status": "passed",
+                "checks": ["sandbox_import", "example_call"],
+                "validated_at": "2026-06-21T00:00:00Z",
+            }
+        ),
+        encoding="utf-8",
+    )
+    session = FakeSession(vm_root_dir=workspace / "session-1")
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    monkeypatch.setattr(sessions, "_WORKSPACE_DIR", str(workspace))
+    monkeypatch.setattr(sessions, "_TOOLS_DIR", str(tools_dir))
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+
+    with pytest.raises(sessions.HTTPException) as excinfo:
+        await sessions.save_tool_from_session(
+            "session-1",
+            sessions.SaveToolRequest(tool_name="paper_lookup"),
+            types.SimpleNamespace(id="user-1"),
+        )
+
+    assert excinfo.value.status_code == 400
+    assert "return schema" in excinfo.value.detail
+    assert not (tools_dir / "paper_lookup.py").exists()
 
 
 @pytest.mark.asyncio

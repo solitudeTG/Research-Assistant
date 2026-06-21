@@ -364,7 +364,7 @@ export async function saveToolFromSession(
   tool_name: string,
   saved: boolean,
   replaced?: string,
-  validation: { status: string, checks: string[], validated_at: string }
+  validation: { status: string, checks: string[], validated_at: string, return_schema: Record<string, unknown> }
 }> {
   const payload: Record<string, string> = { tool_name: toolName };
   if (replaces && replaces !== toolName) {
@@ -374,7 +374,7 @@ export async function saveToolFromSession(
     tool_name: string,
     saved: boolean,
     replaced?: string,
-    validation: { status: string, checks: string[], validated_at: string }
+    validation: { status: string, checks: string[], validated_at: string, return_schema: Record<string, unknown> }
   }>>(`/sessions/${sessionId}/tools/save`, payload);
   return response.data.data;
 }
