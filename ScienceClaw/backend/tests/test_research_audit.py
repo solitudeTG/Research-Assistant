@@ -138,6 +138,47 @@ def test_audit_evidence_claims_accepts_web_and_database_citation_evidence():
     assert [claim.evidence_ids for claim in audit.claims] == [[101], [102]]
 
 
+def test_audit_evidence_claims_approves_claim_supported_by_multiple_citations():
+    audit = audit_evidence_claims(
+        answer_content=(
+            "Based on citation evidence:\n"
+            "1. Hybrid retrieval combines lexical matching and vector similarity. "
+            "[paper-1:Methods:2] [db-1]"
+        ),
+        citations=[
+            ResearchCitation(
+                evidence_id=17,
+                chunk_id="chunk-17",
+                paper_id="paper-1",
+                title="Hybrid Retrieval",
+                section="Methods",
+                page_start=2,
+                page_end=2,
+                quote="Hybrid retrieval combines lexical matching.",
+                citation_label="[paper-1:Methods:2]",
+            ),
+            ResearchCitation(
+                evidence_id=101,
+                chunk_id="db-row-1",
+                paper_id="database-source",
+                title="Benchmark Registry",
+                section="Rows",
+                page_start=None,
+                page_end=None,
+                quote="Hybrid retrieval uses vector similarity.",
+                citation_label="[db-1]",
+                source_type="database",
+            ),
+        ],
+    )
+
+    assert audit.status == "approved"
+    assert audit.claims[0].status == "approved"
+    assert audit.claims[0].evidence_ids == [17, 101]
+    assert audit.claims[0].support_score == 1.0
+    assert "Multiple cited evidence records jointly support this claim." in audit.claims[0].notes
+
+
 def test_audit_evidence_claims_rejects_claim_without_explicit_citation_label():
     audit = audit_evidence_claims(
         answer_content=(

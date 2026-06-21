@@ -146,6 +146,16 @@ def _audit_claim(claim_text: str, citations: list[CitationLike]) -> EvidenceAudi
             support_score=1.0,
         )
 
+    joint_matching = _jointly_supporting_citation_ids(claim_body, citation_candidates)
+    if joint_matching:
+        return EvidenceAuditClaim(
+            claim_text=claim_text,
+            status="approved",
+            evidence_ids=joint_matching,
+            notes=["Multiple cited evidence records jointly support this claim."],
+            support_score=1.0,
+        )
+
     nearest_evidence_id, nearest_score = _nearest_citation_support(claim_body, citations)
     notes = []
     if nearest_evidence_id is not None and nearest_score > 0:
@@ -211,6 +221,29 @@ def _citation_directly_supports_claim(claim_body: str, quote: str) -> bool:
     claim_terms = _audit_terms(claim_body)
     quote_terms = _audit_terms(quote)
     return bool(claim_terms) and claim_terms <= quote_terms
+
+
+def _jointly_supporting_citation_ids(claim_body: str, citations: list[CitationLike]) -> list[int]:
+    claim_terms = _audit_terms(claim_body)
+    if not claim_terms or len(citations) < 2:
+        return []
+
+    contributing: list[tuple[int, set[str]]] = []
+    for citation in citations:
+        supported_terms = claim_terms & _audit_terms(citation.quote)
+        if supported_terms:
+            contributing.append((citation.evidence_id, supported_terms))
+
+    if len(contributing) < 2:
+        return []
+
+    jointly_supported_terms: set[str] = set()
+    for _, supported_terms in contributing:
+        jointly_supported_terms |= supported_terms
+
+    if claim_terms <= jointly_supported_terms:
+        return [evidence_id for evidence_id, _ in contributing]
+    return []
 
 
 def _nearest_citation_support(claim_text: str, citations: list[CitationLike]) -> tuple[int | None, float]:
