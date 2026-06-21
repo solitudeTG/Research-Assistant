@@ -115,7 +115,7 @@ def _compose_markdown_report(
         "",
         f"- Report ID: `{report_id}`",
         f"- Generated at: `{generated_at}`",
-        "- Evidence scope: uploaded papers only",
+        f"- Evidence scope: {_evidence_scope_label(answer)}",
         "",
         "## Trust Summary",
         "",
@@ -174,7 +174,7 @@ def _compose_markdown_report(
             "",
             (
                 "This Markdown artifact can cite paper, web, or database evidence when present. "
-                "This generated report currently used uploaded-paper retrieval. "
+                f"{_evidence_scope_sentence(answer)} "
                 "Memory, model reasoning, process trace, and tool logs remain context-only and are not cited as evidence."
             ),
             "",
@@ -213,7 +213,8 @@ def _build_evidence_map(*, report_id: str, answer: ResearchAnswer) -> dict:
     citations_by_id = {citation.evidence_id: citation for citation in answer.citations}
     return {
         "report_id": report_id,
-        "evidence_scope": "uploaded_papers_only",
+        "evidence_scope": _evidence_scope_slug(answer),
+        "citation_source_types": _citation_source_types(answer),
         "trust_summary": _build_trust_summary(answer),
         "citation_count": answer.citation_count,
         "context_memory_count": answer.context_memory_count,
@@ -230,6 +231,45 @@ def _report_title(question: str) -> str:
     if len(title) > 80:
         title = title[:77].rstrip() + "..."
     return title
+
+
+def _citation_source_types(answer: ResearchAnswer) -> list[str]:
+    return sorted({citation.source_type for citation in answer.citations if citation.source_type})
+
+
+def _evidence_scope_label(answer: ResearchAnswer) -> str:
+    source_types = _citation_source_types(answer)
+    if source_types == ["paper"]:
+        return "uploaded papers only"
+    if not source_types:
+        return "no citation evidence"
+    return f"{_human_join(source_types)} citation evidence"
+
+
+def _evidence_scope_slug(answer: ResearchAnswer) -> str:
+    source_types = _citation_source_types(answer)
+    if source_types == ["paper"]:
+        return "uploaded_papers_only"
+    if not source_types:
+        return "no_citation_evidence"
+    return f"{'_and_'.join(source_types)}_citation_evidence"
+
+
+def _evidence_scope_sentence(answer: ResearchAnswer) -> str:
+    source_types = _citation_source_types(answer)
+    if source_types == ["paper"]:
+        return "This generated report currently used uploaded-paper retrieval."
+    if not source_types:
+        return "This generated report did not attach citation evidence."
+    return f"This generated report used {_human_join(source_types)} citation evidence."
+
+
+def _human_join(values: list[str]) -> str:
+    if len(values) == 1:
+        return values[0]
+    if len(values) == 2:
+        return f"{values[0]} and {values[1]}"
+    return f"{', '.join(values[:-1])}, and {values[-1]}"
 
 
 def _citation_anchor(index: int) -> str:

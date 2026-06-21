@@ -245,3 +245,75 @@ async def test_generate_markdown_research_report_uses_generic_no_citation_eviden
     assert "No citation evidence was found for this report." in citation_section
     assert "No paper citation evidence was found for this report." not in citation_section
     assert "Citation evidence sources: `paper`, `web`, `database`" in markdown
+
+
+@pytest.mark.asyncio
+async def test_generate_markdown_research_report_describes_actual_source_scope(tmp_path, monkeypatch):
+    async def fake_answer(**kwargs):
+        return ResearchAnswer(
+            content=(
+                "Based on citation evidence:\n"
+                "1. OpenAlex records track citation counts. [db-1]\n"
+                "2. The project page documents the benchmark release. [web-1]"
+            ),
+            citations=[
+                ResearchCitation(
+                    evidence_id=21,
+                    chunk_id="db-chunk-1",
+                    paper_id="database:openalex",
+                    title="OpenAlex Work",
+                    section="works",
+                    page_start=None,
+                    page_end=None,
+                    quote="OpenAlex records track citation counts.",
+                    citation_label="[db-1]",
+                    source_type="database",
+                ),
+                ResearchCitation(
+                    evidence_id=22,
+                    chunk_id="web-chunk-1",
+                    paper_id="web:https://example.org/benchmark",
+                    title="Benchmark Project Page",
+                    section="Release notes",
+                    page_start=None,
+                    page_end=None,
+                    quote="The project page documents the benchmark release.",
+                    citation_label="[web-1]",
+                    source_type="web",
+                ),
+            ],
+        )
+
+    async def fake_persist(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr("backend.research_assistant.reports.answer_research_question", fake_answer)
+    monkeypatch.setattr(
+        "backend.research_assistant.reports.persist_report_evidence_map_to_database",
+        fake_persist,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.reports.persist_audit_result_to_database",
+        fake_persist,
+    )
+
+    report = await generate_markdown_research_report(
+        database_url="postgresql://test",
+        session_id="session-1",
+        question="What do the external sources say?",
+        workspace_dir=tmp_path,
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=5,
+    )
+
+    markdown = (tmp_path / "research_reports" / f"{report.report_id}.md").read_text(encoding="utf-8")
+    evidence = json.loads(
+        (tmp_path / "research_reports" / f"{report.report_id}.evidence.json").read_text(encoding="utf-8")
+    )
+
+    assert "- Evidence scope: database and web citation evidence" in markdown
+    assert "This generated report used database and web citation evidence." in markdown
+    assert "uploaded-paper retrieval" not in markdown
+    assert evidence["evidence_scope"] == "database_and_web_citation_evidence"
+    assert evidence["citation_source_types"] == ["database", "web"]
