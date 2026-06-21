@@ -165,6 +165,7 @@ def _compose_markdown_report(
             "| --- | --- | --- | --- | --- |",
             *_compose_claim_check_rows(answer),
             "",
+            *_compose_context_memory_lines(answer),
             "## Evidence Boundary",
             "",
             (
@@ -184,6 +185,8 @@ def _build_evidence_map(*, report_id: str, answer: ResearchAnswer) -> dict:
         "report_id": report_id,
         "evidence_scope": "uploaded_papers_only",
         "citation_count": answer.citation_count,
+        "context_memory_count": answer.context_memory_count,
+        "context_memory": answer.context_memory,
         "audit": answer.audit.to_dict(),
         "evidence": _build_approved_claim_evidence_rows(answer, citations_by_id),
     }
@@ -274,6 +277,43 @@ def _compose_claim_check_rows(answer: ResearchAnswer) -> list[str]:
     if not rows:
         return ["| No auditable claims. | `unsupported` | `0.00` |  | No answer content was available. |"]
     return rows
+
+
+def _compose_context_memory_lines(answer: ResearchAnswer) -> list[str]:
+    if not answer.context_memory:
+        return []
+
+    return [
+        "## Context-Only Memory",
+        "",
+        "These memory entries are context only and are not citation evidence.",
+        "",
+        "| Memory | Layer | Score | Reason |",
+        "| --- | --- | --- | --- |",
+        *[_compose_context_memory_row(memory) for memory in answer.context_memory],
+        "",
+    ]
+
+
+def _compose_context_memory_row(memory: dict) -> str:
+    return (
+        "| "
+        + " | ".join(
+            [
+                _table_cell(str(memory.get("title") or memory.get("memory_id") or "Untitled memory")),
+                f"`{memory.get('layer') or 'memory'}`",
+                _format_optional_score(memory.get("relevance_score")),
+                _table_cell(str(memory.get("recall_reason") or "")),
+            ]
+        )
+        + " |"
+    )
+
+
+def _format_optional_score(value: object) -> str:
+    if isinstance(value, int | float):
+        return f"`{value:.2f}`"
+    return ""
 
 
 def _format_evidence_ids(evidence_ids: list[int]) -> str:

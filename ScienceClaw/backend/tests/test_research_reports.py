@@ -27,6 +27,20 @@ async def test_generate_markdown_research_report_writes_artifact_and_evidence_ma
                     citation_label="[paper-1:Results:4]",
                 )
             ],
+            context_memory=[
+                {
+                    "memory_id": "mem-1",
+                    "layer": "l2",
+                    "title": "Retrieval preference",
+                    "content": "Prefer hybrid retrieval for scholarly terminology.",
+                    "source_type": "memory",
+                    "context_only": True,
+                    "relevance_score": 0.67,
+                    "recall_reason": "matched question terms: hybrid, retrieval; source answer answer-1.",
+                    "source_subject_type": "answer",
+                    "source_subject_id": "answer-1",
+                }
+            ],
         )
 
     persisted = {}
@@ -83,12 +97,20 @@ async def test_generate_markdown_research_report_writes_artifact_and_evidence_ma
     assert "Citation evidence sources: `paper`, `web`, `database`" in markdown
     assert "Context-only sources: `memory`, `model_reasoning`, `process_trace`, `tool_logs`" in markdown
     assert "Hybrid retrieval improves recall. [paper-1:Results:4]" in markdown
+    assert "## Context-Only Memory" in markdown
+    assert "| Memory | Layer | Score | Reason |" in markdown
+    assert "| Retrieval preference | `l2` | `0.67` | matched question terms: hybrid, retrieval; source answer answer-1. |" in markdown
+    assert "These memory entries are context only and are not citation evidence." in markdown
     assert "This Markdown artifact can cite paper, web, or database evidence when present." in markdown
     assert "This generated report currently used uploaded-paper retrieval." in markdown
     assert "only uploaded paper chunks as citation evidence" not in markdown
     assert "Memory, model reasoning, process trace, and tool logs remain context-only" in markdown
     assert evidence["audit"]["status"] == "approved"
     assert evidence["audit"]["boundaries"]["citation_evidence"] == ["paper", "web", "database"]
+    assert evidence["context_memory_count"] == 1
+    assert evidence["context_memory"][0]["memory_id"] == "mem-1"
+    assert evidence["context_memory"][0]["source_type"] == "memory"
+    assert evidence["context_memory"][0]["context_only"] is True
     assert evidence["audit"]["claims"][0]["support_score"] == 1.0
     assert evidence["evidence"][0]["evidence_id"] == 17
     assert evidence["evidence"][0]["claim_text"] == "Hybrid retrieval improves recall. [paper-1:Results:4]"
