@@ -159,6 +159,29 @@
 
     <!-- External Tools Tab -->
     <div v-else-if="activeTab === 'external'" class="flex-1 overflow-y-auto p-5 bg-[#f8f9fb] dark:bg-[#111]">
+      <div v-if="externalToolPacks.length > 0" class="max-w-[1800px] mx-auto mb-4 flex flex-wrap items-center gap-2">
+        <span class="text-[11px] font-medium text-[var(--text-tertiary)] mr-1">Research workflow</span>
+        <button
+          @click="selectedToolPack = ''"
+          class="px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-colors"
+          :class="!selectedToolPack
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300'
+            : 'border-[var(--border-light)] bg-white dark:bg-[#1e1e1e] text-[var(--text-secondary)] hover:bg-gray-50 dark:hover:bg-white/5'"
+        >
+          All packs
+        </button>
+        <button
+          v-for="pack in externalToolPacks"
+          :key="pack.id"
+          @click="selectedToolPack = pack.id"
+          class="px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-colors"
+          :class="selectedToolPack === pack.id
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-900/20 dark:text-emerald-300'
+            : 'border-[var(--border-light)] bg-white dark:bg-[#1e1e1e] text-[var(--text-secondary)] hover:bg-gray-50 dark:hover:bg-white/5'"
+        >
+          {{ pack.label }}
+        </button>
+      </div>
       <div v-if="externalTools.length === 0 && !extLoading" class="flex flex-col items-center justify-center h-full text-[var(--text-tertiary)] gap-3">
         <div class="size-16 rounded-2xl bg-gray-100 dark:bg-gray-800 flex items-center justify-center">
           <Box :size="28" class="text-gray-300 dark:text-gray-600" />
@@ -197,8 +220,13 @@
             </div>
             <p class="text-xs text-[var(--text-secondary)] leading-relaxed line-clamp-2 min-h-[2.5rem]">{{ tool.description || 'No description' }}</p>
             <div class="mt-3 flex items-center justify-between">
-              <span v-if="tool.blocked" class="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 font-medium">Blocked</span>
-              <span v-else class="text-[10px] text-[var(--text-tertiary)]">Custom tool</span>
+              <div class="min-w-0 flex items-center gap-1.5">
+                <span v-if="tool.blocked" class="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 font-medium">Blocked</span>
+                <span v-else class="text-[10px] text-[var(--text-tertiary)]">Custom tool</span>
+                <span v-if="tool.tool_pack?.label" class="truncate max-w-[9rem] text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 font-medium">
+                  {{ tool.tool_pack?.label }}
+                </span>
+              </div>
               <div class="text-[10px] text-emerald-500 opacity-0 group-hover:opacity-100 transition-all duration-300 translate-x-1 group-hover:translate-x-0 flex items-center gap-0.5">
                 Open <svg class="size-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
               </div>
@@ -252,6 +280,7 @@ const tabs = computed(() => [
 const activeTab = ref('science');
 const searchQuery = ref('');
 const selectedCategory = ref('');
+const selectedToolPack = ref('');
 const displayLimit = ref(100);
 
 const scienceTools = ref<TUTool[]>([]);
@@ -292,9 +321,26 @@ const filteredScienceTools = computed(() => {
 
 const displayedScienceTools = computed(() => filteredScienceTools.value.slice(0, displayLimit.value));
 
+const externalToolPacks = computed(() => {
+  const packs = new Map<string, { id: string; label: string; research_workflow: string }>();
+  for (const tool of externalTools.value) {
+    if (tool.tool_pack?.id && tool.tool_pack?.label) {
+      packs.set(tool.tool_pack.id, tool.tool_pack);
+    }
+  }
+  return Array.from(packs.values()).sort((a, b) => a.label.localeCompare(b.label));
+});
+
 const filteredExtTools = computed(() => {
-  if (!searchQuery.value) return externalTools.value;
-  return externalTools.value.filter(t => t.name.toLowerCase().includes(searchQuery.value.toLowerCase()));
+  let list = externalTools.value;
+  if (selectedToolPack.value) list = list.filter(tool => tool.tool_pack?.id === selectedToolPack.value);
+  if (!searchQuery.value) return list;
+  const q = searchQuery.value.toLowerCase();
+  return list.filter(t => (
+    t.name.toLowerCase().includes(q)
+    || (t.description || '').toLowerCase().includes(q)
+    || (t.tool_pack?.label || '').toLowerCase().includes(q)
+  ));
 });
 
 let searchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -330,6 +376,7 @@ onMounted(async () => {
 });
 
 watch(selectedCategory, () => { displayLimit.value = 100; });
+watch(selectedToolPack, () => { displayLimit.value = 100; });
 watch(locale, () => { loadScienceTools(); });
 
 const handleToggleBlock = async (tool: ExternalToolItem) => {

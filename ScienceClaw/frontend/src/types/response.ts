@@ -91,5 +91,5 @@ export interface ExternalToolItem {
     description: string;
     file: string;
     blocked: boolean;
+    tool_pack?: { id: string; label: string; research_workflow: string };
 }
-  

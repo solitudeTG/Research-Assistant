@@ -82,3 +82,15 @@ def test_agent_api_sends_research_tool_pack_for_tool_save():
     assert "toolPack: string = 'literature'" in agent_api
     assert "tool_pack: toolPack" in agent_api
     assert "tool_pack: { id: string, label: string, research_workflow: string }" in agent_api
+
+
+def test_tools_page_surfaces_external_tool_packs():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    tools_page = (frontend_root / "pages" / "ToolsPage.vue").read_text(encoding="utf-8")
+    response_types = (frontend_root / "types" / "response.ts").read_text(encoding="utf-8")
+
+    assert "tool_pack?: { id: string; label: string; research_workflow: string }" in response_types
+    assert "selectedToolPack" in tools_page
+    assert "tool.tool_pack?.label" in tools_page
+    assert "tool.tool_pack?.id === selectedToolPack" in tools_page
+    assert "Research workflow" in tools_page
