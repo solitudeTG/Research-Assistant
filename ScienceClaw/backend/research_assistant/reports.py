@@ -36,6 +36,7 @@ async def generate_markdown_research_report(
     *,
     database_url: str,
     session_id: str,
+    user_id: str | None = None,
     question: str,
     workspace_dir: Path,
     embedding_dimensions: int,
@@ -45,6 +46,7 @@ async def generate_markdown_research_report(
     answer = await answer_research_question(
         database_url=database_url,
         session_id=session_id,
+        user_id=user_id,
         question=question,
         embedding_dimensions=embedding_dimensions,
         embedding_model=embedding_model,

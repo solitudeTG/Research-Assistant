@@ -203,6 +203,45 @@ async def test_generate_markdown_research_report_surfaces_context_memory_conflic
 
 
 @pytest.mark.asyncio
+async def test_generate_markdown_research_report_passes_user_id_to_answer_memory_recall(tmp_path, monkeypatch):
+    answer_kwargs = {}
+
+    async def fake_answer(**kwargs):
+        answer_kwargs.update(kwargs)
+        return ResearchAnswer(
+            content="No citation evidence was found for this question.",
+            citations=[],
+        )
+
+    async def fake_persist(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr("backend.research_assistant.reports.answer_research_question", fake_answer)
+    monkeypatch.setattr(
+        "backend.research_assistant.reports.persist_report_evidence_map_to_database",
+        fake_persist,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.reports.persist_audit_result_to_database",
+        fake_persist,
+    )
+
+    await generate_markdown_research_report(
+        database_url="postgresql://test",
+        session_id="session-1",
+        user_id="user-1",
+        question="What should I remember for reports?",
+        workspace_dir=tmp_path,
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=5,
+    )
+
+    assert answer_kwargs["session_id"] == "session-1"
+    assert answer_kwargs["user_id"] == "user-1"
+
+
+@pytest.mark.asyncio
 async def test_generate_markdown_research_report_keeps_unsupported_claims_out_of_findings(tmp_path, monkeypatch):
     async def fake_answer(**kwargs):
         return ResearchAnswer(

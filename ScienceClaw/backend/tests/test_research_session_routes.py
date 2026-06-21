@@ -600,6 +600,55 @@ async def test_research_answer_passes_user_id_for_cross_session_memory_recall(mo
 
 
 @pytest.mark.asyncio
+async def test_research_report_passes_user_id_for_cross_session_memory_recall(monkeypatch, tmp_path):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession(vm_root_dir=tmp_path)
+    report_kwargs = {}
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    async def fake_report(**kwargs):
+        report_kwargs.update(kwargs)
+        report_dir = tmp_path / "research_reports"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        markdown_path = report_dir / "report.md"
+        evidence_path = report_dir / "report.evidence.json"
+        markdown_path.write_text("# Report\n", encoding="utf-8")
+        evidence_path.write_text("{}", encoding="utf-8")
+        return types.SimpleNamespace(
+            report_id="report-1",
+            title="Report",
+            question=kwargs["question"],
+            markdown_path=str(markdown_path),
+            evidence_map_path=str(evidence_path),
+            citation_count=0,
+            to_dict=lambda: {
+                "report_id": "report-1",
+                "title": "Report",
+                "question": kwargs["question"],
+                "markdown_path": str(markdown_path),
+                "evidence_map_path": str(evidence_path),
+                "citation_count": 0,
+            },
+        )
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "generate_markdown_research_report", fake_report)
+    monkeypatch.setattr(sessions, "_publish_session_event", lambda *args, **kwargs: None)
+
+    await sessions.generate_research_report_for_session(
+        "session-1",
+        sessions.ResearchReportRequest(question="What should the report remember?"),
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    assert report_kwargs["session_id"] == "session-1"
+    assert report_kwargs["user_id"] == "user-1"
+
+
+@pytest.mark.asyncio
 async def test_get_research_audit_result_for_session_returns_persisted_audit(monkeypatch):
     sessions = _load_sessions_module(monkeypatch)
     session = FakeSession()

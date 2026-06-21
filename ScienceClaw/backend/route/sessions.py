@@ -2469,6 +2469,7 @@ async def generate_research_report_for_session(
             report = await generate_markdown_research_report(
                 database_url=settings.research_database_url,
                 session_id=session_id,
+                user_id=current_user.id,
                 question=body.question,
                 workspace_dir=session.vm_root_dir,
                 embedding_dimensions=settings.research_embedding_dimensions,
