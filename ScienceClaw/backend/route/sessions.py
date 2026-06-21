@@ -1269,6 +1269,29 @@ async def validate_tool_from_session(
 
         staging_dir = _Path(_WORKSPACE_DIR) / session_id / "tools_staging"
         payload = validate_staged_tool(staging_dir, tool_name, example_args=body.example_args)
+        validation_status = str(payload.get("status", "failed"))
+        trace_status = "completed" if validation_status == "passed" else "failed"
+        metadata: Dict[str, Any] = {
+            "tool_name": tool_name,
+            "validation_status": validation_status,
+            "checks": payload.get("checks", []),
+        }
+        if payload.get("return_schema"):
+            metadata["return_schema"] = payload["return_schema"]
+        if payload.get("error"):
+            metadata["error"] = payload["error"]
+
+        await _append_save_publish_session_event(
+            session,
+            session_id=session_id,
+            user_id=current_user.id,
+            event=_research_upload_step_event(
+                step_id=f"tool-validation-{tool_name}",
+                status=trace_status,
+                description=f"Custom tool validation {validation_status}: {tool_name}",
+                metadata=metadata,
+            ),
+        )
         return ApiResponse(data=payload)
     except ScienceSessionNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

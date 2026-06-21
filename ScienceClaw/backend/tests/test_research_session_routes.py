@@ -1061,6 +1061,102 @@ async def test_validate_tool_from_session_generates_validation_sidecar(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_validate_tool_from_session_persists_completed_trace_step(monkeypatch, tmp_path):
+    sessions = _load_sessions_module(monkeypatch)
+    workspace = tmp_path / "workspace"
+    staging = workspace / "session-1" / "tools_staging"
+    staging.mkdir(parents=True)
+    (staging / "paper_lookup.py").write_text(
+        '@tool\n'
+        'def paper_lookup(query: str) -> dict:\n'
+        '    """Look up paper metadata."""\n'
+        '    return {"title": query}\n',
+        encoding="utf-8",
+    )
+    session = FakeSession(vm_root_dir=workspace / "session-1")
+    published = []
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    monkeypatch.setattr(sessions, "_WORKSPACE_DIR", str(workspace))
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "_publish_session_event", lambda *args: published.append(args))
+
+    response = await sessions.validate_tool_from_session(
+        "session-1",
+        sessions.ValidateToolRequest(
+            tool_name="paper_lookup",
+            example_args={"query": "evidence boundaries"},
+        ),
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    assert response.data["status"] == "passed"
+    assert session.save_count == 1
+    assert len(session.events) == 1
+    step = session.events[0]["data"]
+    assert step["status"] == "completed"
+    assert step["description"] == "Custom tool validation passed: paper_lookup"
+    assert step["metadata"] == {
+        "tool_name": "paper_lookup",
+        "validation_status": "passed",
+        "checks": ["python_syntax", "tool_function", "example_call", "return_schema"],
+        "return_schema": {
+            "type": "object",
+            "properties": {"title": {"type": "string"}},
+            "required": ["title"],
+        },
+    }
+    assert published[0][0] == "session-1"
+    assert published[0][1] == "user-1"
+    assert published[0][2] == session.events[0]
+
+
+@pytest.mark.asyncio
+async def test_validate_tool_from_session_persists_failed_trace_step(monkeypatch, tmp_path):
+    sessions = _load_sessions_module(monkeypatch)
+    workspace = tmp_path / "workspace"
+    staging = workspace / "session-1" / "tools_staging"
+    staging.mkdir(parents=True)
+    (staging / "paper_lookup.py").write_text(
+        'def paper_lookup(query: str) -> dict:\n'
+        '    return {"title": query}\n',
+        encoding="utf-8",
+    )
+    session = FakeSession(vm_root_dir=workspace / "session-1")
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    monkeypatch.setattr(sessions, "_WORKSPACE_DIR", str(workspace))
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "_publish_session_event", lambda *args: None)
+
+    response = await sessions.validate_tool_from_session(
+        "session-1",
+        sessions.ValidateToolRequest(
+            tool_name="paper_lookup",
+            example_args={"query": "evidence boundaries"},
+        ),
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    assert response.data["status"] == "failed"
+    assert session.save_count == 1
+    assert len(session.events) == 1
+    step = session.events[0]["data"]
+    assert step["status"] == "failed"
+    assert step["description"] == "Custom tool validation failed: paper_lookup"
+    assert step["metadata"]["tool_name"] == "paper_lookup"
+    assert step["metadata"]["validation_status"] == "failed"
+    assert step["metadata"]["checks"] == ["python_syntax"]
+    assert "No @tool-decorated function" in step["metadata"]["error"]
+
+
+@pytest.mark.asyncio
 async def test_research_upload_marks_session_completed_after_indexing(monkeypatch, tmp_path):
     sessions = _load_sessions_module(monkeypatch)
     session = FakeSession(vm_root_dir=tmp_path)
