@@ -356,12 +356,26 @@ export async function readToolFile(toolName: string): Promise<{file: string, con
   return response.data.data;
 }
 
-export async function saveToolFromSession(sessionId: string, toolName: string, replaces?: string): Promise<{tool_name: string, saved: boolean, replaced?: string}> {
+export async function saveToolFromSession(
+  sessionId: string,
+  toolName: string,
+  replaces?: string
+): Promise<{
+  tool_name: string,
+  saved: boolean,
+  replaced?: string,
+  validation: { status: string, checks: string[], validated_at: string }
+}> {
   const payload: Record<string, string> = { tool_name: toolName };
   if (replaces && replaces !== toolName) {
     payload.replaces = replaces;
   }
-  const response = await apiClient.post<ApiResponse<{tool_name: string, saved: boolean, replaced?: string}>>(`/sessions/${sessionId}/tools/save`, payload);
+  const response = await apiClient.post<ApiResponse<{
+    tool_name: string,
+    saved: boolean,
+    replaced?: string,
+    validation: { status: string, checks: string[], validated_at: string }
+  }>>(`/sessions/${sessionId}/tools/save`, payload);
   return response.data.data;
 }
 

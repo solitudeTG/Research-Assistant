@@ -1080,6 +1080,38 @@ def _extract_tool_description(py_file: _Path) -> str:
     return ""
 
 
+def _read_passed_tool_validation(staging_dir: _Path, tool_name: str) -> Dict[str, Any] | None:
+    validation_path = staging_dir / f"{tool_name}.validation.json"
+    if not validation_path.is_file():
+        return None
+    try:
+        payload = json.loads(validation_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("tool_name") != tool_name:
+        return None
+    if payload.get("status") != "passed":
+        return None
+    checks = payload.get("checks")
+    return {
+        "status": "passed",
+        "checks": checks if isinstance(checks, list) else [],
+        "validated_at": str(payload.get("validated_at") or ""),
+    }
+
+
+def _require_passed_tool_validation(staging_dir: _Path, tool_name: str) -> Dict[str, Any]:
+    validation = _read_passed_tool_validation(staging_dir, tool_name)
+    if validation is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Tool must pass sandbox validation before it can be saved",
+        )
+    return validation
+
+
 def _list_external_tools() -> List[Dict[str, Any]]:
     """列出 Tools 目录中所有外置工具（排除 __init__.py）。"""
     base = _Path(_TOOLS_DIR)
@@ -1206,7 +1238,8 @@ async def save_tool_from_session(
         if not tool_name or "/" in tool_name or "\\" in tool_name:
             raise HTTPException(status_code=400, detail="Invalid tool name")
 
-        src = _Path(_WORKSPACE_DIR) / session_id / "tools_staging" / f"{tool_name}.py"
+        staging_dir = _Path(_WORKSPACE_DIR) / session_id / "tools_staging"
+        src = staging_dir / f"{tool_name}.py"
         if not src.is_file():
             raise HTTPException(
                 status_code=404,
@@ -1220,6 +1253,7 @@ async def save_tool_from_session(
                 detail="File does not contain a @tool decorated function",
             )
 
+        validation = _require_passed_tool_validation(staging_dir, tool_name)
         dst = _Path(_TOOLS_DIR) / f"{tool_name}.py"
         shutil.copy2(src, dst)
 
@@ -1231,7 +1265,12 @@ async def save_tool_from_session(
                 logger.info(f"[Tools] Removed old tool '{replaces}.py' (replaced by '{tool_name}')")
 
         logger.info(f"[Tools] Saved tool '{tool_name}' from session {session_id} to {dst}")
-        return ApiResponse(data={"tool_name": tool_name, "saved": True, "replaced": replaces or None})
+        return ApiResponse(data={
+            "tool_name": tool_name,
+            "saved": True,
+            "replaced": replaces or None,
+            "validation": validation,
+        })
     except ScienceSessionNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except HTTPException:
@@ -2314,7 +2353,11 @@ async def _agent_background_worker(
                 } if _Path(_TOOLS_DIR).is_dir() else set()
                 for child in sorted(staging_dir.glob("*.py")):
                     tool_name = child.stem
-                    if tool_name not in saved_tools and "@tool" in child.read_text(encoding="utf-8", errors="replace"):
+                    if (
+                        tool_name not in saved_tools
+                        and "@tool" in child.read_text(encoding="utf-8", errors="replace")
+                        and _read_passed_tool_validation(staging_dir, tool_name) is not None
+                    ):
                         _emit("tool_save_prompt", _json_dumps({
                             "event_id": _new_event_id(),
                             "timestamp": _now_ts(),
