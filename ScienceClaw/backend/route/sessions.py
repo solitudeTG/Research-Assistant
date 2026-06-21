@@ -21,6 +21,7 @@ import asyncio
 import json
 import os
 import re
+import shlex
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
@@ -41,6 +42,7 @@ from sse_starlette.sse import EventSourceResponse
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from backend.deepagent.engine import get_llm_model
+from backend.deepagent.full_sandbox_backend import FullSandboxBackend
 from backend.deepagent.runner import arun_science_task_stream
 from backend.deepagent.sessions import (
     ScienceSessionNotFoundError,
@@ -1332,6 +1334,91 @@ class ValidateToolRequest(BaseModel):
     example_args: Dict[str, Any] = Field(default_factory=dict, description="Example keyword arguments for a sandbox validation call")
 
 
+def _tool_validation_runner_source(tool_name: str, example_args: Dict[str, Any]) -> str:
+    return (
+        "import json\n"
+        "import sys\n"
+        "from pathlib import Path\n\n"
+        f"tool_name = {tool_name!r}\n"
+        f"example_args = {json.dumps(example_args, ensure_ascii=False)!r}\n\n"
+        "safe_builtins = {\n"
+        "    'bool': bool, 'dict': dict, 'float': float, 'int': int, 'len': len,\n"
+        "    'list': list, 'max': max, 'min': min, 'range': range, 'round': round,\n"
+        "    'str': str, 'sum': sum,\n"
+        "}\n"
+        "namespace = {\n"
+        "    '__builtins__': safe_builtins,\n"
+        "    'tool': lambda fn=None, **_kwargs: fn if fn is not None else (lambda wrapped: wrapped),\n"
+        "}\n"
+        "try:\n"
+        "    source = Path(__file__).with_name(f'{tool_name}.py').read_text(encoding='utf-8', errors='replace')\n"
+        "    exec(compile(source, f'{tool_name}.py', 'exec'), namespace)\n"
+        "    result = namespace[tool_name](**json.loads(example_args))\n"
+        "    print(json.dumps({'status': 'passed', 'result': result}, ensure_ascii=False))\n"
+        "except Exception as exc:\n"
+        "    print(json.dumps({'status': 'failed', 'error': str(exc)}, ensure_ascii=False))\n"
+        "    sys.exit(1)\n"
+    )
+
+
+def _parse_sandbox_validation_output(output: str) -> Dict[str, Any] | None:
+    for line in reversed(str(output or "").splitlines()):
+        text = line.strip()
+        if not text:
+            continue
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(payload, dict) and payload.get("status") in {"passed", "failed"}:
+            return payload
+    return None
+
+
+def _run_staged_tool_example_in_sandbox(
+    *,
+    session_id: str,
+    user_id: str,
+    staging_dir: _Path,
+    tool_name: str,
+    example_args: Dict[str, Any],
+) -> tuple[Dict[str, Any], Dict[str, Any]] | None:
+    if os.environ.get("SANDBOX_TOOL_VALIDATION") != "1" and not os.environ.get("SANDBOX_REST_URL"):
+        return None
+
+    runner_path = staging_dir / f".{tool_name}.validation_runner.py"
+    sandbox = FullSandboxBackend(session_id, user_id)
+    execution_environment = {
+        "type": "sandbox_container",
+        "backend": "full_sandbox",
+        "sandbox_workspace": sandbox.workspace,
+        "imports_allowed": False,
+    }
+    try:
+        runner_path.write_text(
+            _tool_validation_runner_source(tool_name, example_args),
+            encoding="utf-8",
+        )
+        remote_runner = "/".join([
+            str(sandbox.workspace).rstrip("/"),
+            "tools_staging",
+            runner_path.name,
+        ])
+        result = sandbox.execute(f"python {shlex.quote(remote_runner)}", timeout=30)
+        parsed = _parse_sandbox_validation_output(getattr(result, "output", ""))
+        if parsed is None:
+            return None
+        return parsed, execution_environment
+    except Exception as exc:
+        logger.warning(f"Sandbox tool validation unavailable for {tool_name}: {exc}")
+        return None
+    finally:
+        try:
+            runner_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 @router.post("/{session_id}/tools/validate", response_model=ApiResponse)
 async def validate_tool_from_session(
     session_id: str,
@@ -1349,7 +1436,25 @@ async def validate_tool_from_session(
             raise HTTPException(status_code=400, detail="Invalid tool name")
 
         staging_dir = _Path(_WORKSPACE_DIR) / session_id / "tools_staging"
-        payload = validate_staged_tool(staging_dir, tool_name, example_args=body.example_args)
+        sandbox_result = _run_staged_tool_example_in_sandbox(
+            session_id=session_id,
+            user_id=current_user.id,
+            staging_dir=staging_dir,
+            tool_name=tool_name,
+            example_args=body.example_args,
+        )
+        if sandbox_result is not None:
+            example_call_result, execution_environment = sandbox_result
+            payload = validate_staged_tool(
+                staging_dir,
+                tool_name,
+                example_args=body.example_args,
+                example_call_result=example_call_result,
+                example_check_name="sandbox_example_call",
+                execution_environment=execution_environment,
+            )
+        else:
+            payload = validate_staged_tool(staging_dir, tool_name, example_args=body.example_args)
         validation_status = str(payload.get("status", "failed"))
         trace_status = "completed" if validation_status == "passed" else "failed"
         metadata: Dict[str, Any] = {
@@ -1357,6 +1462,8 @@ async def validate_tool_from_session(
             "validation_status": validation_status,
             "checks": payload.get("checks", []),
         }
+        if payload.get("execution_environment"):
+            metadata["execution_environment"] = payload["execution_environment"]
         if payload.get("input_schema"):
             metadata["input_schema"] = payload["input_schema"]
         if payload.get("return_schema"):

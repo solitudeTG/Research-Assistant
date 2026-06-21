@@ -62,6 +62,46 @@ def test_validate_staged_tool_writes_passed_sidecar_with_return_schema(tmp_path)
     assert sidecar == payload
 
 
+def test_validate_staged_tool_uses_sandbox_example_result(tmp_path):
+    staging = tmp_path / "tools_staging"
+    staging.mkdir()
+    source = (
+        '@tool\n'
+        'def paper_lookup(query: str) -> dict:\n'
+        '    """Look up paper metadata."""\n'
+        '    return {"title": query}\n'
+    )
+    (staging / "paper_lookup.py").write_text(source, encoding="utf-8")
+
+    payload = validate_staged_tool(
+        staging,
+        "paper_lookup",
+        example_args={"query": "evidence boundaries"},
+        example_call_result={"status": "passed", "result": {"title": "evidence boundaries"}},
+        example_check_name="sandbox_example_call",
+        execution_environment={
+            "type": "sandbox_container",
+            "backend": "full_sandbox",
+            "imports_allowed": False,
+        },
+    )
+
+    assert payload["status"] == "passed"
+    assert payload["checks"] == [
+        "python_syntax",
+        "tool_function",
+        "sandbox_example_call",
+        "input_schema",
+        "return_schema",
+    ]
+    assert payload["execution_environment"] == {
+        "type": "sandbox_container",
+        "backend": "full_sandbox",
+        "imports_allowed": False,
+    }
+    assert payload["example_output"] == {"title": "evidence boundaries"}
+
+
 def test_validate_staged_tool_writes_failed_sidecar_for_invalid_tool(tmp_path):
     staging = tmp_path / "tools_staging"
     staging.mkdir()

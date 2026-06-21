@@ -1561,8 +1561,80 @@ async def test_validate_tool_from_session_generates_validation_sidecar(monkeypat
         },
         "required": ["title", "doi"],
     }
+    assert response.data["execution_environment"] == {
+        "type": "local_restricted",
+        "imports_allowed": False,
+    }
     sidecar = json.loads((staging / "paper_lookup.validation.json").read_text(encoding="utf-8"))
     assert sidecar == response.data
+
+
+@pytest.mark.asyncio
+async def test_validate_tool_from_session_uses_sandbox_container_when_available(monkeypatch, tmp_path):
+    sessions = _load_sessions_module(monkeypatch)
+    workspace = tmp_path / "workspace"
+    staging = workspace / "session-1" / "tools_staging"
+    staging.mkdir(parents=True)
+    (staging / "paper_lookup.py").write_text(
+        '@tool\n'
+        'def paper_lookup(query: str) -> dict:\n'
+        '    """Look up paper metadata."""\n'
+        '    return {"title": query}\n',
+        encoding="utf-8",
+    )
+    session = FakeSession(vm_root_dir=workspace / "session-1")
+    executed = []
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    class FakeSandboxBackend:
+        def __init__(self, session_id, user_id):
+            assert session_id == "session-1"
+            assert user_id == "user-1"
+            self.workspace = "/workspace/session-1"
+
+        def execute(self, command, *, timeout=None):
+            executed.append((command, timeout))
+            return types.SimpleNamespace(
+                exit_code=0,
+                output=json.dumps({"status": "passed", "result": {"title": "evidence boundaries"}}),
+                truncated=False,
+            )
+
+    monkeypatch.setattr(sessions, "_WORKSPACE_DIR", str(workspace))
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "FullSandboxBackend", FakeSandboxBackend)
+    monkeypatch.setenv("SANDBOX_TOOL_VALIDATION", "1")
+
+    response = await sessions.validate_tool_from_session(
+        "session-1",
+        sessions.ValidateToolRequest(
+            tool_name="paper_lookup",
+            example_args={"query": "evidence boundaries"},
+        ),
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    assert executed
+    assert response.data["status"] == "passed"
+    assert response.data["checks"] == [
+        "python_syntax",
+        "tool_function",
+        "sandbox_example_call",
+        "input_schema",
+        "return_schema",
+    ]
+    assert response.data["execution_environment"] == {
+        "type": "sandbox_container",
+        "backend": "full_sandbox",
+        "sandbox_workspace": "/workspace/session-1",
+        "imports_allowed": False,
+    }
+    assert response.data["example_output"] == {"title": "evidence boundaries"}
+    step = session.events[0]["data"]
+    assert step["metadata"]["execution_environment"] == response.data["execution_environment"]
 
 
 @pytest.mark.asyncio
@@ -1619,6 +1691,10 @@ async def test_validate_tool_from_session_persists_completed_trace_step(monkeypa
             "type": "object",
             "properties": {"title": {"type": "string"}},
             "required": ["title"],
+        },
+        "execution_environment": {
+            "type": "local_restricted",
+            "imports_allowed": False,
         },
     }
     assert published[0][0] == "session-1"

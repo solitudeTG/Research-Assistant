@@ -142,6 +142,9 @@ def validate_staged_tool(
     tool_name: str,
     *,
     example_args: Dict[str, Any] | None = None,
+    example_call_result: Dict[str, Any] | None = None,
+    example_check_name: str = "example_call",
+    execution_environment: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     staging_path = Path(staging_dir)
     tool_path = staging_path / f"{tool_name}.py"
@@ -150,7 +153,7 @@ def validate_staged_tool(
     base_payload: Dict[str, Any] = {
         "tool_name": tool_name,
         "validated_at": _utc_now_iso(),
-        "execution_environment": {
+        "execution_environment": execution_environment or {
             "type": "local_restricted",
             "imports_allowed": False,
         },
@@ -199,28 +202,42 @@ def validate_staged_tool(
         )
     checks.append("tool_function")
 
-    safe_builtins = {
-        "bool": bool,
-        "dict": dict,
-        "float": float,
-        "int": int,
-        "len": len,
-        "list": list,
-        "max": max,
-        "min": min,
-        "range": range,
-        "round": round,
-        "str": str,
-        "sum": sum,
-    }
-    namespace: Dict[str, Any] = {
-        "__builtins__": safe_builtins,
-        "tool": lambda fn=None, **_kwargs: fn if fn is not None else (lambda wrapped: wrapped),
-    }
-    try:
-        exec(compile(module, str(tool_path), "exec"), namespace)
-        result = namespace[tool_name](**(example_args or {}))
-    except Exception as exc:
+    if example_call_result is None:
+        safe_builtins = {
+            "bool": bool,
+            "dict": dict,
+            "float": float,
+            "int": int,
+            "len": len,
+            "list": list,
+            "max": max,
+            "min": min,
+            "range": range,
+            "round": round,
+            "str": str,
+            "sum": sum,
+        }
+        namespace: Dict[str, Any] = {
+            "__builtins__": safe_builtins,
+            "tool": lambda fn=None, **_kwargs: fn if fn is not None else (lambda wrapped: wrapped),
+        }
+        try:
+            exec(compile(module, str(tool_path), "exec"), namespace)
+            result = namespace[tool_name](**(example_args or {}))
+        except Exception as exc:
+            return _write_sidecar(
+                staging_path,
+                tool_name,
+                {
+                    **base_payload,
+                    "status": "failed",
+                    "checks": checks,
+                    "error": f"Example call failed: {exc}",
+                },
+            )
+    elif example_call_result.get("status") == "passed":
+        result = example_call_result.get("result")
+    else:
         return _write_sidecar(
             staging_path,
             tool_name,
@@ -228,10 +245,10 @@ def validate_staged_tool(
                 **base_payload,
                 "status": "failed",
                 "checks": checks,
-                "error": f"Example call failed: {exc}",
+                "error": f"Example call failed: {example_call_result.get('error', 'unknown error')}",
             },
         )
-    checks.append("example_call")
+    checks.append(example_check_name)
 
     input_schema = _input_schema_for_function(tool_function)
     checks.append("input_schema")
