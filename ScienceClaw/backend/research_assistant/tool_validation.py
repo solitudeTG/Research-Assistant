@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,6 +10,10 @@ from typing import Any, Dict
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def tool_source_sha256(source: str) -> str:
+    return hashlib.sha256(source.encode("utf-8")).hexdigest()
 
 
 def _tool_decorator_name(decorator: ast.expr) -> str:
@@ -77,6 +82,10 @@ def validate_staged_tool(
     base_payload: Dict[str, Any] = {
         "tool_name": tool_name,
         "validated_at": _utc_now_iso(),
+        "execution_environment": {
+            "type": "local_restricted",
+            "imports_allowed": False,
+        },
     }
 
     if not tool_path.is_file():
@@ -92,6 +101,7 @@ def validate_staged_tool(
         )
 
     source = tool_path.read_text(encoding="utf-8", errors="replace")
+    base_payload["source_sha256"] = tool_source_sha256(source)
     try:
         module = ast.parse(source, filename=str(tool_path))
     except SyntaxError as exc:

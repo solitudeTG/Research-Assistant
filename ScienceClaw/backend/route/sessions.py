@@ -54,7 +54,7 @@ from backend.research_assistant.indexing import index_ingestion_result
 from backend.research_assistant.ingestion import ingest_uploaded_paper, is_research_document
 from backend.research_assistant.parsers import PaperParseError
 from backend.research_assistant.reports import generate_markdown_research_report
-from backend.research_assistant.tool_validation import validate_staged_tool
+from backend.research_assistant.tool_validation import tool_source_sha256, validate_staged_tool
 from backend.research_assistant.storage.database import (
     delete_memory_entry_from_database,
     get_audit_result_from_database,
@@ -1096,7 +1096,11 @@ def _read_tool_validation_payload(staging_dir: _Path, tool_name: str) -> Dict[st
     return payload
 
 
-def _normalize_passed_tool_validation(payload: Dict[str, Any]) -> Dict[str, Any] | None:
+def _normalize_passed_tool_validation(
+    payload: Dict[str, Any],
+    *,
+    source: str | None = None,
+) -> Dict[str, Any] | None:
     if payload.get("status") != "passed":
         return None
     return_schema = payload.get("return_schema")
@@ -1104,11 +1108,21 @@ def _normalize_passed_tool_validation(payload: Dict[str, Any]) -> Dict[str, Any]
         return_schema = payload.get("result_schema")
     if not isinstance(return_schema, dict) or not return_schema:
         return None
+    execution_environment = payload.get("execution_environment")
+    if not isinstance(execution_environment, dict) or not execution_environment.get("type"):
+        return None
+    source_sha256 = payload.get("source_sha256")
+    if not isinstance(source_sha256, str) or not source_sha256:
+        return None
+    if source is not None and source_sha256 != tool_source_sha256(source):
+        return None
     checks = payload.get("checks")
     return {
         "status": "passed",
         "checks": checks if isinstance(checks, list) else [],
         "validated_at": str(payload.get("validated_at") or ""),
+        "execution_environment": execution_environment,
+        "source_sha256": source_sha256,
         "return_schema": return_schema,
     }
 
@@ -1117,23 +1131,42 @@ def _read_passed_tool_validation(staging_dir: _Path, tool_name: str) -> Dict[str
     payload = _read_tool_validation_payload(staging_dir, tool_name)
     if payload is None:
         return None
-    return _normalize_passed_tool_validation(payload)
+    source_path = staging_dir / f"{tool_name}.py"
+    source = source_path.read_text(encoding="utf-8", errors="replace") if source_path.is_file() else None
+    return _normalize_passed_tool_validation(payload, source=source)
 
 
 def _require_passed_tool_validation(staging_dir: _Path, tool_name: str) -> Dict[str, Any]:
     payload = _read_tool_validation_payload(staging_dir, tool_name)
-    validation = _normalize_passed_tool_validation(payload) if payload is not None else None
+    source_path = staging_dir / f"{tool_name}.py"
+    source = source_path.read_text(encoding="utf-8", errors="replace") if source_path.is_file() else None
+    validation = _normalize_passed_tool_validation(payload, source=source) if payload is not None else None
     if validation is None:
         if payload is not None and payload.get("status") == "passed":
             raise HTTPException(
                 status_code=400,
-                detail="Tool validation must include a non-empty return schema before it can be saved",
+                detail=_passed_tool_validation_failure_detail(payload, source=source),
             )
         raise HTTPException(
             status_code=400,
             detail="Tool must pass sandbox validation before it can be saved",
         )
     return validation
+
+
+def _passed_tool_validation_failure_detail(payload: Dict[str, Any], *, source: str | None = None) -> str:
+    return_schema = payload.get("return_schema") or payload.get("result_schema")
+    if not isinstance(return_schema, dict) or not return_schema:
+        return "Tool validation must include a non-empty return schema before it can be saved"
+    execution_environment = payload.get("execution_environment")
+    if not isinstance(execution_environment, dict) or not execution_environment.get("type"):
+        return "Tool validation must include an execution environment before it can be saved"
+    source_sha256 = payload.get("source_sha256")
+    if not isinstance(source_sha256, str) or not source_sha256:
+        return "Tool validation must include a source hash before it can be saved"
+    if source is not None and source_sha256 != tool_source_sha256(source):
+        return "Tool validation must match the current tool source before it can be saved"
+    return "Tool must pass sandbox validation before it can be saved"
 
 
 def _list_external_tools() -> List[Dict[str, Any]]:

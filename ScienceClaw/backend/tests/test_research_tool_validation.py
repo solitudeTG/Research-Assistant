@@ -1,4 +1,5 @@
 import json
+import hashlib
 
 from backend.research_assistant.tool_validation import validate_staged_tool
 
@@ -6,11 +7,14 @@ from backend.research_assistant.tool_validation import validate_staged_tool
 def test_validate_staged_tool_writes_passed_sidecar_with_return_schema(tmp_path):
     staging = tmp_path / "tools_staging"
     staging.mkdir()
-    (staging / "paper_lookup.py").write_text(
+    source = (
         '@tool\n'
         'def paper_lookup(query: str) -> dict:\n'
         '    """Look up paper metadata."""\n'
-        '    return {"title": query, "doi": "10.1234/example"}\n',
+        '    return {"title": query, "doi": "10.1234/example"}\n'
+    )
+    (staging / "paper_lookup.py").write_text(
+        source,
         encoding="utf-8",
     )
 
@@ -40,6 +44,11 @@ def test_validate_staged_tool_writes_passed_sidecar_with_return_schema(tmp_path)
         "title": "evidence boundaries",
         "doi": "10.1234/example",
     }
+    assert payload["execution_environment"] == {
+        "type": "local_restricted",
+        "imports_allowed": False,
+    }
+    assert payload["source_sha256"] == hashlib.sha256(source.encode("utf-8")).hexdigest()
 
     sidecar = json.loads((staging / "paper_lookup.validation.json").read_text(encoding="utf-8"))
     assert sidecar == payload
