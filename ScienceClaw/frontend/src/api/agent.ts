@@ -445,14 +445,20 @@ export async function saveToolFromSession(
   sessionId: string,
   toolName: string,
   userConfirmed: boolean,
-  replaces?: string
+  replaces?: string,
+  toolPack: string = 'literature'
 ): Promise<{
   tool_name: string,
   saved: boolean,
   replaced?: string,
+  tool_pack: { id: string, label: string, research_workflow: string },
   validation: { status: string, checks: string[], validated_at: string, return_schema: Record<string, unknown> }
 }> {
-  const payload: Record<string, string | boolean> = { tool_name: toolName, user_confirmed: userConfirmed };
+  const payload: Record<string, string | boolean> = {
+    tool_name: toolName,
+    user_confirmed: userConfirmed,
+    tool_pack: toolPack,
+  };
   if (replaces && replaces !== toolName) {
     payload.replaces = replaces;
   }
@@ -460,6 +466,7 @@ export async function saveToolFromSession(
     tool_name: string,
     saved: boolean,
     replaced?: string,
+    tool_pack: { id: string, label: string, research_workflow: string },
     validation: { status: string, checks: string[], validated_at: string, return_schema: Record<string, unknown> }
   }>>(`/sessions/${sessionId}/tools/save`, payload);
   return response.data.data;

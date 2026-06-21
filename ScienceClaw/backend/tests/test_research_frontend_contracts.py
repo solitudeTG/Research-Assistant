@@ -68,3 +68,17 @@ def test_chat_page_sends_user_confirmation_for_tool_save():
     assert "saveToolFromSession(" in chat_page
     assert "pendingToolSave.value,\n      true,\n      pendingToolReplaces.value || undefined" in chat_page
     assert "user_confirmed: userConfirmed" in agent_api
+
+
+def test_agent_api_sends_research_tool_pack_for_tool_save():
+    agent_api = (
+        Path(__file__).resolve().parents[2]
+        / "frontend"
+        / "src"
+        / "api"
+        / "agent.ts"
+    ).read_text(encoding="utf-8")
+
+    assert "toolPack: string = 'literature'" in agent_api
+    assert "tool_pack: toolPack" in agent_api
+    assert "tool_pack: { id: string, label: string, research_workflow: string }" in agent_api

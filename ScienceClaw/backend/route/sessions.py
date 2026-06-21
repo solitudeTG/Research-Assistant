@@ -1110,6 +1110,40 @@ async def read_skill_file(
 
 _TOOLS_DIR = os.environ.get("TOOLS_DIR", "/app/Tools")
 
+_RESEARCH_TOOL_PACKS: Dict[str, Dict[str, str]] = {
+    "literature": {
+        "id": "literature",
+        "label": "Literature management",
+        "research_workflow": "literature_management",
+    },
+    "evidence": {
+        "id": "evidence",
+        "label": "Evidence audit",
+        "research_workflow": "evidence_audit",
+    },
+    "reporting": {
+        "id": "reporting",
+        "label": "Report generation",
+        "research_workflow": "report_generation",
+    },
+    "memory": {
+        "id": "memory",
+        "label": "Research memory",
+        "research_workflow": "research_memory",
+    },
+}
+
+
+def _normalize_research_tool_pack(tool_pack: str | None) -> Dict[str, str]:
+    pack_id = str(tool_pack or "").strip()
+    pack = _RESEARCH_TOOL_PACKS.get(pack_id)
+    if pack is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Tool save requires a research tool pack",
+        )
+    return dict(pack)
+
 
 def _extract_tool_description(py_file: _Path) -> str:
     """从 Python 文件中提取 @tool 函数的首行 docstring。"""
@@ -1234,11 +1268,20 @@ def _list_external_tools() -> List[Dict[str, Any]]:
     for py_file in sorted(base.glob("*.py")):
         if py_file.name == "__init__.py":
             continue
-        tools.append({
+        item = {
             "name": py_file.stem,
             "description": _extract_tool_description(py_file),
             "file": py_file.name,
-        })
+        }
+        metadata_path = py_file.with_suffix(".meta.json")
+        if metadata_path.is_file():
+            try:
+                metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError, TypeError):
+                metadata = {}
+            if isinstance(metadata, dict) and isinstance(metadata.get("tool_pack"), dict):
+                item["tool_pack"] = metadata["tool_pack"]
+        tools.append(item)
     return tools
 
 
@@ -1301,6 +1344,9 @@ async def delete_tool(
         if not str(resolved).startswith(str(base_resolved)):
             raise HTTPException(status_code=403, detail="Invalid tool path")
         resolved.unlink()
+        metadata_path = resolved.with_suffix(".meta.json")
+        if metadata_path.is_file():
+            metadata_path.unlink()
         col = _db.get_collection("blocked_tools")
         await col.delete_many({"tool_name": tool_name})
         return ApiResponse(data={"tool_name": tool_name, "deleted": True})
@@ -1334,6 +1380,7 @@ class SaveToolRequest(BaseModel):
     tool_name: str = Field(..., description="Name of the tool to save (without .py extension)")
     replaces: str = Field("", description="If this tool replaces an existing tool with a different name, specify the old tool name here")
     user_confirmed: bool = Field(False, description="Whether the user explicitly confirmed permanent tool persistence")
+    tool_pack: str = Field("", description="Research workflow tool pack for this tool")
 
 
 class ValidateToolRequest(BaseModel):
@@ -1518,6 +1565,7 @@ async def save_tool_from_session(
             raise HTTPException(status_code=400, detail="Invalid tool name")
         if body.user_confirmed is not True:
             raise HTTPException(status_code=400, detail="Tool save requires explicit user confirmation")
+        tool_pack = _normalize_research_tool_pack(body.tool_pack)
 
         staging_dir = _Path(_WORKSPACE_DIR) / session_id / "tools_staging"
         src = staging_dir / f"{tool_name}.py"
@@ -1537,6 +1585,20 @@ async def save_tool_from_session(
         validation = _require_passed_tool_validation(staging_dir, tool_name)
         dst = _Path(_TOOLS_DIR) / f"{tool_name}.py"
         shutil.copy2(src, dst)
+        metadata_path = dst.with_suffix(".meta.json")
+        metadata_path.write_text(
+            json.dumps(
+                {
+                    "tool_name": tool_name,
+                    "tool_pack": tool_pack,
+                    "validation": validation,
+                    "saved_at": datetime.now(timezone.utc).isoformat(),
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
 
         replaces = (body.replaces or "").strip()
         if replaces and replaces != tool_name:
@@ -1544,10 +1606,14 @@ async def save_tool_from_session(
             if old_file.is_file():
                 old_file.unlink()
                 logger.info(f"[Tools] Removed old tool '{replaces}.py' (replaced by '{tool_name}')")
+            old_metadata = _Path(_TOOLS_DIR) / f"{replaces}.meta.json"
+            if old_metadata.is_file():
+                old_metadata.unlink()
 
         logger.info(f"[Tools] Saved tool '{tool_name}' from session {session_id} to {dst}")
         return ApiResponse(data={
             "tool_name": tool_name,
+            "tool_pack": tool_pack,
             "saved": True,
             "replaced": replaces or None,
             "validation": validation,
