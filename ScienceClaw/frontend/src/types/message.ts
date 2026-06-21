@@ -48,6 +48,8 @@ export interface ResearchContextMemoryMetadata {
   source_subject_id?: string | null;
   relevance_score?: number;
   recall_reason?: string;
+  memory_status?: 'active' | 'conflict';
+  conflicts_with?: string[];
 }
 
 export interface ResearchAuditClaimMetadata {

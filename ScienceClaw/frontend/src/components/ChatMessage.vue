@@ -138,6 +138,13 @@
                 {{ memory.title || memory.memory_id }}
               </span>
               <div class="flex shrink-0 items-center gap-2">
+                <span
+                  v-if="memory.memory_status === 'conflict'"
+                  class="rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:border-amber-900/60 dark:bg-amber-900/20 dark:text-amber-300"
+                  title="This context-only memory conflicts with another recalled memory"
+                >
+                  Conflict
+                </span>
                 <button
                   v-if="props.sessionId"
                   class="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-tertiary)] transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900/40 dark:hover:border-red-900/60 dark:hover:bg-red-900/20 dark:hover:text-red-300"
@@ -159,6 +166,10 @@
             <div class="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-[var(--text-tertiary)]">
               <span>contextOnly=true</span>
               <span>source=memory</span>
+              <span v-if="memory.memory_status === 'conflict'">status=conflict</span>
+              <span v-if="memory.memory_status === 'conflict' && memory.conflicts_with?.length">
+                Conflicts with {{ memory.conflicts_with.join(', ') }}
+              </span>
               <span v-if="typeof memory.relevance_score === 'number'">score={{ memory.relevance_score.toFixed(2) }}</span>
               <span v-if="memory.recall_reason">{{ memory.recall_reason }}</span>
             </div>

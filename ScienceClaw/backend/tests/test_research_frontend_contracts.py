@@ -43,3 +43,18 @@ def test_chat_page_surfaces_source_evidence_ingestion_controls():
     assert "sourceEvidenceKind === 'database'" in chat_page
     assert "agentApi.ingestWebEvidenceSource" in chat_page
     assert "agentApi.ingestDatabaseEvidenceSource" in chat_page
+
+
+def test_chat_message_surfaces_context_memory_conflicts():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    chat_message = (frontend_root / "components" / "ChatMessage.vue").read_text(encoding="utf-8")
+    message_types = (frontend_root / "types" / "message.ts").read_text(encoding="utf-8")
+    agent_api = (frontend_root / "api" / "agent.ts").read_text(encoding="utf-8")
+
+    assert "memory.memory_status === 'conflict'" in chat_message
+    assert "Conflicts with" in chat_message
+    assert "memory.conflicts_with" in chat_message
+    assert "memory_status?: 'active' | 'conflict'" in message_types
+    assert "conflicts_with?: string[]" in message_types
+    assert "memory_status?: 'active' | 'conflict'" in agent_api
+    assert "conflicts_with?: string[]" in agent_api
