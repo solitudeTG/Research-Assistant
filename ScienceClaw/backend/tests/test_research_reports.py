@@ -113,6 +113,16 @@ async def test_generate_markdown_research_report_writes_artifact_and_evidence_ma
     assert "Memory, model reasoning, process trace, and tool logs remain context-only" in markdown
     assert evidence["audit"]["status"] == "approved"
     assert evidence["audit"]["boundaries"]["citation_evidence"] == ["paper", "web", "database"]
+    assert evidence["trust_summary"] == {
+        "audit_status": "approved",
+        "claim_count": 1,
+        "approved_claim_count": 1,
+        "unsupported_claim_count": 0,
+        "invalid_source_count": 0,
+        "citation_evidence_count": 1,
+        "context_memory_count": 1,
+        "usage_note": "Use the Evidence-Grounded Answer section only after checking Claim Checks.",
+    }
     assert evidence["context_memory_count"] == 1
     assert evidence["context_memory"][0]["memory_id"] == "mem-1"
     assert evidence["context_memory"][0]["source_type"] == "memory"

@@ -184,15 +184,29 @@ def _compose_markdown_report(
 
 
 def _compose_trust_summary_lines(answer: ResearchAnswer) -> list[str]:
+    summary = _build_trust_summary(answer)
     return [
-        f"- Audit status: `{answer.audit.status}`",
-        f"- Approved claims: {answer.audit.approved_claim_count} / {answer.audit.claim_count}",
-        f"- Unsupported claims: {answer.audit.unsupported_claim_count}",
-        f"- Invalid-source claims: {answer.audit.invalid_source_count}",
-        f"- Citation evidence records: {answer.citation_count}",
-        f"- Context-only memory records: {answer.context_memory_count}",
-        "- Use the Evidence-Grounded Answer section only after checking Claim Checks.",
+        f"- Audit status: `{summary['audit_status']}`",
+        f"- Approved claims: {summary['approved_claim_count']} / {summary['claim_count']}",
+        f"- Unsupported claims: {summary['unsupported_claim_count']}",
+        f"- Invalid-source claims: {summary['invalid_source_count']}",
+        f"- Citation evidence records: {summary['citation_evidence_count']}",
+        f"- Context-only memory records: {summary['context_memory_count']}",
+        f"- {summary['usage_note']}",
     ]
+
+
+def _build_trust_summary(answer: ResearchAnswer) -> dict:
+    return {
+        "audit_status": answer.audit.status,
+        "claim_count": answer.audit.claim_count,
+        "approved_claim_count": answer.audit.approved_claim_count,
+        "unsupported_claim_count": answer.audit.unsupported_claim_count,
+        "invalid_source_count": answer.audit.invalid_source_count,
+        "citation_evidence_count": answer.citation_count,
+        "context_memory_count": answer.context_memory_count,
+        "usage_note": "Use the Evidence-Grounded Answer section only after checking Claim Checks.",
+    }
 
 
 def _build_evidence_map(*, report_id: str, answer: ResearchAnswer) -> dict:
@@ -200,6 +214,7 @@ def _build_evidence_map(*, report_id: str, answer: ResearchAnswer) -> dict:
     return {
         "report_id": report_id,
         "evidence_scope": "uploaded_papers_only",
+        "trust_summary": _build_trust_summary(answer),
         "citation_count": answer.citation_count,
         "context_memory_count": answer.context_memory_count,
         "context_memory": answer.context_memory,
