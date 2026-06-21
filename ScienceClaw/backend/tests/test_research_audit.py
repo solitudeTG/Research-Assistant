@@ -55,6 +55,48 @@ def test_audit_evidence_claims_rejects_context_only_sources_as_citation_evidence
     assert "memory" in audit.claims[0].notes[0]
 
 
+def test_audit_evidence_claims_scopes_invalid_sources_to_cited_claim_label():
+    audit = audit_evidence_claims(
+        answer_content=(
+            "Based on uploaded paper evidence:\n"
+            "1. Hybrid retrieval improves recall. [paper-1:Results:4]\n"
+            "2. Prior memory says hybrid retrieval improves recall. [memory-1]"
+        ),
+        citations=[
+            ResearchCitation(
+                evidence_id=17,
+                chunk_id="chunk-17",
+                paper_id="paper-1",
+                title="Hybrid Retrieval",
+                section="Results",
+                page_start=4,
+                page_end=4,
+                quote="Hybrid retrieval improves recall.",
+                citation_label="[paper-1:Results:4]",
+            ),
+            ResearchCitation(
+                evidence_id=91,
+                chunk_id="memory-1",
+                paper_id="memory",
+                title="Session memory",
+                section="Memory",
+                page_start=None,
+                page_end=None,
+                quote="Prior memory says hybrid retrieval improves recall.",
+                citation_label="[memory-1]",
+                source_type="memory",
+            ),
+        ],
+    )
+
+    assert audit.status == "invalid_source"
+    assert [claim.status for claim in audit.claims] == ["approved", "invalid_source"]
+    assert audit.claims[0].evidence_ids == [17]
+    assert audit.claims[0].support_score == 1.0
+    assert audit.claims[1].evidence_ids == [91]
+    assert audit.invalid_source_count == 1
+
+
 def test_audit_evidence_claims_accepts_web_and_database_citation_evidence():
     audit = audit_evidence_claims(
         answer_content=(

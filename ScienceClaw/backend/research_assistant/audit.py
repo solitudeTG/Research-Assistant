@@ -93,23 +93,6 @@ def _audit_claim(claim_text: str, citations: list[CitationLike]) -> EvidenceAudi
             support_score=0.0,
         )
 
-    invalid_sources = [
-        citation.source_type
-        for citation in citations
-        if citation.source_type not in CITATION_EVIDENCE_TYPES
-    ]
-    if invalid_sources:
-        return EvidenceAuditClaim(
-            claim_text=claim_text,
-            status="invalid_source",
-            evidence_ids=[citation.evidence_id for citation in citations],
-            notes=[
-                f"{source_type} is context-only and cannot be used as citation evidence."
-                for source_type in sorted(set(invalid_sources))
-            ],
-            support_score=0.0,
-        )
-
     cited_labels = _citation_labels_in_claim(claim_text, citations)
     labeled_citations = [citation for citation in citations if getattr(citation, "citation_label", "")]
     if labeled_citations and not cited_labels:
@@ -130,6 +113,23 @@ def _audit_claim(claim_text: str, citations: list[CitationLike]) -> EvidenceAudi
         citation for citation in citations
         if not labeled_citations or getattr(citation, "citation_label", "") in cited_labels
     ]
+
+    invalid_sources = [
+        citation.source_type
+        for citation in citation_candidates
+        if citation.source_type not in CITATION_EVIDENCE_TYPES
+    ]
+    if invalid_sources:
+        return EvidenceAuditClaim(
+            claim_text=claim_text,
+            status="invalid_source",
+            evidence_ids=[citation.evidence_id for citation in citation_candidates],
+            notes=[
+                f"{source_type} is context-only and cannot be used as citation evidence."
+                for source_type in sorted(set(invalid_sources))
+            ],
+            support_score=0.0,
+        )
 
     matching = [
         citation.evidence_id
