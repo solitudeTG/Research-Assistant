@@ -147,6 +147,7 @@ async def persist_memory_entry_to_database(
     *,
     memory_id: str,
     session_id: str,
+    user_id: str,
     layer: str,
     title: str,
     content: str,
@@ -161,6 +162,7 @@ async def persist_memory_entry_to_database(
             connection,
             memory_id=memory_id,
             session_id=session_id,
+            user_id=user_id,
             layer=layer,
             title=title,
             content=content,
@@ -215,6 +217,7 @@ async def list_memory_entries_from_database(
     database_url: str,
     *,
     session_id: str,
+    user_id: str | None = None,
     layer: str | None = None,
     limit: int = 20,
 ) -> list[ResearchMemoryEntry]:
@@ -225,6 +228,7 @@ async def list_memory_entries_from_database(
         return await list_memory_entries(
             connection,
             session_id=session_id,
+            user_id=user_id,
             layer=layer,
             limit=limit,
         )

@@ -1481,6 +1481,7 @@ async def answer_research_question_for_session(
             answer = await answer_research_question(
                 database_url=settings.research_database_url,
                 session_id=session_id,
+                user_id=current_user.id,
                 question=body.question,
                 embedding_dimensions=settings.research_embedding_dimensions,
                 embedding_model=settings.research_embedding_model,
@@ -1629,6 +1630,7 @@ async def promote_research_memory_for_session(
         existing_memories = await list_memory_entries_from_database(
             settings.research_database_url,
             session_id=session_id,
+            user_id=current_user.id,
             layer="L2",
             limit=100,
         )
@@ -1642,7 +1644,7 @@ async def promote_research_memory_for_session(
             data = existing_memory.to_context_dict()
             data.update(
                 {
-                    "session_id": session_id,
+                    "session_id": getattr(existing_memory, "session_id", session_id),
                     "promotion_reason": "approved_audit_claim",
                     "evidence_ids": approved_claim.get("evidence_ids", []),
                     "created": False,
@@ -1657,6 +1659,7 @@ async def promote_research_memory_for_session(
             settings.research_database_url,
             memory_id=memory_id,
             session_id=session_id,
+            user_id=current_user.id,
             layer="L2",
             title=title,
             content=body.claim_text,

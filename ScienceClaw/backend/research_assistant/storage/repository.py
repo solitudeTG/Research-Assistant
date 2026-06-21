@@ -80,6 +80,7 @@ class ResearchEvidenceRecord:
 class ResearchMemoryEntry:
     memory_id: str
     session_id: str
+    user_id: str
     layer: str
     title: str
     content: str
@@ -444,6 +445,7 @@ async def persist_memory_entry(
     *,
     memory_id: str,
     session_id: str,
+    user_id: str,
     layer: str,
     title: str,
     content: str,
@@ -455,6 +457,7 @@ async def persist_memory_entry(
         INSERT INTO research_memory_entries (
             memory_id,
             session_id,
+            user_id,
             layer,
             title,
             content,
@@ -464,9 +467,10 @@ async def persist_memory_entry(
             source_subject_id,
             updated_at
         )
-        VALUES ($1, $2, $3, $4, $5, 'memory', true, $6, $7, now())
+        VALUES ($1, $2, $3, $4, $5, $6, 'memory', true, $7, $8, now())
         ON CONFLICT (memory_id) DO UPDATE SET
             session_id = EXCLUDED.session_id,
+            user_id = EXCLUDED.user_id,
             layer = EXCLUDED.layer,
             title = EXCLUDED.title,
             content = EXCLUDED.content,
@@ -478,6 +482,7 @@ async def persist_memory_entry(
         """,
         memory_id,
         session_id,
+        user_id,
         _normalise_memory_layer(layer),
         title,
         content,
@@ -490,6 +495,7 @@ async def list_memory_entries(
     connection: Any,
     *,
     session_id: str,
+    user_id: str | None = None,
     layer: str | None = None,
     limit: int = 20,
 ) -> list[ResearchMemoryEntry]:
@@ -499,6 +505,7 @@ async def list_memory_entries(
         SELECT
             memory_id,
             session_id,
+            user_id,
             layer,
             title,
             content,
@@ -508,14 +515,18 @@ async def list_memory_entries(
             source_subject_id,
             created_at
         FROM research_memory_entries
-        WHERE session_id = $1
-            AND ($2::text IS NULL OR layer = $2)
+        WHERE (
+                session_id = $1
+                OR ($2::text IS NOT NULL AND user_id = $2 AND layer IN ('l2', 'l3'))
+            )
+            AND ($3::text IS NULL OR layer = $3)
             AND source_type = 'memory'
             AND context_only = true
         ORDER BY created_at DESC
-        LIMIT $3
+        LIMIT $4
         """,
         session_id,
+        user_id,
         _normalise_memory_layer(layer) if layer else None,
         row_limit,
     )
@@ -523,6 +534,7 @@ async def list_memory_entries(
         ResearchMemoryEntry(
             memory_id=row["memory_id"],
             session_id=row["session_id"],
+            user_id=row["user_id"],
             layer=row["layer"],
             title=row["title"],
             content=row["content"],

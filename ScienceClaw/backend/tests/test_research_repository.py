@@ -282,6 +282,7 @@ async def test_persist_memory_entry_forces_context_only_memory_boundary():
         connection,
         memory_id="mem-1",
         session_id="session-1",
+        user_id="user-1",
         layer="L2",
         title="Confirmed retrieval preference",
         content="Prefer hybrid retrieval for scholarly terminology.",
@@ -297,6 +298,7 @@ async def test_persist_memory_entry_forces_context_only_memory_boundary():
     assert args == (
         "mem-1",
         "session-1",
+        "user-1",
         "l2",
         "Confirmed retrieval preference",
         "Prefer hybrid retrieval for scholarly terminology.",
@@ -312,6 +314,7 @@ async def test_list_memory_entries_returns_context_only_memory_contexts():
         {
             "memory_id": "mem-1",
             "session_id": "session-1",
+            "user_id": "user-1",
             "layer": "l2",
             "title": "Confirmed retrieval preference",
             "content": "Prefer hybrid retrieval for scholarly terminology.",
@@ -333,9 +336,11 @@ async def test_list_memory_entries_returns_context_only_memory_contexts():
     sql, args = connection.fetch_calls[0]
     assert "from research_memory_entries" in sql.lower()
     assert "session_id = $1" in sql.lower()
-    assert "layer = $2" in sql.lower()
+    assert "user_id = $2" in sql.lower()
+    assert "layer in ('l2', 'l3')" in sql.lower()
+    assert "layer = $3" in sql.lower()
     assert "context_only = true" in sql.lower()
-    assert args == ("session-1", "l2", 5)
+    assert args == ("session-1", None, "l2", 5)
     assert len(memories) == 1
     assert memories[0].source_type == "memory"
     assert memories[0].context_only is True
@@ -349,6 +354,42 @@ async def test_list_memory_entries_returns_context_only_memory_contexts():
         "source_subject_type": "answer",
         "source_subject_id": "answer-1",
     }
+
+
+@pytest.mark.asyncio
+async def test_list_memory_entries_can_include_same_user_l2_l3_across_sessions():
+    connection = RecordingConnection()
+    connection.fetch_result = [
+        {
+            "memory_id": "mem-cross-session",
+            "session_id": "session-2",
+            "user_id": "user-1",
+            "layer": "l2",
+            "title": "Confirmed retrieval preference",
+            "content": "Prefer hybrid retrieval for scholarly terminology.",
+            "source_type": "memory",
+            "context_only": True,
+            "source_subject_type": "answer",
+            "source_subject_id": "answer-1",
+            "created_at": None,
+        }
+    ]
+
+    memories = await repository.list_memory_entries(
+        connection,
+        session_id="session-1",
+        user_id="user-1",
+        layer="L2",
+        limit=10,
+    )
+
+    sql, args = connection.fetch_calls[0]
+    assert "user_id = $2" in sql.lower()
+    assert "layer in ('l2', 'l3')" in sql.lower()
+    assert args == ("session-1", "user-1", "l2", 10)
+    assert memories[0].memory_id == "mem-cross-session"
+    assert memories[0].session_id == "session-2"
+    assert memories[0].user_id == "user-1"
 
 
 @pytest.mark.asyncio

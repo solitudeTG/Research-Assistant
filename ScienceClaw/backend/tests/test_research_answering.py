@@ -109,9 +109,10 @@ async def test_answer_research_question_returns_context_only_memory_separate_fro
             )
         ]
 
-    async def fake_list_memory(database_url, *, session_id, layer=None, limit=20):
+    async def fake_list_memory(database_url, *, session_id, user_id=None, layer=None, limit=20):
         assert database_url == "postgresql://test"
         assert session_id == "session-1"
+        assert user_id is None
         assert layer is None
         assert limit == 5
 
@@ -190,3 +191,50 @@ async def test_answer_research_question_returns_context_only_memory_separate_fro
     assert "source answer answer-1" in payload["context_memory"][0]["recall_reason"]
     assert all(citation["source_type"] == "paper" for citation in payload["citations"])
     assert answer.audit.status == "approved"
+
+
+@pytest.mark.asyncio
+async def test_answer_research_question_passes_user_id_to_memory_lookup(monkeypatch):
+    async def fake_search(*args, **kwargs):
+        return []
+
+    memory_lookup = {}
+
+    async def fake_list_memory(database_url, *, session_id, user_id=None, layer=None, limit=20):
+        memory_lookup.update(
+            {
+                "database_url": database_url,
+                "session_id": session_id,
+                "user_id": user_id,
+                "layer": layer,
+                "limit": limit,
+            }
+        )
+        return []
+
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.hybrid_search_evidence_in_database",
+        fake_search,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_memory_entries_from_database",
+        fake_list_memory,
+    )
+
+    await answer_research_question(
+        database_url="postgresql://test",
+        session_id="session-1",
+        user_id="user-1",
+        question="What should I remember?",
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=3,
+    )
+
+    assert memory_lookup == {
+        "database_url": "postgresql://test",
+        "session_id": "session-1",
+        "user_id": "user-1",
+        "layer": None,
+        "limit": 5,
+    }

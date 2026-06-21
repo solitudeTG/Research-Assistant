@@ -108,6 +108,7 @@ CREATE INDEX IF NOT EXISTS research_audit_results_status_idx
 CREATE TABLE IF NOT EXISTS research_memory_entries (
     memory_id TEXT PRIMARY KEY,
     session_id TEXT NOT NULL,
+    user_id TEXT NOT NULL DEFAULT '',
     layer TEXT NOT NULL CHECK (layer IN ('l1', 'l2', 'l3')),
     title TEXT NOT NULL DEFAULT '',
     content TEXT NOT NULL,
@@ -119,5 +120,11 @@ CREATE TABLE IF NOT EXISTS research_memory_entries (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+ALTER TABLE research_memory_entries
+    ADD COLUMN IF NOT EXISTS user_id TEXT NOT NULL DEFAULT '';
+
 CREATE INDEX IF NOT EXISTS research_memory_entries_session_layer_created_idx
     ON research_memory_entries (session_id, layer, created_at DESC);
+
+CREATE INDEX IF NOT EXISTS research_memory_entries_user_layer_created_idx
+    ON research_memory_entries (user_id, layer, created_at DESC);

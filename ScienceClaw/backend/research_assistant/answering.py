@@ -96,6 +96,7 @@ async def answer_research_question(
     *,
     database_url: str,
     session_id: str,
+    user_id: str | None = None,
     question: str,
     embedding_dimensions: int,
     embedding_model: str,
@@ -130,6 +131,7 @@ async def answer_research_question(
     context_memory = await _load_context_memory(
         database_url=database_url,
         session_id=session_id,
+        user_id=user_id,
         question=question,
     )
     content = _compose_extractive_answer(citations)
@@ -153,10 +155,17 @@ def _compose_extractive_answer(citations: list[ResearchCitation]) -> str:
     return "\n".join(lines)
 
 
-async def _load_context_memory(*, database_url: str, session_id: str, question: str) -> list[dict]:
+async def _load_context_memory(
+    *,
+    database_url: str,
+    session_id: str,
+    user_id: str | None,
+    question: str,
+) -> list[dict]:
     memories = await list_memory_entries_from_database(
         database_url,
         session_id=session_id,
+        user_id=user_id,
         layer=None,
         limit=5,
     )

@@ -163,6 +163,7 @@ async def test_persist_memory_entry_to_database_closes_asyncpg_connection(monkey
         "postgresql://test",
         memory_id="mem-1",
         session_id="session-1",
+        user_id="user-1",
         layer="L3",
         title="Candidate insight",
         content="Repeated weak evidence should remain pending.",
@@ -171,7 +172,8 @@ async def test_persist_memory_entry_to_database_closes_asyncpg_connection(monkey
     )
 
     assert "research_memory_entries" in fake_connection.executed[0][0].lower()
-    assert fake_connection.executed[0][1][2] == "l3"
+    assert fake_connection.executed[0][1][2] == "user-1"
+    assert fake_connection.executed[0][1][3] == "l3"
     assert fake_connection.closed is True
 
 
@@ -276,6 +278,7 @@ async def test_list_memory_entries_from_database_returns_context_only_memory(mon
         {
             "memory_id": "mem-1",
             "session_id": "session-1",
+            "user_id": "user-1",
             "layer": "l1",
             "title": "Session constraint",
             "content": "Memory can inform answers but cannot be cited.",
