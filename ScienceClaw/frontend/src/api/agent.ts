@@ -127,6 +127,39 @@ export interface ResearchSessionStatus {
   has_indexed_papers: boolean;
 }
 
+export interface SourceEvidenceChunkPayload {
+  section: string;
+  content: string;
+  quote?: string;
+}
+
+export interface WebEvidenceIngestPayload {
+  url: string;
+  title: string;
+  retrieved_at?: string;
+  chunks: SourceEvidenceChunkPayload[];
+}
+
+export interface DatabaseEvidenceIngestPayload {
+  database_name: string;
+  query: string;
+  title: string;
+  retrieved_at?: string;
+  chunks: SourceEvidenceChunkPayload[];
+}
+
+export interface SourceEvidenceIngestResult {
+  source_type: 'web' | 'database';
+  source_id: string;
+  title: string;
+  retrieved_at: string;
+  chunk_count: number;
+  evidence_record_count: number;
+  url?: string;
+  database_name?: string;
+  query?: string;
+}
+
 export async function createSession(data: CreateSessionRequest): Promise<Session> {
   const response = await apiClient.put<ApiResponse<Session>>('/sessions', data);
   return response.data.data;
@@ -187,6 +220,28 @@ export async function answerResearchQuestion(
 export async function getResearchStatus(sessionId: string): Promise<ResearchSessionStatus> {
   const response = await apiClient.get<ApiResponse<ResearchSessionStatus>>(
     `/sessions/${sessionId}/research/status`,
+  );
+  return response.data.data;
+}
+
+export async function ingestWebEvidenceSource(
+  sessionId: string,
+  payload: WebEvidenceIngestPayload,
+): Promise<SourceEvidenceIngestResult> {
+  const response = await apiClient.post<ApiResponse<SourceEvidenceIngestResult>>(
+    `/sessions/${sessionId}/research/web-evidence`,
+    payload,
+  );
+  return response.data.data;
+}
+
+export async function ingestDatabaseEvidenceSource(
+  sessionId: string,
+  payload: DatabaseEvidenceIngestPayload,
+): Promise<SourceEvidenceIngestResult> {
+  const response = await apiClient.post<ApiResponse<SourceEvidenceIngestResult>>(
+    `/sessions/${sessionId}/research/database-evidence`,
+    payload,
   );
   return response.data.data;
 }

@@ -86,6 +86,80 @@
                 class="h-8 w-8 rounded-xl inline-flex items-center justify-center border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 hover:shadow-sm transition-all duration-200">
                 <FileSearch class="text-[var(--icon-secondary)]" :size="16" />
               </button>
+              <Popover v-model:open="sourceEvidenceOpen">
+                <PopoverTrigger>
+                  <button
+                    class="h-8 w-8 rounded-xl inline-flex items-center justify-center border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 hover:shadow-sm transition-all duration-200"
+                    title="Ingest citation evidence">
+                    <Database class="text-[var(--icon-secondary)]" :size="16" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent class="w-[420px] p-0 overflow-hidden bg-[var(--background-white-main)] border border-[var(--border-light)] shadow-xl rounded-xl" align="end" :side-offset="8">
+                  <div class="flex flex-col">
+                    <div class="px-4 py-3 border-b border-[var(--border-light)]">
+                      <div class="flex items-center justify-between gap-3">
+                        <div class="min-w-0">
+                          <div class="text-sm font-semibold text-[var(--text-primary)]">Ingest citation evidence</div>
+                          <div class="text-xs text-[var(--text-tertiary)] truncate">Paper, web, and database evidence stay separate from memory and trace.</div>
+                        </div>
+                        <div class="inline-flex rounded-lg border border-[var(--border-light)] overflow-hidden flex-shrink-0">
+                          <button
+                            @click="sourceEvidenceKind = 'web'"
+                            class="px-2.5 py-1 text-xs font-semibold transition-colors"
+                            :class="sourceEvidenceKind === 'web' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'text-[var(--text-tertiary)] hover:bg-[var(--fill-tsp-gray-main)]'">
+                            Web
+                          </button>
+                          <button
+                            @click="sourceEvidenceKind = 'database'"
+                            class="px-2.5 py-1 text-xs font-semibold transition-colors border-l border-[var(--border-light)]"
+                            :class="sourceEvidenceKind === 'database' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'text-[var(--text-tertiary)] hover:bg-[var(--fill-tsp-gray-main)]'">
+                            Database
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="p-4 flex flex-col gap-3">
+                      <template v-if="sourceEvidenceKind === 'web'">
+                        <input v-model="webEvidenceForm.title" class="source-evidence-input" placeholder="Source title" />
+                        <input v-model="webEvidenceForm.url" class="source-evidence-input" placeholder="https://example.org/source" />
+                        <input v-model="webEvidenceForm.section" class="source-evidence-input" placeholder="Section or heading" />
+                      </template>
+                      <template v-else-if="sourceEvidenceKind === 'database'">
+                        <input v-model="databaseEvidenceForm.title" class="source-evidence-input" placeholder="Source title" />
+                        <input v-model="databaseEvidenceForm.databaseName" class="source-evidence-input" placeholder="Database name, e.g. OpenAlex" />
+                        <input v-model="databaseEvidenceForm.query" class="source-evidence-input" placeholder="Query or lookup" />
+                        <input v-model="databaseEvidenceForm.section" class="source-evidence-input" placeholder="Result section or row group" />
+                      </template>
+                      <textarea
+                        v-model="activeSourceEvidenceContent"
+                        class="source-evidence-input min-h-[92px] resize-none"
+                        placeholder="Paste the source-identified evidence text to cite"></textarea>
+                      <textarea
+                        v-model="activeSourceEvidenceQuote"
+                        class="source-evidence-input min-h-[58px] resize-none"
+                        placeholder="Optional exact quote; defaults to the evidence text"></textarea>
+                    </div>
+
+                    <div class="px-4 py-3 border-t border-[var(--border-light)] flex items-center justify-end gap-2">
+                      <button
+                        @click="sourceEvidenceOpen = false"
+                        :disabled="sourceEvidenceSubmitting"
+                        class="px-3 py-1.5 text-xs font-medium rounded-lg text-[var(--text-secondary)] hover:bg-[var(--fill-tsp-gray-main)] transition-colors disabled:opacity-50">
+                        Cancel
+                      </button>
+                      <button
+                        @click="handleIngestSourceEvidence"
+                        :disabled="sourceEvidenceSubmitting"
+                        class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 transition-colors disabled:opacity-50 flex items-center gap-1.5">
+                        <div v-if="sourceEvidenceSubmitting" class="size-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                        <Plus v-else :size="13" />
+                        Ingest
+                      </button>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
               <button v-if="researchModeAvailable" @click="toggleResearchMode"
                 class="h-8 rounded-xl inline-flex items-center justify-center gap-1.5 border px-2.5 text-xs font-semibold hover:shadow-sm transition-all duration-200"
                 :class="researchModeEnabled
@@ -264,7 +338,7 @@ import {
   AgentSSEEvent,
 } from '../types/event';
 import ToolPanel from '../components/ToolPanel.vue'
-import { ArrowDown, FileSearch, Lock, Globe, Link, Check, Package, Wrench, X, FileText } from 'lucide-vue-next';
+import { ArrowDown, FileSearch, Lock, Globe, Link, Check, Package, Wrench, X, FileText, Database, Plus } from 'lucide-vue-next';
 import ShareIcon from '@/components/icons/ShareIcon.vue';
 import { showErrorToast, showSuccessToast } from '../utils/toast';
 import type { FileInfo } from '../api/file';
@@ -392,6 +466,47 @@ const savingSkill = ref(false);
 const pendingToolSave = ref<string | null>(null);
 const pendingToolReplaces = ref<string | null>(null);
 const savingTool = ref(false);
+
+const sourceEvidenceOpen = ref(false);
+const sourceEvidenceKind = ref<'web' | 'database'>('web');
+const sourceEvidenceSubmitting = ref(false);
+const webEvidenceForm = reactive({
+  title: '',
+  url: '',
+  section: 'Web',
+  content: '',
+  quote: '',
+});
+const databaseEvidenceForm = reactive({
+  title: '',
+  databaseName: '',
+  query: '',
+  section: 'Database',
+  content: '',
+  quote: '',
+});
+
+const activeSourceEvidenceContent = computed({
+  get: () => sourceEvidenceKind.value === 'web' ? webEvidenceForm.content : databaseEvidenceForm.content,
+  set: (value: string) => {
+    if (sourceEvidenceKind.value === 'web') {
+      webEvidenceForm.content = value;
+    } else {
+      databaseEvidenceForm.content = value;
+    }
+  },
+});
+
+const activeSourceEvidenceQuote = computed({
+  get: () => sourceEvidenceKind.value === 'web' ? webEvidenceForm.quote : databaseEvidenceForm.quote,
+  set: (value: string) => {
+    if (sourceEvidenceKind.value === 'web') {
+      webEvidenceForm.quote = value;
+    } else {
+      databaseEvidenceForm.quote = value;
+    }
+  },
+});
 
 // 上一轮是否因报错结束（用于显示「推理失败」而非「推理完成」）
 const lastTurnHadError = ref(false);
@@ -938,6 +1053,86 @@ const refreshResearchStatus = async (targetSessionId: string) => {
     }
   } catch (error) {
     console.warn('Failed to load research status:', error);
+  }
+};
+
+const resetSourceEvidenceForm = () => {
+  if (sourceEvidenceKind.value === 'web') {
+    webEvidenceForm.content = '';
+    webEvidenceForm.quote = '';
+  } else {
+    databaseEvidenceForm.content = '';
+    databaseEvidenceForm.quote = '';
+  }
+};
+
+const handleIngestSourceEvidence = async () => {
+  if (!sessionId.value || _unmounted || sourceEvidenceSubmitting.value) return;
+
+  const content = activeSourceEvidenceContent.value.trim();
+  const quote = activeSourceEvidenceQuote.value.trim();
+  if (!content) {
+    showErrorToast(t('Evidence text is required'));
+    return;
+  }
+
+  selectedActivityTurn.value = -1;
+  activityItems.value = [];
+  pendingToolCallIds.value = [];
+  lastTurnHadError.value = false;
+  follow.value = true;
+  sourceEvidenceSubmitting.value = true;
+  isLoading.value = true;
+  activityPanelRef.value?.show();
+
+  try {
+    if (sourceEvidenceKind.value === 'web') {
+      const title = webEvidenceForm.title.trim();
+      const url = webEvidenceForm.url.trim();
+      if (!title || !url) {
+        showErrorToast(t('Source title and URL are required'));
+        return;
+      }
+      await agentApi.ingestWebEvidenceSource(sessionId.value, {
+        title,
+        url,
+        chunks: [{
+          section: webEvidenceForm.section.trim() || 'Web',
+          content,
+          ...(quote ? { quote } : {}),
+        }],
+      });
+    } else {
+      const title = databaseEvidenceForm.title.trim();
+      const databaseName = databaseEvidenceForm.databaseName.trim();
+      const query = databaseEvidenceForm.query.trim();
+      if (!title || !databaseName || !query) {
+        showErrorToast(t('Source title, database name, and query are required'));
+        return;
+      }
+      await agentApi.ingestDatabaseEvidenceSource(sessionId.value, {
+        title,
+        database_name: databaseName,
+        query,
+        chunks: [{
+          section: databaseEvidenceForm.section.trim() || 'Database',
+          content,
+          ...(quote ? { quote } : {}),
+        }],
+      });
+    }
+
+    activateResearchMode();
+    sourceEvidenceOpen.value = false;
+    resetSourceEvidenceForm();
+    showSuccessToast(t('Citation evidence indexed'));
+  } catch (error) {
+    console.error('Source evidence ingestion error:', error);
+    showErrorToast(t('Failed to ingest citation evidence'));
+    lastTurnHadError.value = true;
+  } finally {
+    sourceEvidenceSubmitting.value = false;
+    isLoading.value = false;
   }
 };
 
@@ -1502,5 +1697,23 @@ const handleCopyLink = async () => {
 }
 .animate-fadeIn {
   animation: fadeIn 0.4s ease-out;
+}
+.source-evidence-input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--border-light);
+  background: var(--background-gray-main);
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 8px 10px;
+  outline: none;
+}
+.source-evidence-input:focus {
+  border-color: rgba(16, 185, 129, 0.55);
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.12);
+}
+.source-evidence-input::placeholder {
+  color: var(--text-tertiary);
 }
 </style>
