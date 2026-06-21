@@ -368,8 +368,8 @@ def _compose_context_memory_lines(answer: ResearchAnswer) -> list[str]:
         "",
         "These memory entries are context only and are not citation evidence.",
         "",
-        "| Memory | Layer | Score | Reason |",
-        "| --- | --- | --- | --- |",
+        "| Memory | Layer | Score | Status | Conflicts With | Reason |",
+        "| --- | --- | --- | --- | --- | --- |",
         *[_compose_context_memory_row(memory) for memory in answer.context_memory],
         "",
     ]
@@ -383,11 +383,21 @@ def _compose_context_memory_row(memory: dict) -> str:
                 _table_cell(str(memory.get("title") or memory.get("memory_id") or "Untitled memory")),
                 f"`{memory.get('layer') or 'memory'}`",
                 _format_optional_score(memory.get("relevance_score")),
+                f"`{memory.get('memory_status') or 'active'}`",
+                _table_cell(_format_conflicts_with(memory.get("conflicts_with"))),
                 _table_cell(str(memory.get("recall_reason") or "")),
             ]
         )
         + " |"
     )
+
+
+def _format_conflicts_with(value: object) -> str:
+    if isinstance(value, list):
+        return ", ".join(str(item) for item in value)
+    if isinstance(value, str):
+        return value
+    return ""
 
 
 def _format_optional_score(value: object) -> str:

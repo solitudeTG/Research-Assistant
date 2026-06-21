@@ -106,8 +106,11 @@ async def test_generate_markdown_research_report_writes_artifact_and_evidence_ma
     assert "1. Hybrid retrieval improves recall." in findings_section
     assert "1. Hybrid retrieval improves recall. [paper-1:Results:4]" not in findings_section
     assert "## Context-Only Memory" in markdown
-    assert "| Memory | Layer | Score | Reason |" in markdown
-    assert "| Retrieval preference | `l2` | `0.67` | matched question terms: hybrid, retrieval; source answer answer-1. |" in markdown
+    assert "| Memory | Layer | Score | Status | Conflicts With | Reason |" in markdown
+    assert (
+        "| Retrieval preference | `l2` | `0.67` | `active` |  | "
+        "matched question terms: hybrid, retrieval; source answer answer-1. |"
+    ) in markdown
     assert "These memory entries are context only and are not citation evidence." in markdown
     assert "This Markdown artifact can cite paper, web, or database evidence when present." in markdown
     assert "This generated report currently used uploaded-paper retrieval." in markdown
@@ -143,6 +146,60 @@ async def test_generate_markdown_research_report_writes_artifact_and_evidence_ma
         "subject_id": report.report_id,
         "status": "approved",
     }
+
+
+@pytest.mark.asyncio
+async def test_generate_markdown_research_report_surfaces_context_memory_conflicts(tmp_path, monkeypatch):
+    async def fake_answer(**kwargs):
+        return ResearchAnswer(
+            content="No citation evidence was found for this answer.",
+            citations=[],
+            context_memory=[
+                {
+                    "memory_id": "mem-prefer",
+                    "layer": "l2",
+                    "title": "Retrieval preference",
+                    "content": "Prefer hybrid retrieval.",
+                    "source_type": "memory",
+                    "context_only": True,
+                    "relevance_score": 0.8,
+                    "recall_reason": "matched question terms: hybrid, retrieval.",
+                    "memory_status": "conflict",
+                    "conflicts_with": ["mem-avoid"],
+                }
+            ],
+        )
+
+    async def fake_persist(database_url, *, report_id, evidence_rows):
+        assert evidence_rows == []
+
+    async def fake_persist_audit(database_url, *, audit_id, session_id, subject_type, subject_id, audit):
+        assert audit.status == "unsupported"
+
+    monkeypatch.setattr("backend.research_assistant.reports.answer_research_question", fake_answer)
+    monkeypatch.setattr(
+        "backend.research_assistant.reports.persist_report_evidence_map_to_database",
+        fake_persist,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.reports.persist_audit_result_to_database",
+        fake_persist_audit,
+    )
+
+    report = await generate_markdown_research_report(
+        database_url="postgresql://test",
+        session_id="session-1",
+        question="Should we use hybrid retrieval?",
+        workspace_dir=tmp_path,
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=5,
+    )
+
+    markdown = (tmp_path / "research_reports" / f"{report.report_id}.md").read_text(encoding="utf-8")
+
+    assert "| Memory | Layer | Score | Status | Conflicts With | Reason |" in markdown
+    assert "| Retrieval preference | `l2` | `0.80` | `conflict` | mem-avoid | matched question terms: hybrid, retrieval. |" in markdown
 
 
 @pytest.mark.asyncio
