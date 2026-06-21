@@ -130,6 +130,7 @@ def _compose_markdown_report(
         *_compose_audited_answer_lines(answer),
         "",
         *_compose_evidence_gap_lines(answer),
+        *_compose_limitation_lines(answer),
         "## Citation Evidence",
         "",
     ]
@@ -221,6 +222,7 @@ def _build_evidence_map(*, report_id: str, answer: ResearchAnswer) -> dict:
         "context_memory_count": answer.context_memory_count,
         "context_memory": answer.context_memory,
         "evidence_gaps": _build_evidence_gaps(answer),
+        "limitations": _build_limitations(answer),
         "audit": answer.audit.to_dict(),
         "evidence": _build_approved_claim_evidence_rows(answer, citations_by_id),
     }
@@ -360,6 +362,41 @@ def _build_evidence_gaps(answer: ResearchAnswer) -> list[dict]:
         for claim in answer.audit.claims
         if claim.status in {"unsupported", "invalid_source"}
     ]
+
+
+def _compose_limitation_lines(answer: ResearchAnswer) -> list[str]:
+    limitations = _build_limitations(answer)
+    if not limitations:
+        return []
+    return [
+        "## Limitations and Next Steps",
+        "",
+        *[f"- {limitation['message']}" for limitation in limitations],
+        "",
+    ]
+
+
+def _build_limitations(answer: ResearchAnswer) -> list[dict]:
+    limitations: list[dict] = []
+    gap_count = len(_build_evidence_gaps(answer))
+    if gap_count:
+        limitations.append(
+            {
+                "type": "evidence_gap",
+                "message": (
+                    f"Resolve {gap_count} unsupported or invalid-source claim"
+                    f"{'' if gap_count == 1 else 's'} before treating the report as complete."
+                ),
+            }
+        )
+    if not answer.citations:
+        limitations.append(
+            {
+                "type": "no_citation_evidence",
+                "message": "Attach paper, web, or database evidence before using this report as a cited research output.",
+            }
+        )
+    return limitations
 
 
 def _compose_claim_check_rows(answer: ResearchAnswer) -> list[str]:

@@ -264,6 +264,10 @@ async def test_generate_markdown_research_report_keeps_unsupported_claims_out_of
         "- `0.40` Hybrid retrieval proves clinical benefit. - "
         "Nearest citation evidence: 17 with lexical support 0.40. No explicit citation label was attached to this claim."
     ) in markdown
+    assert "## Limitations and Next Steps" in markdown
+    assert (
+        "- Resolve 1 unsupported or invalid-source claim before treating the report as complete."
+    ) in markdown
     assert (
         "| Hybrid retrieval proves clinical benefit. | `unsupported` | `0.40` |  | "
         "Nearest citation evidence: 17 with lexical support 0.40. No explicit citation label was attached to this claim. |"
@@ -277,6 +281,12 @@ async def test_generate_markdown_research_report_keeps_unsupported_claims_out_of
                 "Nearest citation evidence: 17 with lexical support 0.40.",
                 "No explicit citation label was attached to this claim.",
             ],
+        }
+    ]
+    assert evidence["limitations"] == [
+        {
+            "type": "evidence_gap",
+            "message": "Resolve 1 unsupported or invalid-source claim before treating the report as complete.",
         }
     ]
 
@@ -321,6 +331,23 @@ async def test_generate_markdown_research_report_uses_generic_no_citation_eviden
     assert "No citation evidence was found for this report." in citation_section
     assert "No paper citation evidence was found for this report." not in citation_section
     assert "Citation evidence sources: `paper`, `web`, `database`" in markdown
+    assert "## Limitations and Next Steps" in markdown
+    assert (
+        "- Attach paper, web, or database evidence before using this report as a cited research output."
+    ) in markdown
+    evidence = json.loads(
+        (tmp_path / "research_reports" / f"{report.report_id}.evidence.json").read_text(encoding="utf-8")
+    )
+    assert evidence["limitations"] == [
+        {
+            "type": "evidence_gap",
+            "message": "Resolve 1 unsupported or invalid-source claim before treating the report as complete.",
+        },
+        {
+            "type": "no_citation_evidence",
+            "message": "Attach paper, web, or database evidence before using this report as a cited research output.",
+        },
+    ]
 
 
 @pytest.mark.asyncio
