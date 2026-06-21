@@ -50,7 +50,16 @@ def test_validate_staged_tool_writes_passed_sidecar_with_return_schema(tmp_path)
     }
     assert payload["example_output"] == {
         "title": "evidence boundaries",
-        "doi": "10.1234/example",
+            "doi": "10.1234/example",
+    }
+    assert payload["result_contract"] == {
+        "kind": "object",
+        "schema": payload["return_schema"],
+        "example_preview": {
+            "title": "evidence boundaries",
+            "doi": "10.1234/example",
+        },
+        "truncated": False,
     }
     assert payload["execution_environment"] == {
         "type": "local_restricted",
@@ -100,6 +109,12 @@ def test_validate_staged_tool_uses_sandbox_example_result(tmp_path):
         "imports_allowed": False,
     }
     assert payload["example_output"] == {"title": "evidence boundaries"}
+    assert payload["result_contract"] == {
+        "kind": "object",
+        "schema": payload["return_schema"],
+        "example_preview": {"title": "evidence boundaries"},
+        "truncated": False,
+    }
 
 
 def test_validate_staged_tool_writes_failed_sidecar_for_invalid_tool(tmp_path):

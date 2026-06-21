@@ -63,6 +63,44 @@ def _schema_for_value(value: Any) -> Dict[str, Any]:
     return {"type": "string"}
 
 
+def _result_kind_for_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int) and not isinstance(value, bool):
+        return "integer"
+    if isinstance(value, float):
+        return "number"
+    if isinstance(value, str):
+        return "text"
+    if isinstance(value, list):
+        return "array"
+    if isinstance(value, dict):
+        return "object"
+    if value is None:
+        return "null"
+    return "unknown"
+
+
+def _json_preview(value: Any, *, limit: int = 2000) -> tuple[Any, bool]:
+    try:
+        serialized = json.dumps(value, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return str(value)[:limit], len(str(value)) > limit
+    if len(serialized) <= limit:
+        return value, False
+    return serialized[:limit], True
+
+
+def _result_contract_for_value(value: Any, schema: Dict[str, Any]) -> Dict[str, Any]:
+    preview, truncated = _json_preview(value)
+    return {
+        "kind": _result_kind_for_value(value),
+        "schema": schema,
+        "example_preview": preview,
+        "truncated": truncated,
+    }
+
+
 def _schema_for_annotation(annotation: ast.expr | None) -> Dict[str, Any]:
     if annotation is None:
         return {"type": "string"}
@@ -255,6 +293,7 @@ def validate_staged_tool(
 
     return_schema = _schema_for_value(result)
     checks.append("return_schema")
+    result_contract = _result_contract_for_value(result, return_schema)
 
     return _write_sidecar(
         staging_path,
@@ -265,6 +304,7 @@ def validate_staged_tool(
             "checks": checks,
             "input_schema": input_schema,
             "return_schema": return_schema,
+            "result_contract": result_contract,
             "example_output": result,
         },
     )

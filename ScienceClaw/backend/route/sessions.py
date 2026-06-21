@@ -1153,6 +1153,9 @@ def _normalize_passed_tool_validation(
     input_schema = payload.get("input_schema")
     if not isinstance(input_schema, dict) or not input_schema:
         return None
+    result_contract = payload.get("result_contract")
+    if not isinstance(result_contract, dict) or not result_contract:
+        return None
     execution_environment = payload.get("execution_environment")
     if not isinstance(execution_environment, dict) or not execution_environment.get("type"):
         return None
@@ -1170,6 +1173,7 @@ def _normalize_passed_tool_validation(
         "source_sha256": source_sha256,
         "input_schema": input_schema,
         "return_schema": return_schema,
+        "result_contract": result_contract,
     }
 
 
@@ -1207,6 +1211,9 @@ def _passed_tool_validation_failure_detail(payload: Dict[str, Any], *, source: s
     input_schema = payload.get("input_schema")
     if not isinstance(input_schema, dict) or not input_schema:
         return "Tool validation must include a non-empty input schema before it can be saved"
+    result_contract = payload.get("result_contract")
+    if not isinstance(result_contract, dict) or not result_contract:
+        return "Tool validation must include a result contract before it can be saved"
     execution_environment = payload.get("execution_environment")
     if not isinstance(execution_environment, dict) or not execution_environment.get("type"):
         return "Tool validation must include an execution environment before it can be saved"
@@ -1468,6 +1475,8 @@ async def validate_tool_from_session(
             metadata["input_schema"] = payload["input_schema"]
         if payload.get("return_schema"):
             metadata["return_schema"] = payload["return_schema"]
+        if payload.get("result_contract"):
+            metadata["result_contract"] = payload["result_contract"]
         if payload.get("error"):
             metadata["error"] = payload["error"]
 

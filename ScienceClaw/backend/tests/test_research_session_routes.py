@@ -1236,6 +1236,22 @@ async def test_save_tool_from_session_persists_only_validated_tool(monkeypatch, 
                     },
                     "required": ["title"],
                 },
+                "result_contract": {
+                    "kind": "object",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "title": {"type": "string"},
+                            "doi": {"type": "string"},
+                        },
+                        "required": ["title"],
+                    },
+                    "example_preview": {
+                        "title": "evidence boundaries",
+                        "doi": "10.1234/example",
+                    },
+                    "truncated": False,
+                },
             }
         ),
         encoding="utf-8",
@@ -1282,6 +1298,22 @@ async def test_save_tool_from_session_persists_only_validated_tool(monkeypatch, 
                 "doi": {"type": "string"},
             },
             "required": ["title"],
+        },
+        "result_contract": {
+            "kind": "object",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "doi": {"type": "string"},
+                },
+                "required": ["title"],
+            },
+            "example_preview": {
+                "title": "evidence boundaries",
+                "doi": "10.1234/example",
+            },
+            "truncated": False,
         },
     }
 
@@ -1391,6 +1423,16 @@ async def test_save_tool_from_session_rejects_stale_validation_source(monkeypatc
                     "type": "object",
                     "properties": {"title": {"type": "string"}},
                     "required": ["title"],
+                },
+                "result_contract": {
+                    "kind": "object",
+                    "schema": {
+                        "type": "object",
+                        "properties": {"title": {"type": "string"}},
+                        "required": ["title"],
+                    },
+                    "example_preview": {"title": "evidence boundaries"},
+                    "truncated": False,
                 },
             }
         ),
@@ -1561,6 +1603,15 @@ async def test_validate_tool_from_session_generates_validation_sidecar(monkeypat
         },
         "required": ["title", "doi"],
     }
+    assert response.data["result_contract"] == {
+        "kind": "object",
+        "schema": response.data["return_schema"],
+        "example_preview": {
+            "title": "evidence boundaries",
+            "doi": "10.1234/example",
+        },
+        "truncated": False,
+    }
     assert response.data["execution_environment"] == {
         "type": "local_restricted",
         "imports_allowed": False,
@@ -1691,6 +1742,16 @@ async def test_validate_tool_from_session_persists_completed_trace_step(monkeypa
             "type": "object",
             "properties": {"title": {"type": "string"}},
             "required": ["title"],
+        },
+        "result_contract": {
+            "kind": "object",
+            "schema": {
+                "type": "object",
+                "properties": {"title": {"type": "string"}},
+                "required": ["title"],
+            },
+            "example_preview": {"title": "evidence boundaries"},
+            "truncated": False,
         },
         "execution_environment": {
             "type": "local_restricted",
