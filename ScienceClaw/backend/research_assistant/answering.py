@@ -166,6 +166,8 @@ async def _load_context_memory(*, database_url: str, session_id: str, question: 
         if context.get("source_type") != "memory" or context.get("context_only") is not True:
             continue
         relevance_score, matched_terms = _memory_relevance(question=question, context=context)
+        if relevance_score <= 0:
+            continue
         context_rows.append(
             {
                 **context,

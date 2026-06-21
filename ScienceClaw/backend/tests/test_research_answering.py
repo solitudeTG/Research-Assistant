@@ -181,16 +181,12 @@ async def test_answer_research_question_returns_context_only_memory_separate_fro
     payload = answer.to_dict()
     assert answer.citation_count == 1
     assert payload["citation_count"] == 1
-    assert payload["context_memory_count"] == 2
+    assert payload["context_memory_count"] == 1
     assert payload["context_memory"][0]["memory_id"] == "mem-relevant"
-    assert payload["context_memory"][1]["memory_id"] == "mem-unrelated"
     assert payload["context_memory"][0]["source_type"] == "memory"
     assert payload["context_memory"][0]["context_only"] is True
-    assert payload["context_memory"][0]["relevance_score"] > payload["context_memory"][1]["relevance_score"]
     assert 0 < payload["context_memory"][0]["relevance_score"] <= 1
-    assert payload["context_memory"][1]["relevance_score"] == 0
     assert "matched question terms: hybrid, retrieval" in payload["context_memory"][0]["recall_reason"]
     assert "source answer answer-1" in payload["context_memory"][0]["recall_reason"]
-    assert "no direct question-term match" in payload["context_memory"][1]["recall_reason"]
     assert all(citation["source_type"] == "paper" for citation in payload["citations"])
     assert answer.audit.status == "approved"
