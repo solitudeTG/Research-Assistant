@@ -296,7 +296,7 @@ async def test_generate_markdown_research_report_uses_generic_no_citation_eviden
     async def fake_answer(**kwargs):
         return ResearchAnswer(
             content=(
-                "No citation evidence was found in the uploaded papers for this question. "
+                "No citation evidence was found for this question. "
                 "I cannot answer it as a cited research claim yet."
             ),
             citations=[],

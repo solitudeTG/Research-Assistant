@@ -553,7 +553,7 @@ async def test_research_answer_passes_user_id_for_cross_session_memory_recall(mo
     async def fake_answer(*args, **kwargs):
         answer_kwargs.update(kwargs)
         return ResearchAnswer(
-            content="No citation evidence was found in the uploaded papers for this question.",
+            content="No citation evidence was found for this question.",
             citations=[],
         )
 

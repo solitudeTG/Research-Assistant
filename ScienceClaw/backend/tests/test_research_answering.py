@@ -265,6 +265,37 @@ async def test_answer_research_question_marks_conflicting_context_memory(monkeyp
 
 
 @pytest.mark.asyncio
+async def test_answer_research_question_uses_generic_no_citation_evidence_wording(monkeypatch):
+    async def fake_search(*args, **kwargs):
+        return []
+
+    async def fake_list_memory(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.hybrid_search_evidence_in_database",
+        fake_search,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_memory_entries_from_database",
+        fake_list_memory,
+    )
+
+    answer = await answer_research_question(
+        database_url="postgresql://test",
+        session_id="session-1",
+        question="What evidence supports this claim?",
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=3,
+    )
+
+    assert "No citation evidence was found for this question." in answer.content
+    assert "uploaded papers" not in answer.content
+    assert answer.audit.status == "unsupported"
+
+
+@pytest.mark.asyncio
 async def test_answer_research_question_preserves_web_citation_source_type(monkeypatch):
     async def fake_search(*args, **kwargs):
         return [

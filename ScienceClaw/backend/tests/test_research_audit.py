@@ -222,7 +222,7 @@ def test_audit_evidence_claims_rejects_claim_without_explicit_citation_label():
 
 def test_audit_evidence_claims_marks_answer_without_citations_as_unsupported():
     audit = audit_evidence_claims(
-        answer_content="No citation evidence was found in the uploaded papers for this question.",
+        answer_content="No citation evidence was found for this question.",
         citations=[],
     )
 

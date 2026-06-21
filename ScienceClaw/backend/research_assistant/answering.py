@@ -151,7 +151,7 @@ async def answer_research_question(
 def _compose_extractive_answer(citations: list[ResearchCitation]) -> str:
     if not citations:
         return (
-            "No citation evidence was found in the uploaded papers for this question. "
+            "No citation evidence was found for this question. "
             "I cannot answer it as a cited research claim yet."
         )
     lines = ["Based on citation evidence:"]
