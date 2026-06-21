@@ -1137,6 +1137,9 @@ def _normalize_passed_tool_validation(
         return_schema = payload.get("result_schema")
     if not isinstance(return_schema, dict) or not return_schema:
         return None
+    input_schema = payload.get("input_schema")
+    if not isinstance(input_schema, dict) or not input_schema:
+        return None
     execution_environment = payload.get("execution_environment")
     if not isinstance(execution_environment, dict) or not execution_environment.get("type"):
         return None
@@ -1152,6 +1155,7 @@ def _normalize_passed_tool_validation(
         "validated_at": str(payload.get("validated_at") or ""),
         "execution_environment": execution_environment,
         "source_sha256": source_sha256,
+        "input_schema": input_schema,
         "return_schema": return_schema,
     }
 
@@ -1187,6 +1191,9 @@ def _passed_tool_validation_failure_detail(payload: Dict[str, Any], *, source: s
     return_schema = payload.get("return_schema") or payload.get("result_schema")
     if not isinstance(return_schema, dict) or not return_schema:
         return "Tool validation must include a non-empty return schema before it can be saved"
+    input_schema = payload.get("input_schema")
+    if not isinstance(input_schema, dict) or not input_schema:
+        return "Tool validation must include a non-empty input schema before it can be saved"
     execution_environment = payload.get("execution_environment")
     if not isinstance(execution_environment, dict) or not execution_environment.get("type"):
         return "Tool validation must include an execution environment before it can be saved"
@@ -1338,6 +1345,8 @@ async def validate_tool_from_session(
             "validation_status": validation_status,
             "checks": payload.get("checks", []),
         }
+        if payload.get("input_schema"):
+            metadata["input_schema"] = payload["input_schema"]
         if payload.get("return_schema"):
             metadata["return_schema"] = payload["return_schema"]
         if payload.get("error"):

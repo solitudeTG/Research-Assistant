@@ -30,8 +30,16 @@ def test_validate_staged_tool_writes_passed_sidecar_with_return_schema(tmp_path)
         "python_syntax",
         "tool_function",
         "example_call",
+        "input_schema",
         "return_schema",
     ]
+    assert payload["input_schema"] == {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string"},
+        },
+        "required": ["query"],
+    }
     assert payload["return_schema"] == {
         "type": "object",
         "properties": {

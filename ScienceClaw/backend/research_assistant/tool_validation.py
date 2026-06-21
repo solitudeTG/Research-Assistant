@@ -63,6 +63,74 @@ def _schema_for_value(value: Any) -> Dict[str, Any]:
     return {"type": "string"}
 
 
+def _schema_for_annotation(annotation: ast.expr | None) -> Dict[str, Any]:
+    if annotation is None:
+        return {"type": "string"}
+    if isinstance(annotation, ast.Name):
+        return _schema_for_annotation_name(annotation.id)
+    if isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
+        return _schema_for_annotation_name(annotation.value)
+    if isinstance(annotation, ast.Subscript):
+        return _schema_for_subscript_annotation(annotation)
+    return {"type": "string"}
+
+
+def _schema_for_annotation_name(name: str) -> Dict[str, Any]:
+    normalized = name.lower()
+    if normalized in {"str", "string"}:
+        return {"type": "string"}
+    if normalized == "int":
+        return {"type": "integer"}
+    if normalized == "float":
+        return {"type": "number"}
+    if normalized == "bool":
+        return {"type": "boolean"}
+    if normalized in {"dict", "mapping"}:
+        return {"type": "object"}
+    if normalized in {"list", "sequence"}:
+        return {"type": "array", "items": {}}
+    return {"type": "string"}
+
+
+def _schema_for_subscript_annotation(annotation: ast.Subscript) -> Dict[str, Any]:
+    base_name = ""
+    if isinstance(annotation.value, ast.Name):
+        base_name = annotation.value.id.lower()
+    if base_name in {"list", "sequence"}:
+        return {"type": "array", "items": _schema_for_annotation(annotation.slice)}
+    if base_name in {"dict", "mapping"}:
+        return {"type": "object"}
+    return _schema_for_annotation_name(base_name)
+
+
+def _input_schema_for_function(function: ast.FunctionDef) -> Dict[str, Any]:
+    properties: Dict[str, Any] = {}
+    required: list[str] = []
+    positional_args = list(function.args.args)
+    defaults_by_arg = {
+        arg.arg
+        for arg in positional_args[len(positional_args) - len(function.args.defaults) :]
+    }
+
+    for arg in positional_args:
+        if arg.arg in {"self", "cls"}:
+            continue
+        properties[arg.arg] = _schema_for_annotation(arg.annotation)
+        if arg.arg not in defaults_by_arg:
+            required.append(arg.arg)
+
+    for index, arg in enumerate(function.args.kwonlyargs):
+        properties[arg.arg] = _schema_for_annotation(arg.annotation)
+        if function.args.kw_defaults[index] is None:
+            required.append(arg.arg)
+
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": required,
+    }
+
+
 def _write_sidecar(staging_dir: Path, tool_name: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     sidecar = staging_dir / f"{tool_name}.validation.json"
     sidecar.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -165,6 +233,9 @@ def validate_staged_tool(
         )
     checks.append("example_call")
 
+    input_schema = _input_schema_for_function(tool_function)
+    checks.append("input_schema")
+
     return_schema = _schema_for_value(result)
     checks.append("return_schema")
 
@@ -175,6 +246,7 @@ def validate_staged_tool(
             **base_payload,
             "status": "passed",
             "checks": checks,
+            "input_schema": input_schema,
             "return_schema": return_schema,
             "example_output": result,
         },
