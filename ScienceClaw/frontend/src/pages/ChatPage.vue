@@ -160,6 +160,44 @@
                   </div>
                 </PopoverContent>
               </Popover>
+              <Popover>
+                <PopoverTrigger>
+                  <button
+                    class="h-8 rounded-xl inline-flex items-center justify-center gap-1.5 border px-2.5 text-xs font-semibold hover:shadow-sm transition-all duration-200"
+                    :class="activeResearchToolPacks.length > 0
+                      ? 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-300'
+                      : 'border-gray-200 bg-white text-[var(--text-secondary)] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'"
+                    title="Research tool packs">
+                    <Wrench :size="14" />
+                    <span class="hidden sm:inline">{{ researchToolPackSummary }}</span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent class="w-[340px] p-0 overflow-hidden bg-[var(--background-white-main)] border border-[var(--border-light)] shadow-xl rounded-xl" align="end" :side-offset="8">
+                  <div class="px-4 py-3 border-b border-[var(--border-light)]">
+                    <div class="text-sm font-semibold text-[var(--text-primary)]">Research tool packs</div>
+                    <div class="text-xs text-[var(--text-tertiary)]">Literature, evidence, reporting, memory</div>
+                  </div>
+                  <div class="p-2">
+                    <button
+                      v-for="toolPack in researchToolPackOptions"
+                      :key="toolPack.id"
+                      @click="toggleResearchToolPack(toolPack.id)"
+                      class="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-[var(--fill-tsp-gray-main)]">
+                      <span
+                        class="h-4 w-4 rounded border inline-flex items-center justify-center flex-shrink-0"
+                        :class="selectedResearchToolPacks.includes(toolPack.id)
+                          ? 'border-sky-500 bg-sky-500 text-white'
+                          : 'border-[var(--border-light)] text-transparent'">
+                        <Check :size="12" />
+                      </span>
+                      <span class="min-w-0 flex-1">
+                        <span class="block text-sm font-medium text-[var(--text-primary)]">{{ toolPack.label }}</span>
+                        <span class="block text-xs text-[var(--text-tertiary)] truncate">{{ toolPack.researchWorkflow }}</span>
+                      </span>
+                    </button>
+                  </div>
+                </PopoverContent>
+              </Popover>
               <button v-if="researchModeAvailable" @click="toggleResearchMode"
                 class="h-8 rounded-xl inline-flex items-center justify-center gap-1.5 border px-2.5 text-xs font-semibold hover:shadow-sm transition-all duration-200"
                 :class="researchModeEnabled
@@ -435,7 +473,26 @@ const {
 
 const { groupedMessages } = useMessageGrouper(messages);
 
-const activeResearchToolPacks = computed<string[]>(() => []);
+const researchToolPackOptions = [
+  { id: 'literature', label: 'Literature', researchWorkflow: 'Literature management' },
+  { id: 'evidence', label: 'Evidence audit', researchWorkflow: 'Evidence inspection and audit' },
+  { id: 'reporting', label: 'Reporting', researchWorkflow: 'Research artifact generation' },
+  { id: 'memory', label: 'Memory', researchWorkflow: 'Context-only research memory' },
+] as const;
+
+const selectedResearchToolPacks = ref<string[]>([]);
+const activeResearchToolPacks = computed<string[]>(() => [...selectedResearchToolPacks.value]);
+const researchToolPackSummary = computed(() => {
+  const count = activeResearchToolPacks.value.length;
+  return count > 0 ? `${count} packs` : 'Tools off';
+});
+
+const toggleResearchToolPack = (packId: string) => {
+  if (!researchToolPackOptions.some((toolPack) => toolPack.id === packId)) return;
+  selectedResearchToolPacks.value = selectedResearchToolPacks.value.includes(packId)
+    ? selectedResearchToolPacks.value.filter((selected) => selected !== packId)
+    : [...selectedResearchToolPacks.value, packId];
+};
 
 // 最后一个 process 组的索引（推理失败时会先 push 一条 assistant 消息，此时最后一组不是 process，需用此判断当前轮次的 process 组）
 const lastProcessGroupIndex = computed(() => {

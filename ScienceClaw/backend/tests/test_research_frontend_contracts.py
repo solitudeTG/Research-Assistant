@@ -103,3 +103,11 @@ def test_chat_request_can_activate_research_tool_packs():
 
     assert "active_tool_packs?: string[]" in agent_api
     assert "active_tool_packs: activeResearchToolPacks.value" in chat_page
+    assert "researchToolPackOptions" in chat_page
+    assert "{ id: 'literature'" in chat_page
+    assert "{ id: 'evidence'" in chat_page
+    assert "{ id: 'reporting'" in chat_page
+    assert "{ id: 'memory'" in chat_page
+    assert "selectedResearchToolPacks" in chat_page
+    assert "toggleResearchToolPack" in chat_page
+    assert "computed<string[]>(() => [])" not in chat_page
