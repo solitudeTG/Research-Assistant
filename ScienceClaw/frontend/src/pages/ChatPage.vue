@@ -1220,7 +1220,7 @@ const researchChat = async (message: string) => {
     activateResearchMode();
   } catch (error) {
     console.error('Research answer error:', error);
-    showErrorToast(t('Failed to answer from paper evidence'));
+    showErrorToast(t('Failed to answer from citation evidence'));
     isLoading.value = false;
     lastTurnHadError.value = true;
   } finally {

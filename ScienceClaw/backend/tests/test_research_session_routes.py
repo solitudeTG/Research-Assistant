@@ -37,6 +37,28 @@ class FakeStorageSummary:
         self.evidence_record_count = evidence_record_count
 
 
+def test_research_answer_and_report_routes_use_citation_evidence_wording():
+    sessions_source = (
+        Path(__file__).resolve().parents[1]
+        / "route"
+        / "sessions.py"
+    ).read_text(encoding="utf-8")
+
+    assert "Research question grounded in citation evidence" in sessions_source
+    assert "Research question or note topic grounded in citation evidence" in sessions_source
+    assert "Answer a question using citation evidence from the research store." in sessions_source
+    assert 'description="Retrieving citation evidence"' in sessions_source
+    assert "Generate a Markdown research artifact using citation evidence and context memory." in sessions_source
+    assert 'description="Generating Markdown research artifact from citation evidence"' in sessions_source
+
+    assert "Research question grounded in uploaded papers" not in sessions_source
+    assert "Research question or note topic grounded in uploaded papers" not in sessions_source
+    assert "using only citation evidence from uploaded papers" not in sessions_source
+    assert "Retrieving citation evidence from uploaded papers" not in sessions_source
+    assert "using only uploaded paper evidence" not in sessions_source
+    assert "Generating Markdown research artifact from uploaded paper evidence" not in sessions_source
+
+
 def _load_sessions_module(monkeypatch):
     async def unused_async(*args, **kwargs):
         raise AssertionError("unexpected ScienceClaw session dependency call")

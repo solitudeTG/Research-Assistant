@@ -139,12 +139,12 @@ class ChatRequest(BaseModel):
 
 
 class ResearchAnswerRequest(BaseModel):
-    question: str = Field(..., description="Research question grounded in uploaded papers")
+    question: str = Field(..., description="Research question grounded in citation evidence")
     limit: int = Field(default=5, ge=1, le=20, description="Maximum evidence chunks to cite")
 
 
 class ResearchReportRequest(BaseModel):
-    question: str = Field(..., description="Research question or note topic grounded in uploaded papers")
+    question: str = Field(..., description="Research question or note topic grounded in citation evidence")
     limit: int = Field(default=8, ge=1, le=20, description="Maximum evidence chunks to include")
 
 
@@ -2121,7 +2121,7 @@ async def answer_research_question_for_session(
     body: ResearchAnswerRequest,
     current_user: User = Depends(require_user),
 ) -> ApiResponse:
-    """Answer a question using only citation evidence from uploaded papers."""
+    """Answer a question using citation evidence from the research store."""
     try:
         session = await async_get_science_session(session_id)
         if session.user_id != current_user.id:
@@ -2142,7 +2142,7 @@ async def answer_research_question_for_session(
         retrieval_started = _research_upload_step_event(
             step_id=step_id,
             status="running",
-            description="Retrieving citation evidence from uploaded papers",
+            description="Retrieving citation evidence",
             metadata={"question": body.question, "limit": body.limit},
         )
         _append_session_event(session, retrieval_started)
@@ -2436,7 +2436,7 @@ async def generate_research_report_for_session(
     body: ResearchReportRequest,
     current_user: User = Depends(require_user),
 ) -> ApiResponse:
-    """Generate a Markdown research artifact using only uploaded paper evidence."""
+    """Generate a Markdown research artifact using citation evidence and context memory."""
     try:
         session = await async_get_science_session(session_id)
         if session.user_id != current_user.id:
@@ -2459,7 +2459,7 @@ async def generate_research_report_for_session(
         report_started = _research_upload_step_event(
             step_id=step_id,
             status="running",
-            description="Generating Markdown research artifact from uploaded paper evidence",
+            description="Generating Markdown research artifact from citation evidence",
             metadata={"question": body.question, "limit": body.limit},
         )
         _append_session_event(session, report_started)

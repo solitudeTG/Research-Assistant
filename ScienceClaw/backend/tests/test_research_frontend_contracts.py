@@ -111,3 +111,16 @@ def test_chat_request_can_activate_research_tool_packs():
     assert "selectedResearchToolPacks" in chat_page
     assert "toggleResearchToolPack" in chat_page
     assert "computed<string[]>(() => [])" not in chat_page
+
+
+def test_chat_answer_error_uses_citation_evidence_wording():
+    chat_page = (
+        Path(__file__).resolve().parents[2]
+        / "frontend"
+        / "src"
+        / "pages"
+        / "ChatPage.vue"
+    ).read_text(encoding="utf-8")
+
+    assert "Failed to answer from citation evidence" in chat_page
+    assert "Failed to answer from paper evidence" not in chat_page
