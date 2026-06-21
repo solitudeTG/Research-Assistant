@@ -117,6 +117,10 @@ def _compose_markdown_report(
         f"- Generated at: `{generated_at}`",
         "- Evidence scope: uploaded papers only",
         "",
+        "## Trust Summary",
+        "",
+        *_compose_trust_summary_lines(answer),
+        "",
         "## Research Question",
         "",
         question.strip(),
@@ -177,6 +181,18 @@ def _compose_markdown_report(
         ]
     )
     return "\n".join(lines)
+
+
+def _compose_trust_summary_lines(answer: ResearchAnswer) -> list[str]:
+    return [
+        f"- Audit status: `{answer.audit.status}`",
+        f"- Approved claims: {answer.audit.approved_claim_count} / {answer.audit.claim_count}",
+        f"- Unsupported claims: {answer.audit.unsupported_claim_count}",
+        f"- Invalid-source claims: {answer.audit.invalid_source_count}",
+        f"- Citation evidence records: {answer.citation_count}",
+        f"- Context-only memory records: {answer.context_memory_count}",
+        "- Use the Evidence-Grounded Answer section only after checking Claim Checks.",
+    ]
 
 
 def _build_evidence_map(*, report_id: str, answer: ResearchAnswer) -> dict:

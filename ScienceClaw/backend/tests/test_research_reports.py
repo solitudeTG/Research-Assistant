@@ -86,6 +86,12 @@ async def test_generate_markdown_research_report_writes_artifact_and_evidence_ma
 
     assert report.citation_count == 1
     assert "Evidence scope: uploaded papers only" in markdown
+    assert "## Trust Summary" in markdown
+    assert "- Audit status: `approved`" in markdown
+    assert "- Approved claims: 1 / 1" in markdown
+    assert "- Citation evidence records: 1" in markdown
+    assert "- Context-only memory records: 1" in markdown
+    assert "- Use the Evidence-Grounded Answer section only after checking Claim Checks." in markdown
     assert "Evidence Audit" in markdown
     assert "Status: `approved`" in markdown
     assert "### Claim Checks" in markdown
