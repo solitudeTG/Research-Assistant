@@ -141,6 +141,17 @@ def test_activity_panel_surfaces_runtime_result_summary():
     assert "citation_evidence" in activity_panel
 
 
+def test_tool_panel_surfaces_runtime_result_summary():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    tool_panel = (frontend_root / "components" / "ToolPanelContent.vue").read_text(encoding="utf-8")
+
+    assert "runtime_result_summary" in tool_panel
+    assert "Runtime summary" in tool_panel
+    assert "result_sha256" in tool_panel
+    assert "context_boundary" in tool_panel
+    assert "citation_evidence" in tool_panel
+
+
 def test_chat_answer_error_uses_citation_evidence_wording():
     chat_page = (
         Path(__file__).resolve().parents[2]

@@ -74,6 +74,20 @@
               <div class="text-[11px] text-[var(--text-tertiary)] mb-1.5 uppercase tracking-wider font-medium">Output</div>
               <pre class="text-[12px] leading-relaxed whitespace-pre-wrap break-words text-[var(--text-secondary)] bg-[var(--fill-tsp-gray-main)] rounded-lg px-3 py-2 border border-[var(--border-light)] max-h-[400px] overflow-y-auto">{{ contentJson }}</pre>
             </div>
+            <div v-if="toolContent.runtime_result_summary">
+              <div class="text-[11px] text-[var(--text-tertiary)] mb-1.5 uppercase tracking-wider font-medium">Runtime summary</div>
+              <div class="text-[12px] leading-relaxed text-[var(--text-secondary)] bg-[var(--fill-tsp-gray-main)] rounded-lg px-3 py-2 border border-[var(--border-light)]">
+                <div class="flex flex-wrap gap-x-3 gap-y-1 font-mono text-[11px] text-[var(--text-tertiary)]">
+                  <span>kind={{ toolContent.runtime_result_summary.kind }}</span>
+                  <span>result_sha256={{ toolContent.runtime_result_summary.result_sha256.slice(0, 12) }}</span>
+                  <span>context_boundary={{ toolContent.runtime_result_summary.context_boundary }}</span>
+                  <span>citation_evidence={{ toolContent.runtime_result_summary.citation_evidence }}</span>
+                  <span v-if="toolContent.runtime_result_summary.tool_pack?.label">pack={{ toolContent.runtime_result_summary.tool_pack.label }}</span>
+                  <span v-if="toolContent.runtime_result_summary.truncated">truncated=true</span>
+                </div>
+                <pre class="mt-1 whitespace-pre-wrap break-words font-mono max-h-[180px] overflow-y-auto">{{ runtimeSummaryPreviewJson }}</pre>
+              </div>
+            </div>
             <!-- 空状态 -->
             <div v-if="toolContent.status === 'calling' && !toolContent.content" class="text-sm text-[var(--text-tertiary)] py-8 text-center flex flex-col items-center gap-2">
               <div class="w-5 h-5 border-2 border-[var(--border-light)] border-t-[var(--text-tertiary)] rounded-full animate-spin"></div>
@@ -154,6 +168,7 @@ const safeStringify = (value: any): string => {
 
 const argsJson = computed(() => safeStringify(props.toolContent?.args));
 const contentJson = computed(() => safeStringify(props.toolContent?.content));
+const runtimeSummaryPreviewJson = computed(() => safeStringify(props.toolContent?.runtime_result_summary?.preview));
 
 const emit = defineEmits<{
   (e: 'jumpToRealTime'): void,
