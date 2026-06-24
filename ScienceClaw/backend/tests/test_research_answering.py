@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+
 import pytest
 
 from backend.research_assistant.answering import answer_research_question
@@ -262,6 +264,70 @@ async def test_answer_research_question_marks_conflicting_context_memory(monkeyp
     assert "conflicts with context-only memory" in memories["mem-avoid"]["recall_reason"]
     assert answer.citation_count == 0
     assert answer.audit.status == "unsupported"
+
+
+@pytest.mark.asyncio
+async def test_answer_research_question_applies_age_decay_to_context_memory(monkeypatch):
+    async def fake_search(*args, **kwargs):
+        return []
+
+    async def fake_list_memory(*args, **kwargs):
+        now = datetime.now(timezone.utc)
+
+        class Memory:
+            def __init__(self, *, memory_id, created_at):
+                self.memory_id = memory_id
+                self.layer = "l2"
+                self.title = "Hybrid retrieval preference"
+                self.content = "Prefer hybrid retrieval for literature review synthesis."
+                self.source_type = "memory"
+                self.context_only = True
+                self.source_subject_type = "answer"
+                self.source_subject_id = memory_id.replace("mem-", "answer-")
+                self.created_at = created_at
+
+            def to_context_dict(self):
+                return {
+                    "memory_id": self.memory_id,
+                    "layer": self.layer,
+                    "title": self.title,
+                    "content": self.content,
+                    "source_type": self.source_type,
+                    "context_only": self.context_only,
+                    "source_subject_type": self.source_subject_type,
+                    "source_subject_id": self.source_subject_id,
+                }
+
+        return [
+            Memory(memory_id="mem-old", created_at=now - timedelta(days=720)),
+            Memory(memory_id="mem-recent", created_at=now - timedelta(days=2)),
+        ]
+
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.hybrid_search_evidence_in_database",
+        fake_search,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_memory_entries_from_database",
+        fake_list_memory,
+    )
+
+    answer = await answer_research_question(
+        database_url="postgresql://test",
+        session_id="session-1",
+        question="Should we prefer hybrid retrieval for literature review synthesis?",
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=3,
+    )
+
+    memories = answer.to_dict()["context_memory"]
+    assert [memory["memory_id"] for memory in memories] == ["mem-recent", "mem-old"]
+    assert memories[0]["relevance_score"] > memories[1]["relevance_score"]
+    assert memories[1]["memory_age_days"] >= 700
+    assert memories[1]["memory_decay_factor"] < memories[0]["memory_decay_factor"]
+    assert "age decay" in memories[1]["recall_reason"]
+    assert all(memory["source_type"] == "memory" and memory["context_only"] is True for memory in memories)
 
 
 @pytest.mark.asyncio
