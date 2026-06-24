@@ -175,6 +175,11 @@ class DatabaseEvidenceIngestRequest(BaseModel):
     chunks: List[DatabaseEvidenceChunkRequest] = Field(..., min_length=1, description="Source-identified database evidence chunks")
 
 
+class RuntimeResultAuditExportRequest(BaseModel):
+    tool_pack_id: Optional[str] = Field(default=None, description="Optional research tool pack id filter")
+    result_sha256: Optional[str] = Field(default=None, description="Optional stable runtime result hash filter")
+
+
 def _source_quality(source_type: str, identity: dict[str, Any]) -> dict[str, Any]:
     identity_fields = list(identity.keys())
     missing_fields = [field for field, value in identity.items() if not str(value or "").strip()]
@@ -2336,6 +2341,100 @@ async def list_runtime_result_audit_for_session(
         raise
     except Exception as exc:
         logger.exception("list_runtime_result_audit_for_session failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/{session_id}/research/runtime-results/export", response_model=ApiResponse)
+async def export_runtime_result_audit_for_session(
+    session_id: str,
+    body: RuntimeResultAuditExportRequest,
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """Write filtered process-trace runtime result summaries as a session artifact."""
+    try:
+        session = await async_get_science_session(session_id)
+        if session.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        workspace_dir = _Path(session.vm_root_dir)
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        pre_file_snapshot = _snapshot_workspace_files(workspace_dir)
+
+        runtime_results = _runtime_result_audit_items(
+            getattr(session, "events", []),
+            tool_pack_id=body.tool_pack_id,
+            result_sha256=body.result_sha256,
+        )
+        export_manifest = _runtime_result_export_manifest(
+            session_id=session_id,
+            runtime_results=runtime_results,
+            tool_pack_id=body.tool_pack_id,
+            result_sha256=body.result_sha256,
+        )
+        payload = {
+            "session_id": session_id,
+            "context_boundary": "process_trace",
+            "citation_evidence": False,
+            "export_manifest": export_manifest,
+            "runtime_results": runtime_results,
+        }
+
+        step_id = f"runtime-result-audit-export-{_new_event_id()}"
+        started = _research_upload_step_event(
+            step_id=step_id,
+            status="running",
+            description="Exporting runtime result audit process trace",
+            metadata={
+                "tool_pack_id": body.tool_pack_id,
+                "result_sha256": body.result_sha256,
+                "context_boundary": "process_trace",
+                "citation_evidence": False,
+            },
+        )
+        _append_session_event(session, started)
+        _publish_session_event(session_id, current_user.id, started)
+
+        artifact_path = workspace_dir / f"runtime-result-audit-{_new_event_id()}.json"
+        artifact_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+        post_file_snapshot = _snapshot_workspace_files(workspace_dir)
+        round_files = _diff_workspace_files(
+            pre_file_snapshot,
+            post_file_snapshot,
+            workspace_dir,
+            session_id,
+        )
+
+        completed = _research_upload_step_event(
+            step_id=step_id,
+            status="completed",
+            description="Runtime result audit process trace exported",
+            metadata={
+                **export_manifest,
+                "artifact_path": str(artifact_path),
+            },
+        )
+        await _append_save_publish_session_event(
+            session,
+            session_id=session_id,
+            user_id=current_user.id,
+            event=completed,
+        )
+
+        return ApiResponse(
+            data={
+                **payload,
+                "artifact_path": str(artifact_path),
+                "file_url": f"/api/v1/sessions/{session_id}/sandbox-file/download?path={artifact_path}",
+                "round_files": round_files,
+            }
+        )
+    except ScienceSessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("export_runtime_result_audit_for_session failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 

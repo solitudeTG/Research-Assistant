@@ -149,11 +149,15 @@ def test_agent_api_exposes_persisted_runtime_result_audit_view():
     assert "export interface RuntimeResultAudit" in agent_api
     assert "export interface RuntimeResultAuditExportManifest" in agent_api
     assert "export async function listRuntimeResultAudit" in agent_api
+    assert "export async function exportRuntimeResultAudit" in agent_api
     assert "filters?: RuntimeResultAuditFilters" in agent_api
     assert "tool_pack_id" in agent_api
     assert "result_sha256" in agent_api
     assert "export_manifest: RuntimeResultAuditExportManifest" in agent_api
+    assert "artifact_path: string" in agent_api
+    assert "round_files: RoundFileInfo[]" in agent_api
     assert "`/sessions/${sessionId}/research/runtime-results`" in agent_api
+    assert "`/sessions/${sessionId}/research/runtime-results/export`" in agent_api
     assert "context_boundary: 'process_trace'" in agent_api
     assert "citation_evidence: false" in agent_api
 

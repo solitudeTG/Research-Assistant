@@ -197,6 +197,12 @@ export interface RuntimeResultAudit {
   export_manifest: RuntimeResultAuditExportManifest;
 }
 
+export interface RuntimeResultAuditExport extends RuntimeResultAudit {
+  artifact_path: string;
+  file_url: string;
+  round_files: RoundFileInfo[];
+}
+
 export async function createSession(data: CreateSessionRequest): Promise<Session> {
   const response = await apiClient.put<ApiResponse<Session>>('/sessions', data);
   return response.data.data;
@@ -319,6 +325,17 @@ export async function listRuntimeResultAudit(
   const query = params.toString();
   const response = await apiClient.get<ApiResponse<RuntimeResultAudit>>(
     `${endpoint}${query ? `?${query}` : ''}`,
+  );
+  return response.data.data;
+}
+
+export async function exportRuntimeResultAudit(
+  sessionId: string,
+  filters?: RuntimeResultAuditFilters,
+): Promise<RuntimeResultAuditExport> {
+  const response = await apiClient.post<ApiResponse<RuntimeResultAuditExport>>(
+    `/sessions/${sessionId}/research/runtime-results/export`,
+    filters ?? {},
   );
   return response.data.data;
 }

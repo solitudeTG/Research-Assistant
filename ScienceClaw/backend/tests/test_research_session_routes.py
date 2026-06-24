@@ -268,6 +268,75 @@ async def test_runtime_result_audit_filters_and_exports_process_trace_manifest(m
 
 
 @pytest.mark.asyncio
+async def test_runtime_result_audit_export_writes_process_trace_artifact(monkeypatch, tmp_path):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession(vm_root_dir=tmp_path)
+    session.events = [
+        {
+            "event": "tool",
+            "data": {
+                "event_id": "evt-literature",
+                "timestamp": 11,
+                "tool_call_id": "tool-1",
+                "name": "paper_lookup",
+                "function": "paper_lookup",
+                "status": "called",
+                "runtime_result_summary": {
+                    "kind": "json",
+                    "preview": {"title": "Evidence boundaries"},
+                    "truncated": False,
+                    "result_sha256": "hash-literature",
+                    "context_boundary": "process_trace",
+                    "citation_evidence": False,
+                    "tool_pack": {"id": "literature", "label": "Literature"},
+                },
+            },
+        }
+    ]
+    published = []
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "_publish_session_event", lambda *args: published.append(args))
+
+    response = await sessions.export_runtime_result_audit_for_session(
+        "session-1",
+        sessions.RuntimeResultAuditExportRequest(
+            tool_pack_id="literature",
+            result_sha256="hash-literature",
+        ),
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    artifact_path = Path(response.data["artifact_path"])
+    assert artifact_path.is_file()
+    assert artifact_path.parent == tmp_path
+    assert artifact_path.name.startswith("runtime-result-audit-")
+    assert artifact_path.name.endswith(".json")
+    payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    assert payload["context_boundary"] == "process_trace"
+    assert payload["citation_evidence"] is False
+    assert payload["export_manifest"]["filters"] == {
+        "tool_pack_id": "literature",
+        "result_sha256": "hash-literature",
+    }
+    assert payload["runtime_results"][0]["event_id"] == "evt-literature"
+    assert response.data["round_files"][0]["filename"] == artifact_path.name
+    assert any(
+        event.get("event") == "step"
+        and event.get("data", {}).get("status") == "completed"
+        and event.get("data", {}).get("metadata", {}).get("context_boundary") == "process_trace"
+        and event.get("data", {}).get("metadata", {}).get("citation_evidence") is False
+        for event in session.events
+    )
+    assert session.save_count == 1
+    assert published
+
+
+@pytest.mark.asyncio
 async def test_research_web_evidence_ingest_persists_source_and_trace(monkeypatch):
     sessions = _load_sessions_module(monkeypatch)
     session = FakeSession()
