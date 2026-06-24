@@ -81,6 +81,7 @@ export interface ResearchAnswerMetadata {
   citation_count?: number;
   context_memory?: ResearchContextMemoryMetadata[];
   context_memory_count?: number;
+  context_memory_conflict_count?: number;
   audit?: ResearchAuditMetadata;
   report?: {
     report_id: string;

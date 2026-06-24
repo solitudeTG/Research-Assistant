@@ -56,8 +56,10 @@ def test_chat_message_surfaces_context_memory_conflicts():
     assert "memory.conflicts_with" in chat_message
     assert "memory_status?: 'active' | 'conflict'" in message_types
     assert "conflicts_with?: string[]" in message_types
+    assert "context_memory_conflict_count?: number" in message_types
     assert "memory_status?: 'active' | 'conflict'" in agent_api
     assert "conflicts_with?: string[]" in agent_api
+    assert "context_memory_conflict_count?: number" in agent_api
 
 
 def test_chat_page_sends_user_confirmation_for_tool_save():

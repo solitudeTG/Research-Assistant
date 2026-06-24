@@ -126,6 +126,7 @@ async def test_generate_markdown_research_report_writes_artifact_and_evidence_ma
         "invalid_source_count": 0,
         "citation_evidence_count": 1,
         "context_memory_count": 1,
+        "context_memory_conflict_count": 0,
         "usage_note": "Use the Evidence-Grounded Answer section only after checking Claim Checks.",
     }
     assert evidence["context_memory_count"] == 1
@@ -200,6 +201,7 @@ async def test_generate_markdown_research_report_surfaces_context_memory_conflic
 
     assert "| Memory | Layer | Score | Status | Conflicts With | Reason |" in markdown
     assert "| Retrieval preference | `l2` | `0.80` | `conflict` | mem-avoid | matched question terms: hybrid, retrieval. |" in markdown
+    assert "- Context-only memory conflicts: 1" in markdown
 
 
 @pytest.mark.asyncio

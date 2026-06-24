@@ -756,6 +756,8 @@ async def test_research_answer_trace_and_message_keep_memory_context_separate(mo
                     "source_subject_type": "answer",
                     "source_subject_id": "answer-1",
                     "recall_reason": "Stored l2 research memory for this session.",
+                    "memory_status": "conflict",
+                    "conflicts_with": ["mem-2"],
                 }
             ],
         )
@@ -776,6 +778,7 @@ async def test_research_answer_trace_and_message_keep_memory_context_separate(mo
 
     assert response.data["citation_count"] == 1
     assert response.data["context_memory_count"] == 1
+    assert response.data["context_memory_conflict_count"] == 1
     assert response.data["context_memory"][0]["source_type"] == "memory"
     assert response.data["context_memory"][0]["context_only"] is True
 
@@ -786,9 +789,11 @@ async def test_research_answer_trace_and_message_keep_memory_context_separate(mo
     ]
     assert completed_steps[-1]["metadata"]["citation_count"] == 1
     assert completed_steps[-1]["metadata"]["context_memory_count"] == 1
+    assert completed_steps[-1]["metadata"]["context_memory_conflict_count"] == 1
     assistant_research = session.events[-1]["data"]["metadata"]["research_assistant"]
     assert assistant_research["citations"][0]["source_type"] == "paper"
     assert assistant_research["context_memory"][0]["source_type"] == "memory"
+    assert assistant_research["context_memory_conflict_count"] == 1
 
 
 @pytest.mark.asyncio

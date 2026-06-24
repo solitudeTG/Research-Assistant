@@ -256,6 +256,8 @@ async def test_answer_research_question_marks_conflicting_context_memory(monkeyp
     )
 
     memories = {memory["memory_id"]: memory for memory in answer.to_dict()["context_memory"]}
+    assert answer.context_memory_conflict_count == 2
+    assert answer.to_dict()["context_memory_conflict_count"] == 2
     assert memories["mem-prefer"]["memory_status"] == "conflict"
     assert memories["mem-prefer"]["conflicts_with"] == ["mem-avoid"]
     assert memories["mem-avoid"]["memory_status"] == "conflict"

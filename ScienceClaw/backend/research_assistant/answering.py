@@ -87,6 +87,10 @@ class ResearchAnswer:
     def context_memory_count(self) -> int:
         return len(self.context_memory)
 
+    @property
+    def context_memory_conflict_count(self) -> int:
+        return sum(1 for memory in self.context_memory if memory.get("memory_status") == "conflict")
+
     def to_dict(self) -> dict:
         return {
             "answer_id": self.answer_id,
@@ -95,6 +99,7 @@ class ResearchAnswer:
             "citation_count": self.citation_count,
             "context_memory": self.context_memory,
             "context_memory_count": self.context_memory_count,
+            "context_memory_conflict_count": self.context_memory_conflict_count,
             "audit": self.audit.to_dict() if self.audit else {},
         }
 

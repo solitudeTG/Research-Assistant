@@ -197,6 +197,7 @@ def _compose_trust_summary_lines(answer: ResearchAnswer) -> list[str]:
         f"- Invalid-source claims: {summary['invalid_source_count']}",
         f"- Citation evidence records: {summary['citation_evidence_count']}",
         f"- Context-only memory records: {summary['context_memory_count']}",
+        f"- Context-only memory conflicts: {summary['context_memory_conflict_count']}",
         f"- {summary['usage_note']}",
     ]
 
@@ -210,6 +211,7 @@ def _build_trust_summary(answer: ResearchAnswer) -> dict:
         "invalid_source_count": answer.audit.invalid_source_count,
         "citation_evidence_count": answer.citation_count,
         "context_memory_count": answer.context_memory_count,
+        "context_memory_conflict_count": answer.context_memory_conflict_count,
         "usage_note": "Use the Evidence-Grounded Answer section only after checking Claim Checks.",
     }
 
@@ -223,6 +225,7 @@ def _build_evidence_map(*, report_id: str, answer: ResearchAnswer) -> dict:
         "trust_summary": _build_trust_summary(answer),
         "citation_count": answer.citation_count,
         "context_memory_count": answer.context_memory_count,
+        "context_memory_conflict_count": answer.context_memory_conflict_count,
         "context_memory": answer.context_memory,
         "evidence_gaps": _build_evidence_gaps(answer),
         "limitations": _build_limitations(answer),

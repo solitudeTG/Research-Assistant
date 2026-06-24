@@ -109,6 +109,7 @@ export interface ResearchAnswer {
   citation_count: number;
   context_memory?: ResearchContextMemory[];
   context_memory_count?: number;
+  context_memory_conflict_count?: number;
   audit?: ResearchAudit;
   question?: string;
 }
