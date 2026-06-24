@@ -46,7 +46,7 @@
               Recovered runtime audit
             </span>
             <span class="text-[10px] text-gray-400 dark:text-gray-500 font-bold tabular-nums ml-auto bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded-md">
-              {{ runtimeAuditItems.length }}
+              {{ visibleRuntimeAuditItems.length }}
             </span>
           </div>
           <div v-if="runtimeAuditExpanded" class="border-b border-gray-100 dark:border-gray-800 px-4 py-2 overflow-y-auto min-h-0 section-content-enter" style="flex: 0.7 1 0%; min-height: 44px;">
@@ -55,8 +55,16 @@
                 <span>context_boundary=process_trace</span>
                 <span>citation_evidence=false</span>
               </div>
+              <div v-if="runtimeAuditPackOptions.length > 1" class="runtime-audit-pack-filter flex flex-wrap gap-1 mb-2">
+                <button v-for="option in runtimeAuditPackOptions" :key="option.id"
+                  @click.stop="selectedRuntimeAuditPack = option.id"
+                  class="px-1.5 py-0.5 rounded-md border text-[10px] font-mono transition-colors"
+                  :class="selectedRuntimeAuditPack === option.id ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-800/50' : 'bg-[var(--background-menu-white)] text-[var(--text-tertiary)] border-[var(--border-light)] hover:text-[var(--text-secondary)]'">
+                  {{ option.label }} {{ option.count }}
+                </button>
+              </div>
               <div class="flex flex-col gap-2">
-                <div v-for="item in runtimeAuditItems" :key="item.event_id || item.tool_call_id"
+                <div v-for="item in visibleRuntimeAuditItems" :key="item.event_id || item.tool_call_id"
                   class="min-w-0 border-t border-[var(--border-light)] first:border-t-0 pt-2 first:pt-0">
                   <div class="flex items-center gap-2 min-w-0 font-mono text-[10px] text-[var(--text-tertiary)]">
                     <span class="text-[var(--text-secondary)] truncate">{{ item.function || item.name || item.tool_call_id }}</span>
@@ -64,7 +72,7 @@
                     <span>result_sha256={{ item.summary.result_sha256.slice(0, 12) }}</span>
                   </div>
                   <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] text-[var(--text-tertiary)]">
-                    <span v-if="item.summary.tool_pack?.label">pack={{ item.summary.tool_pack.label }}</span>
+                    <span>pack={{ item.summary.tool_pack?.label || 'Unpacked' }}</span>
                     <span v-if="item.summary.result_contract?.kind">contract={{ item.summary.result_contract.kind }}</span>
                     <span v-if="item.summary.truncated">truncated=true</span>
                   </div>
@@ -360,6 +368,7 @@ const thinkingExpanded = ref(true);
 const todosExpanded = ref(true);
 const toolsExpanded = ref(true);
 const runtimeAuditExpanded = ref(false);
+const selectedRuntimeAuditPack = ref('all');
 
 // Step filter: when a To-do step is selected, only show its associated tools
 const selectedStepId = ref<string | null>(null);
@@ -423,6 +432,38 @@ const toolItems = computed(() =>
 const runtimeAuditItems = computed(() =>
   props.runtimeAudit?.runtime_results ?? []
 );
+
+const runtimeAuditPackOptions = computed(() => {
+  const packCounts = new Map<string, { id: string; label: string; count: number }>();
+  for (const item of runtimeAuditItems.value) {
+    const id = item.summary.tool_pack?.id || 'unpacked';
+    const label = item.summary.tool_pack?.label || 'Unpacked';
+    const existing = packCounts.get(id);
+    if (existing) {
+      existing.count += 1;
+    } else {
+      packCounts.set(id, { id, label, count: 1 });
+    }
+  }
+  return [
+    { id: 'all', label: 'All packs', count: runtimeAuditItems.value.length },
+    ...Array.from(packCounts.values())
+  ];
+});
+
+const visibleRuntimeAuditItems = computed(() => {
+  if (selectedRuntimeAuditPack.value === 'all') return runtimeAuditItems.value;
+  return runtimeAuditItems.value.filter(
+    item => item.summary.tool_pack?.id === selectedRuntimeAuditPack.value ||
+      (!item.summary.tool_pack?.id && selectedRuntimeAuditPack.value === 'unpacked')
+  );
+});
+
+watch(runtimeAuditPackOptions, (options) => {
+  if (!options.some(option => option.id === selectedRuntimeAuditPack.value)) {
+    selectedRuntimeAuditPack.value = 'all';
+  }
+});
 
 const aggregatedThinkingContent = computed(() =>
   thinkingItems.value.map(i => (i.content || '').trim()).filter(Boolean).join('\n\n').replace(/\n{3,}/g, '\n\n')

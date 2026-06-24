@@ -179,6 +179,19 @@ def test_activity_panel_surfaces_recovered_runtime_audit_details():
     assert "safeStringify(item.summary.preview)" in activity_panel
 
 
+def test_activity_panel_filters_recovered_runtime_audit_by_tool_pack():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    activity_panel = (frontend_root / "components" / "ActivityPanel.vue").read_text(encoding="utf-8")
+
+    assert "selectedRuntimeAuditPack" in activity_panel
+    assert "runtimeAuditPackOptions" in activity_panel
+    assert "visibleRuntimeAuditItems" in activity_panel
+    assert "runtime-audit-pack-filter" in activity_panel
+    assert "All packs" in activity_panel
+    assert "item.summary.tool_pack?.id === selectedRuntimeAuditPack" in activity_panel
+    assert "pack={{ item.summary.tool_pack?.label || 'Unpacked' }}" in activity_panel
+
+
 def test_tool_panel_surfaces_runtime_result_summary():
     frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
     tool_panel = (frontend_root / "components" / "ToolPanelContent.vue").read_text(encoding="utf-8")
