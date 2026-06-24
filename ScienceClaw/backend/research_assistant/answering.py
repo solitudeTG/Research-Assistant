@@ -40,6 +40,7 @@ _RECALL_STOP_WORDS = {
     "work",
 }
 _MEMORY_NEGATION_TERMS = {"avoid", "cannot", "don't", "dont", "never", "no", "not", "reject", "without"}
+_MEMORY_RELEVANCE_THRESHOLD = 0.3
 _MEMORY_DECAY_HALF_LIFE_DAYS = 180
 _MEMORY_DECAY_FLOOR = 0.25
 
@@ -183,7 +184,7 @@ async def _load_context_memory(
         if context.get("source_type") != "memory" or context.get("context_only") is not True:
             continue
         relevance_score, matched_terms = _memory_relevance(question=question, context=context)
-        if relevance_score <= 0:
+        if relevance_score < _MEMORY_RELEVANCE_THRESHOLD:
             continue
         memory_age_days = _memory_age_days(getattr(memory, "created_at", None))
         memory_decay_factor = _memory_decay_factor(memory_age_days)
@@ -192,11 +193,13 @@ async def _load_context_memory(
             {
                 **context,
                 "relevance_score": decayed_score,
+                "relevance_threshold": _MEMORY_RELEVANCE_THRESHOLD,
                 "memory_age_days": memory_age_days,
                 "memory_decay_factor": memory_decay_factor,
                 "recall_reason": _memory_recall_reason(
                     context=context,
                     matched_terms=matched_terms,
+                    relevance_threshold=_MEMORY_RELEVANCE_THRESHOLD,
                     memory_age_days=memory_age_days,
                     memory_decay_factor=memory_decay_factor,
                 ),
@@ -295,6 +298,7 @@ def _memory_recall_reason(
     *,
     context: dict,
     matched_terms: list[str],
+    relevance_threshold: float,
     memory_age_days: int | None = None,
     memory_decay_factor: float = 1.0,
 ) -> str:
@@ -314,4 +318,5 @@ def _memory_recall_reason(
     if memory_age_days is not None and memory_decay_factor < 1:
         decay_text = f"; age decay {memory_age_days}d x{memory_decay_factor:.2f}"
 
-    return f"{layer} memory recalled for this session; {match_text}{source_text}{decay_text}."
+    threshold_text = f"; threshold>={relevance_threshold:.2f}"
+    return f"{layer} memory recalled for this session; {match_text}{threshold_text}{source_text}{decay_text}."
