@@ -51,9 +51,18 @@
           </div>
           <div v-if="runtimeAuditExpanded" class="border-b border-gray-100 dark:border-gray-800 px-4 py-2 overflow-y-auto min-h-0 section-content-enter" style="flex: 0.7 1 0%; min-height: 44px;">
             <div class="text-[11px] leading-[1.5] text-[var(--text-secondary)] bg-[var(--fill-tsp-gray-main)] rounded-lg px-3 py-2 border border-[var(--border-light)]">
-              <div class="flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] text-[var(--text-tertiary)] mb-1.5">
+              <div class="flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] text-[var(--text-tertiary)] mb-1.5">
                 <span>context_boundary=process_trace</span>
                 <span>citation_evidence=false</span>
+                <button
+                  type="button"
+                  class="runtime-audit-export ml-auto inline-flex items-center gap-1 rounded-md border border-[var(--border-light)] bg-[var(--background-menu-white)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-secondary)] transition-colors hover:border-emerald-200 hover:text-emerald-700 dark:hover:border-emerald-800/50 dark:hover:text-emerald-300"
+                  title="Export runtime audit"
+                  @click.stop="handleRuntimeAuditExport"
+                >
+                  <DownloadIcon :size="11" />
+                  <span>Export</span>
+                </button>
               </div>
               <div v-if="runtimeAuditPackOptions.length > 1" class="runtime-audit-pack-filter flex flex-wrap gap-1 mb-2">
                 <button v-for="option in runtimeAuditPackOptions" :key="option.id"
@@ -306,7 +315,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch, nextTick, onMounted, onUnmounted } from 'vue';
-import { X as XIcon, ChevronRight as ChevronRightIcon, Zap as ZapIcon, Lightbulb, ListChecks, Wrench as WrenchIcon, ShieldCheck } from 'lucide-vue-next';
+import { X as XIcon, ChevronRight as ChevronRightIcon, Zap as ZapIcon, Lightbulb, ListChecks, Wrench as WrenchIcon, ShieldCheck, Download as DownloadIcon } from 'lucide-vue-next';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
@@ -314,7 +323,7 @@ import LoadingSpinnerIcon from './icons/LoadingSpinnerIcon.vue';
 import SandboxPreview from './SandboxPreview.vue';
 import type { ToolContent } from '../types/message';
 import type { PlanEventData } from '../types/event';
-import type { RuntimeResultAudit } from '../api/agent';
+import type { RuntimeResultAudit, RuntimeResultAuditFilters } from '../api/agent';
 import type { SandboxPreviewMode } from '../utils/sandbox';
 import { getPreviewMode } from '../utils/sandbox';
 import { useResizeObserver } from '../composables/useResizeObserver';
@@ -341,6 +350,7 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   (e: 'toolClick', tool: ToolContent): void;
   (e: 'close'): void;
+  (e: 'exportRuntimeAudit', filters: RuntimeResultAuditFilters): void;
 }>();
 
 const panelRef = ref<HTMLElement>();
@@ -458,6 +468,13 @@ const visibleRuntimeAuditItems = computed(() => {
       (!item.summary.tool_pack?.id && selectedRuntimeAuditPack.value === 'unpacked')
   );
 });
+
+const handleRuntimeAuditExport = () => {
+  const filters: RuntimeResultAuditFilters = selectedRuntimeAuditPack.value === 'all'
+    ? {}
+    : { tool_pack_id: selectedRuntimeAuditPack.value };
+  emit('exportRuntimeAudit', filters);
+};
 
 watch(runtimeAuditPackOptions, (options) => {
   if (!options.some(option => option.id === selectedRuntimeAuditPack.value)) {

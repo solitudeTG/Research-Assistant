@@ -346,6 +346,7 @@
         :lastTurnHadError="lastTurnHadError"
         :runtimeAudit="runtimeResultAudit"
         @toolClick="handleToolClick"
+        @exportRuntimeAudit="handleRuntimeAuditExport"
         @close="() => {}"
       />
       <!-- Tool Detail Panel (opens on top when a tool is clicked) -->
@@ -533,6 +534,7 @@ const savingTool = ref(false);
 const sourceEvidenceOpen = ref(false);
 const sourceEvidenceKind = ref<'web' | 'database'>('web');
 const sourceEvidenceSubmitting = ref(false);
+const runtimeAuditExporting = ref(false);
 const webEvidenceForm = reactive({
   title: '',
   url: '',
@@ -1129,6 +1131,22 @@ const refreshRuntimeResultAudit = async (targetSessionId: string) => {
   } catch (error) {
     console.warn('Failed to load runtime result audit:', error);
     runtimeResultAudit.value = null;
+  }
+};
+
+const handleRuntimeAuditExport = async (filters: agentApi.RuntimeResultAuditFilters = {}) => {
+  if (!sessionId.value || runtimeAuditExporting.value) return;
+  runtimeAuditExporting.value = true;
+  try {
+    await agentApi.exportRuntimeResultAudit(sessionId.value, filters);
+    await refreshRuntimeResultAudit(sessionId.value);
+    showFileListPanel();
+    showSuccessToast(t('Runtime audit exported'));
+  } catch (error) {
+    console.warn('Failed to export runtime audit:', error);
+    showErrorToast(t('Failed to export runtime audit'));
+  } finally {
+    runtimeAuditExporting.value = false;
   }
 };
 

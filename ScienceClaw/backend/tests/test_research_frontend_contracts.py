@@ -201,6 +201,19 @@ def test_activity_panel_filters_recovered_runtime_audit_by_tool_pack():
     assert "pack={{ item.summary.tool_pack?.label || 'Unpacked' }}" in activity_panel
 
 
+def test_activity_panel_can_export_recovered_runtime_audit_artifact():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    chat_page = (frontend_root / "pages" / "ChatPage.vue").read_text(encoding="utf-8")
+    activity_panel = (frontend_root / "components" / "ActivityPanel.vue").read_text(encoding="utf-8")
+
+    assert "runtime-audit-export" in activity_panel
+    assert "@click.stop=\"handleRuntimeAuditExport\"" in activity_panel
+    assert "emit('exportRuntimeAudit'" in activity_panel
+    assert "@exportRuntimeAudit=\"handleRuntimeAuditExport\"" in chat_page
+    assert "agentApi.exportRuntimeResultAudit" in chat_page
+    assert "refreshRuntimeResultAudit(sessionId.value)" in chat_page
+
+
 def test_tool_panel_surfaces_runtime_result_summary():
     frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
     tool_panel = (frontend_root / "components" / "ToolPanelContent.vue").read_text(encoding="utf-8")
