@@ -55,12 +55,23 @@
                 <span>context_boundary=process_trace</span>
                 <span>citation_evidence=false</span>
               </div>
-              <div class="flex flex-col gap-1">
+              <div class="flex flex-col gap-2">
                 <div v-for="item in runtimeAuditItems" :key="item.event_id || item.tool_call_id"
-                  class="flex items-center gap-2 min-w-0 font-mono text-[10px] text-[var(--text-tertiary)]">
-                  <span class="text-[var(--text-secondary)] truncate">{{ item.function || item.name || item.tool_call_id }}</span>
-                  <span>kind={{ item.summary.kind }}</span>
-                  <span>result_sha256={{ item.summary.result_sha256.slice(0, 12) }}</span>
+                  class="min-w-0 border-t border-[var(--border-light)] first:border-t-0 pt-2 first:pt-0">
+                  <div class="flex items-center gap-2 min-w-0 font-mono text-[10px] text-[var(--text-tertiary)]">
+                    <span class="text-[var(--text-secondary)] truncate">{{ item.function || item.name || item.tool_call_id }}</span>
+                    <span>kind={{ item.summary.kind }}</span>
+                    <span>result_sha256={{ item.summary.result_sha256.slice(0, 12) }}</span>
+                  </div>
+                  <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] text-[var(--text-tertiary)]">
+                    <span v-if="item.summary.tool_pack?.label">pack={{ item.summary.tool_pack.label }}</span>
+                    <span v-if="item.summary.result_contract?.kind">contract={{ item.summary.result_contract.kind }}</span>
+                    <span v-if="item.summary.truncated">truncated=true</span>
+                  </div>
+                  <div v-if="item.summary.preview != null" class="mt-1">
+                    <div class="text-[10px] text-[var(--text-tertiary)] mb-1 uppercase font-semibold">Recovered runtime detail</div>
+                    <pre class="whitespace-pre-wrap break-words font-mono text-[10px] text-[var(--text-secondary)] bg-[var(--background-menu-white)] rounded-md px-2 py-1.5 border border-[var(--border-light)] max-h-[96px] overflow-y-auto">{{ safeStringify(item.summary.preview) }}</pre>
+                  </div>
                 </div>
               </div>
             </div>

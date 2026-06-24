@@ -168,6 +168,17 @@ def test_activity_panel_surfaces_persisted_runtime_result_audit_view():
     assert "result_sha256" in activity_panel
 
 
+def test_activity_panel_surfaces_recovered_runtime_audit_details():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    activity_panel = (frontend_root / "components" / "ActivityPanel.vue").read_text(encoding="utf-8")
+
+    assert "Recovered runtime detail" in activity_panel
+    assert "item.summary.tool_pack?.label" in activity_panel
+    assert "item.summary.result_contract?.kind" in activity_panel
+    assert "item.summary.truncated" in activity_panel
+    assert "safeStringify(item.summary.preview)" in activity_panel
+
+
 def test_tool_panel_surfaces_runtime_result_summary():
     frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
     tool_panel = (frontend_root / "components" / "ToolPanelContent.vue").read_text(encoding="utf-8")
