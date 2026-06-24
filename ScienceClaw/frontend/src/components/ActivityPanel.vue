@@ -205,6 +205,7 @@
                         <div class="text-[11px] leading-[1.5] text-[var(--text-secondary)] bg-[var(--fill-tsp-gray-main)] rounded-md px-2.5 py-2 border border-[var(--border-light)]">
                           <div class="flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] text-[var(--text-tertiary)]">
                             <span>kind={{ item.tool.runtime_result_summary.kind }}</span>
+                            <span>result_sha256={{ item.tool.runtime_result_summary.result_sha256.slice(0, 12) }}</span>
                             <span>context_boundary={{ item.tool.runtime_result_summary.context_boundary }}</span>
                             <span>citation_evidence={{ item.tool.runtime_result_summary.citation_evidence }}</span>
                             <span v-if="item.tool.runtime_result_summary.tool_pack?.label">pack={{ item.tool.runtime_result_summary.tool_pack.label }}</span>

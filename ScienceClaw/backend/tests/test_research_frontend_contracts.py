@@ -134,7 +134,9 @@ def test_activity_panel_surfaces_runtime_result_summary():
     assert "export interface ToolRuntimeResultSummary" in event_types
     assert "runtime_result_summary?: ToolRuntimeResultSummary" in event_types
     assert "runtime_result_summary?: ToolRuntimeResultSummary" in message_types
+    assert "result_sha256: string" in event_types
     assert "Runtime summary" in activity_panel
+    assert "result_sha256" in activity_panel
     assert "context_boundary" in activity_panel
     assert "citation_evidence" in activity_panel
 

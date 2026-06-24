@@ -34,6 +34,7 @@ export interface ToolResultContract {
 export interface ToolRuntimeResultSummary {
   kind: string;
   preview?: any;
+  result_sha256: string;
   truncated?: boolean;
   result_contract?: ToolResultContract;
   tool_pack?: ResearchToolPackMetadata;

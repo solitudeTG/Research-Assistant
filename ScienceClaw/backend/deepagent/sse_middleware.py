@@ -11,6 +11,7 @@ SSE 监控中间件 — 基于 sample/monitoring_v2.py 的模式。
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import threading
 import time
@@ -290,6 +291,7 @@ class SSEMonitoringMiddleware(AgentMiddleware):
         summary: Dict[str, Any] = {
             "kind": result_contract.get("kind", "unknown"),
             "preview": preview,
+            "result_sha256": self._hash_runtime_result(result.get("result")),
             "truncated": truncated,
             "result_contract": result_contract,
             "context_boundary": "process_trace",
@@ -298,6 +300,13 @@ class SSEMonitoringMiddleware(AgentMiddleware):
         if tool_pack:
             summary["tool_pack"] = tool_pack
         return summary
+
+    def _hash_runtime_result(self, value: Any) -> str:
+        try:
+            payload = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        except TypeError:
+            payload = str(value)
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
     def _handle_todos_change(self, tool_args: Optional[Dict[str, Any]]):
         """

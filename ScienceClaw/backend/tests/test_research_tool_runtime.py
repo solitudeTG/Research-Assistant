@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 
+import hashlib
 import importlib
+import json
 import sys
 import types
 
@@ -180,10 +182,14 @@ def test_tool_complete_trace_carries_auditable_runtime_result_summary():
 
     events = middleware.drain_events()
     complete_event = next(event for event in events if event["event"] == "middleware_tool_complete")
+    expected_hash = hashlib.sha256(
+        json.dumps({"title": "evidence boundaries"}, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
 
     assert complete_event["data"]["runtime_result_summary"] == {
         "kind": "object",
         "preview": {"title": "evidence boundaries"},
+        "result_sha256": expected_hash,
         "truncated": False,
         "result_contract": result_contract,
         "tool_pack": tool_pack,
