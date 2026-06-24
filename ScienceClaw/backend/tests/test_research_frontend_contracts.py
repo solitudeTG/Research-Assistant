@@ -125,6 +125,20 @@ def test_frontend_tool_trace_types_accept_result_contract_metadata():
     assert "tool_pack?: ResearchToolPackMetadata" in message_types
 
 
+def test_activity_panel_surfaces_runtime_result_summary():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    event_types = (frontend_root / "types" / "event.ts").read_text(encoding="utf-8")
+    message_types = (frontend_root / "types" / "message.ts").read_text(encoding="utf-8")
+    activity_panel = (frontend_root / "components" / "ActivityPanel.vue").read_text(encoding="utf-8")
+
+    assert "export interface ToolRuntimeResultSummary" in event_types
+    assert "runtime_result_summary?: ToolRuntimeResultSummary" in event_types
+    assert "runtime_result_summary?: ToolRuntimeResultSummary" in message_types
+    assert "Runtime summary" in activity_panel
+    assert "context_boundary" in activity_panel
+    assert "citation_evidence" in activity_panel
+
+
 def test_chat_answer_error_uses_citation_evidence_wording():
     chat_page = (
         Path(__file__).resolve().parents[2]

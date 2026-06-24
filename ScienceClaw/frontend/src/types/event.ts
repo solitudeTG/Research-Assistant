@@ -31,6 +31,16 @@ export interface ToolResultContract {
   truncated?: boolean;
 }
 
+export interface ToolRuntimeResultSummary {
+  kind: string;
+  preview?: any;
+  truncated?: boolean;
+  result_contract?: ToolResultContract;
+  tool_pack?: ResearchToolPackMetadata;
+  context_boundary: 'process_trace';
+  citation_evidence: false;
+}
+
 export interface ToolEventData extends BaseEventData {
   tool_call_id: string;
   name: string;
@@ -44,6 +54,7 @@ export interface ToolEventData extends BaseEventData {
   tool_meta?: ToolMetaData;
   result_contract?: ToolResultContract;
   tool_pack?: ResearchToolPackMetadata;
+  runtime_result_summary?: ToolRuntimeResultSummary;
 }
 
 export interface StepEventData extends BaseEventData {

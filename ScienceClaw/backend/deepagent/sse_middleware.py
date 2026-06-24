@@ -261,7 +261,43 @@ class SSEMonitoringMiddleware(AgentMiddleware):
         tool_pack = result.get("tool_pack")
         if isinstance(tool_pack, dict):
             metadata["tool_pack"] = tool_pack
+        runtime_result_summary = self._extract_runtime_result_summary(
+            result=result,
+            result_contract=result_contract if isinstance(result_contract, dict) else None,
+            tool_pack=tool_pack if isinstance(tool_pack, dict) else None,
+        )
+        if runtime_result_summary:
+            metadata["runtime_result_summary"] = runtime_result_summary
         return metadata
+
+    def _extract_runtime_result_summary(
+        self,
+        *,
+        result: Dict[str, Any],
+        result_contract: Optional[Dict[str, Any]],
+        tool_pack: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Build a compact process-trace summary for validated custom-tool outputs."""
+        if not result_contract:
+            return {}
+
+        preview = result.get("result", result_contract.get("example_preview"))
+        truncated = bool(result_contract.get("truncated", False))
+        if isinstance(preview, str) and len(preview) > 200:
+            preview = preview[:200] + "..."
+            truncated = True
+
+        summary: Dict[str, Any] = {
+            "kind": result_contract.get("kind", "unknown"),
+            "preview": preview,
+            "truncated": truncated,
+            "result_contract": result_contract,
+            "context_boundary": "process_trace",
+            "citation_evidence": False,
+        }
+        if tool_pack:
+            summary["tool_pack"] = tool_pack
+        return summary
 
     def _handle_todos_change(self, tool_args: Optional[Dict[str, Any]]):
         """

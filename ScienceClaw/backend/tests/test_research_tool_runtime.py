@@ -151,6 +151,47 @@ def test_tool_complete_trace_carries_runtime_result_contract_metadata():
     assert complete_event["data"]["tool_pack"] == tool_pack
 
 
+def test_tool_complete_trace_carries_auditable_runtime_result_summary():
+    middleware = SSEMonitoringMiddleware(agent_name="DeepAgent")
+    result_contract = {
+        "kind": "object",
+        "schema": {
+            "type": "object",
+            "properties": {"title": {"type": "string"}},
+            "required": ["title"],
+        },
+        "example_preview": {"title": "evidence boundaries"},
+        "truncated": False,
+    }
+    tool_pack = {"id": "literature", "label": "Literature"}
+
+    middleware._after_tool(
+        {
+            "result": {"title": "evidence boundaries"},
+            "result_contract": result_contract,
+            "tool_pack": tool_pack,
+        },
+        "paper_lookup",
+        {"query": "evidence boundaries"},
+        "call-1",
+        0,
+        {"category": "custom"},
+    )
+
+    events = middleware.drain_events()
+    complete_event = next(event for event in events if event["event"] == "middleware_tool_complete")
+
+    assert complete_event["data"]["runtime_result_summary"] == {
+        "kind": "object",
+        "preview": {"title": "evidence boundaries"},
+        "truncated": False,
+        "result_contract": result_contract,
+        "tool_pack": tool_pack,
+        "context_boundary": "process_trace",
+        "citation_evidence": False,
+    }
+
+
 def test_chat_active_tool_packs_accept_only_research_packs(monkeypatch):
     async def unused_async(*args, **kwargs):
         raise AssertionError("unexpected ScienceClaw session dependency call")

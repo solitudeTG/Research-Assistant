@@ -1,5 +1,5 @@
 import type { FileInfo } from '../api/file';
-import type { ToolMetaData, StatisticsData, RoundFileInfo, ResearchToolPackMetadata, ToolResultContract } from './event';
+import type { ToolMetaData, StatisticsData, RoundFileInfo, ResearchToolPackMetadata, ToolResultContract, ToolRuntimeResultSummary } from './event';
 
 export type MessageType = "user" | "assistant" | "tool" | "step" | "attachments" | "thinking";
 
@@ -105,6 +105,7 @@ export interface ToolContent extends BaseContent {
   tool_meta?: ToolMetaData;
   result_contract?: ToolResultContract;
   tool_pack?: ResearchToolPackMetadata;
+  runtime_result_summary?: ToolRuntimeResultSummary;
 }
 
 export interface StepContent extends BaseContent {

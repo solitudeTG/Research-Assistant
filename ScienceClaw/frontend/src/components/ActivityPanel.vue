@@ -199,6 +199,20 @@
                         <div class="text-[10px] text-[var(--text-tertiary)] mb-1 uppercase tracking-wider font-semibold">Output</div>
                         <pre class="text-[11px] leading-[1.5] whitespace-pre-wrap break-words text-[var(--text-secondary)] bg-[var(--fill-tsp-gray-main)] rounded-md px-2.5 py-2 border border-[var(--border-light)] max-h-[200px] overflow-y-auto font-mono">{{ safeStringify(item.tool.content) }}</pre>
                       </div>
+                      <!-- Runtime summary -->
+                      <div v-if="item.tool.runtime_result_summary">
+                        <div class="text-[10px] text-[var(--text-tertiary)] mb-1 uppercase tracking-wider font-semibold">Runtime summary</div>
+                        <div class="text-[11px] leading-[1.5] text-[var(--text-secondary)] bg-[var(--fill-tsp-gray-main)] rounded-md px-2.5 py-2 border border-[var(--border-light)]">
+                          <div class="flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] text-[var(--text-tertiary)]">
+                            <span>kind={{ item.tool.runtime_result_summary.kind }}</span>
+                            <span>context_boundary={{ item.tool.runtime_result_summary.context_boundary }}</span>
+                            <span>citation_evidence={{ item.tool.runtime_result_summary.citation_evidence }}</span>
+                            <span v-if="item.tool.runtime_result_summary.tool_pack?.label">pack={{ item.tool.runtime_result_summary.tool_pack.label }}</span>
+                            <span v-if="item.tool.runtime_result_summary.truncated">truncated=true</span>
+                          </div>
+                          <pre class="mt-1 whitespace-pre-wrap break-words font-mono max-h-[120px] overflow-y-auto">{{ safeStringify(item.tool.runtime_result_summary.preview) }}</pre>
+                        </div>
+                      </div>
                       <!-- Loading state -->
                       <div v-if="item.tool.status === 'calling' && !item.tool.content"
                         class="flex items-center gap-2 text-[11px] text-[var(--text-tertiary)] py-2 justify-center">
