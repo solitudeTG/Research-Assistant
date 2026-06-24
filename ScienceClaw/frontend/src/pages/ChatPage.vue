@@ -344,6 +344,7 @@
         :plan="displayActivityPlan"
         :isLoading="isLoading && selectedActivityTurn === -1"
         :lastTurnHadError="lastTurnHadError"
+        :runtimeAudit="runtimeResultAudit"
         @toolClick="handleToolClick"
         @close="() => {}"
       />
@@ -363,6 +364,7 @@ import { useI18n } from 'vue-i18n';
 import ChatBox from '../components/ChatBox.vue';
 import ChatMessage from '../components/ChatMessage.vue';
 import * as agentApi from '../api/agent';
+import type { RuntimeResultAudit } from '../api/agent';
 import { Message, MessageContent, ToolContent, StepContent, AttachmentsContent } from '../types/message';
 import {
   StepEventData,
@@ -435,6 +437,7 @@ const createInitialState = () => ({
   activitySnapshots: [] as { items: ActivityItem[], plan: PlanEventData | undefined }[], // Per-turn snapshots
   selectedActivityTurn: -1 as number, // Which turn to show (-1 = live/current)
   pendingToolCallIds: [] as string[], // Tools not yet associated with any plan step
+  runtimeResultAudit: null as RuntimeResultAudit | null,
   researchModeAvailable: false,
   researchModeEnabled: false,
 });
@@ -467,6 +470,7 @@ const {
   activitySnapshots,
   selectedActivityTurn,
   pendingToolCallIds,
+  runtimeResultAudit,
   researchModeAvailable,
   researchModeEnabled,
 } = toRefs(state);
@@ -955,6 +959,9 @@ const handleDoneEvent = (doneData: DoneEventData) => {
   pendingToolCallIds.value = [];
   plan.value = undefined;
   selectedActivityTurn.value = turnIdx;
+  if (sessionId.value) {
+    refreshRuntimeResultAudit(sessionId.value);
+  }
 }
 
 // Handle error event
@@ -1112,6 +1119,16 @@ const refreshResearchStatus = async (targetSessionId: string) => {
     }
   } catch (error) {
     console.warn('Failed to load research status:', error);
+  }
+};
+
+const refreshRuntimeResultAudit = async (targetSessionId: string) => {
+  try {
+    const audit = await agentApi.listRuntimeResultAudit(targetSessionId);
+    runtimeResultAudit.value = audit.runtime_result_count > 0 ? audit : null;
+  } catch (error) {
+    console.warn('Failed to load runtime result audit:', error);
+    runtimeResultAudit.value = null;
   }
 };
 
@@ -1437,6 +1454,8 @@ const restoreSession = async () => {
 
   if (isStale()) { console.log('[restoreSession] stale after load, aborting'); return; }
   await refreshResearchStatus(restoreTarget);
+  if (isStale()) return;
+  await refreshRuntimeResultAudit(restoreTarget);
   if (isStale()) return;
 
   if (session.title) {

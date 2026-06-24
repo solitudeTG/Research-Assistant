@@ -153,6 +153,21 @@ def test_agent_api_exposes_persisted_runtime_result_audit_view():
     assert "citation_evidence: false" in agent_api
 
 
+def test_activity_panel_surfaces_persisted_runtime_result_audit_view():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    chat_page = (frontend_root / "pages" / "ChatPage.vue").read_text(encoding="utf-8")
+    activity_panel = (frontend_root / "components" / "ActivityPanel.vue").read_text(encoding="utf-8")
+
+    assert "runtimeResultAudit" in chat_page
+    assert "agentApi.listRuntimeResultAudit" in chat_page
+    assert ":runtimeAudit=\"runtimeResultAudit\"" in chat_page
+    assert "runtimeAudit" in activity_panel
+    assert "Recovered runtime audit" in activity_panel
+    assert "process_trace" in activity_panel
+    assert "citation_evidence=false" in activity_panel
+    assert "result_sha256" in activity_panel
+
+
 def test_tool_panel_surfaces_runtime_result_summary():
     frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
     tool_panel = (frontend_root / "components" / "ToolPanelContent.vue").read_text(encoding="utf-8")
