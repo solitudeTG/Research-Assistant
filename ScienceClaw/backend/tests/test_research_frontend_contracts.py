@@ -141,6 +141,18 @@ def test_activity_panel_surfaces_runtime_result_summary():
     assert "citation_evidence" in activity_panel
 
 
+def test_agent_api_exposes_persisted_runtime_result_audit_view():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    agent_api = (frontend_root / "api" / "agent.ts").read_text(encoding="utf-8")
+
+    assert "export interface RuntimeResultAuditItem" in agent_api
+    assert "export interface RuntimeResultAudit" in agent_api
+    assert "export async function listRuntimeResultAudit" in agent_api
+    assert "`/sessions/${sessionId}/research/runtime-results`" in agent_api
+    assert "context_boundary: 'process_trace'" in agent_api
+    assert "citation_evidence: false" in agent_api
+
+
 def test_tool_panel_surfaces_runtime_result_summary():
     frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
     tool_panel = (frontend_root / "components" / "ToolPanelContent.vue").read_text(encoding="utf-8")

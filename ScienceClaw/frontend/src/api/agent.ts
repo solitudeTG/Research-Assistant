@@ -1,6 +1,6 @@
 import { apiClient, ApiResponse, createSSEConnection, SSECallbacks } from './client';
 import type { FileInfo } from './file';
-import type { RoundFileInfo } from '../types/event';
+import type { RoundFileInfo, ToolRuntimeResultSummary } from '../types/event';
 import { ListSessionItem, GetSessionResponse, ExternalSkillItem, ExternalToolItem } from '../types/response';
 
 // Re-export or alias if needed for backward compatibility, 
@@ -163,6 +163,24 @@ export interface SourceEvidenceIngestResult {
   query?: string;
 }
 
+export interface RuntimeResultAuditItem {
+  event_id?: string;
+  timestamp?: number;
+  tool_call_id?: string;
+  name?: string;
+  function?: string;
+  status?: 'calling' | 'called' | string;
+  summary: ToolRuntimeResultSummary;
+}
+
+export interface RuntimeResultAudit {
+  session_id: string;
+  runtime_result_count: number;
+  runtime_results: RuntimeResultAuditItem[];
+  context_boundary: 'process_trace';
+  citation_evidence: false;
+}
+
 export async function createSession(data: CreateSessionRequest): Promise<Session> {
   const response = await apiClient.put<ApiResponse<Session>>('/sessions', data);
   return response.data.data;
@@ -266,6 +284,13 @@ export async function getResearchAuditResult(
 ): Promise<ResearchAudit> {
   const response = await apiClient.get<ApiResponse<ResearchAudit>>(
     `/sessions/${sessionId}/research/audit/${subjectType}/${subjectId}`,
+  );
+  return response.data.data;
+}
+
+export async function listRuntimeResultAudit(sessionId: string): Promise<RuntimeResultAudit> {
+  const response = await apiClient.get<ApiResponse<RuntimeResultAudit>>(
+    `/sessions/${sessionId}/research/runtime-results`,
   );
   return response.data.data;
 }

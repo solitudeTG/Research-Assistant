@@ -110,6 +110,80 @@ def _load_sessions_module(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_runtime_result_audit_lists_persisted_process_trace_summaries(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession()
+    session.events = [
+        {
+            "event": "tool",
+            "data": {
+                "event_id": "evt-call",
+                "timestamp": 10,
+                "tool_call_id": "tool-1",
+                "name": "paper_lookup",
+                "function": "paper_lookup",
+                "status": "calling",
+            },
+        },
+        {
+            "event": "tool",
+            "data": {
+                "event_id": "evt-called",
+                "timestamp": 11,
+                "tool_call_id": "tool-1",
+                "name": "paper_lookup",
+                "function": "paper_lookup",
+                "status": "called",
+                "runtime_result_summary": {
+                    "kind": "json",
+                    "preview": {"title": "Evidence boundaries"},
+                    "truncated": False,
+                    "result_sha256": "abc123",
+                    "context_boundary": "process_trace",
+                    "citation_evidence": False,
+                    "tool_pack": {
+                        "id": "literature",
+                        "label": "Literature",
+                        "research_workflow": "Literature management",
+                    },
+                },
+            },
+        },
+        {
+            "event": "message",
+            "data": {
+                "event_id": "evt-message",
+                "timestamp": 12,
+                "role": "assistant",
+                "content": "done",
+            },
+        },
+    ]
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+
+    response = await sessions.list_runtime_result_audit_for_session(
+        "session-1",
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    assert response.data["session_id"] == "session-1"
+    assert response.data["runtime_result_count"] == 1
+    item = response.data["runtime_results"][0]
+    assert item["event_id"] == "evt-called"
+    assert item["tool_call_id"] == "tool-1"
+    assert item["function"] == "paper_lookup"
+    assert item["status"] == "called"
+    assert item["summary"]["result_sha256"] == "abc123"
+    assert item["summary"]["context_boundary"] == "process_trace"
+    assert item["summary"]["citation_evidence"] is False
+
+
+@pytest.mark.asyncio
 async def test_research_web_evidence_ingest_persists_source_and_trace(monkeypatch):
     sessions = _load_sessions_module(monkeypatch)
     session = FakeSession()
