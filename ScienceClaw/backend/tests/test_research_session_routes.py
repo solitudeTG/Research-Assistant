@@ -184,6 +184,90 @@ async def test_runtime_result_audit_lists_persisted_process_trace_summaries(monk
 
 
 @pytest.mark.asyncio
+async def test_runtime_result_audit_filters_and_exports_process_trace_manifest(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession()
+    session.events = [
+        {
+            "event": "tool",
+            "data": {
+                "event_id": "evt-literature",
+                "timestamp": 11,
+                "tool_call_id": "tool-1",
+                "name": "paper_lookup",
+                "function": "paper_lookup",
+                "status": "called",
+                "runtime_result_summary": {
+                    "kind": "json",
+                    "preview": {"title": "Evidence boundaries"},
+                    "truncated": False,
+                    "result_sha256": "hash-literature",
+                    "context_boundary": "process_trace",
+                    "citation_evidence": False,
+                    "tool_pack": {
+                        "id": "literature",
+                        "label": "Literature",
+                        "research_workflow": "Literature management",
+                    },
+                },
+            },
+        },
+        {
+            "event": "tool",
+            "data": {
+                "event_id": "evt-audit",
+                "timestamp": 12,
+                "tool_call_id": "tool-2",
+                "name": "audit_claims",
+                "function": "audit_claims",
+                "status": "called",
+                "runtime_result_summary": {
+                    "kind": "json",
+                    "preview": {"status": "unsupported"},
+                    "truncated": False,
+                    "result_sha256": "hash-audit",
+                    "context_boundary": "process_trace",
+                    "citation_evidence": False,
+                    "tool_pack": {
+                        "id": "evidence-audit",
+                        "label": "Evidence Audit",
+                        "research_workflow": "Evidence audit",
+                    },
+                },
+            },
+        },
+    ]
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+
+    response = await sessions.list_runtime_result_audit_for_session(
+        "session-1",
+        types.SimpleNamespace(id="user-1"),
+        tool_pack_id="literature",
+        result_sha256="hash-literature",
+    )
+
+    assert response.data["runtime_result_count"] == 1
+    assert response.data["runtime_results"][0]["event_id"] == "evt-literature"
+    assert response.data["export_manifest"] == {
+        "format": "runtime_result_audit.v1",
+        "session_id": "session-1",
+        "runtime_result_count": 1,
+        "filters": {
+            "tool_pack_id": "literature",
+            "result_sha256": "hash-literature",
+        },
+        "context_boundary": "process_trace",
+        "citation_evidence": False,
+        "event_ids": ["evt-literature"],
+    }
+
+
+@pytest.mark.asyncio
 async def test_research_web_evidence_ingest_persists_source_and_trace(monkeypatch):
     sessions = _load_sessions_module(monkeypatch)
     session = FakeSession()

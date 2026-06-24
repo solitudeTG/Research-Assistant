@@ -289,7 +289,12 @@ def _find_matching_memory_entry(memories: list[Any], *, subject_type: str, subje
     return None
 
 
-def _runtime_result_audit_items(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _runtime_result_audit_items(
+    events: list[dict[str, Any]],
+    *,
+    tool_pack_id: str | None = None,
+    result_sha256: str | None = None,
+) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     for event in events or []:
         if event.get("event") != "tool":
@@ -297,6 +302,14 @@ def _runtime_result_audit_items(events: list[dict[str, Any]]) -> list[dict[str, 
         data = event.get("data") or {}
         summary = data.get("runtime_result_summary")
         if not isinstance(summary, dict):
+            continue
+        tool_pack = summary.get("tool_pack")
+        if tool_pack_id and (
+            not isinstance(tool_pack, dict)
+            or str(tool_pack.get("id") or "").strip() != tool_pack_id
+        ):
+            continue
+        if result_sha256 and str(summary.get("result_sha256") or "").strip() != result_sha256:
             continue
         items.append(
             {
@@ -310,6 +323,27 @@ def _runtime_result_audit_items(events: list[dict[str, Any]]) -> list[dict[str, 
             }
         )
     return items
+
+
+def _runtime_result_export_manifest(
+    *,
+    session_id: str,
+    runtime_results: list[dict[str, Any]],
+    tool_pack_id: str | None = None,
+    result_sha256: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "format": "runtime_result_audit.v1",
+        "session_id": session_id,
+        "runtime_result_count": len(runtime_results),
+        "filters": {
+            "tool_pack_id": tool_pack_id,
+            "result_sha256": result_sha256,
+        },
+        "context_boundary": "process_trace",
+        "citation_evidence": False,
+        "event_ids": [item.get("event_id") for item in runtime_results if item.get("event_id")],
+    }
 
 
 def _publish_session_event(session_id: str, user_id: str, event: Dict[str, Any]) -> None:
@@ -2267,6 +2301,8 @@ async def get_research_status_for_session(
 async def list_runtime_result_audit_for_session(
     session_id: str,
     current_user: User = Depends(require_user),
+    tool_pack_id: Optional[str] = None,
+    result_sha256: Optional[str] = None,
 ) -> ApiResponse:
     """Return process-trace runtime result summaries recovered from persisted session events."""
     try:
@@ -2274,7 +2310,11 @@ async def list_runtime_result_audit_for_session(
         if session.user_id != current_user.id:
             raise HTTPException(status_code=403, detail="Access denied")
 
-        runtime_results = _runtime_result_audit_items(getattr(session, "events", []))
+        runtime_results = _runtime_result_audit_items(
+            getattr(session, "events", []),
+            tool_pack_id=tool_pack_id,
+            result_sha256=result_sha256,
+        )
         return ApiResponse(
             data={
                 "session_id": session_id,
@@ -2282,6 +2322,12 @@ async def list_runtime_result_audit_for_session(
                 "runtime_results": runtime_results,
                 "context_boundary": "process_trace",
                 "citation_evidence": False,
+                "export_manifest": _runtime_result_export_manifest(
+                    session_id=session_id,
+                    runtime_results=runtime_results,
+                    tool_pack_id=tool_pack_id,
+                    result_sha256=result_sha256,
+                ),
             }
         )
     except ScienceSessionNotFoundError as exc:

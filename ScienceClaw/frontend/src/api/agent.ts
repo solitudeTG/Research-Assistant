@@ -173,12 +173,28 @@ export interface RuntimeResultAuditItem {
   summary: ToolRuntimeResultSummary;
 }
 
+export interface RuntimeResultAuditFilters {
+  tool_pack_id?: string;
+  result_sha256?: string;
+}
+
+export interface RuntimeResultAuditExportManifest {
+  format: 'runtime_result_audit.v1';
+  session_id: string;
+  runtime_result_count: number;
+  filters: RuntimeResultAuditFilters;
+  context_boundary: 'process_trace';
+  citation_evidence: false;
+  event_ids: string[];
+}
+
 export interface RuntimeResultAudit {
   session_id: string;
   runtime_result_count: number;
   runtime_results: RuntimeResultAuditItem[];
   context_boundary: 'process_trace';
   citation_evidence: false;
+  export_manifest: RuntimeResultAuditExportManifest;
 }
 
 export async function createSession(data: CreateSessionRequest): Promise<Session> {
@@ -288,9 +304,21 @@ export async function getResearchAuditResult(
   return response.data.data;
 }
 
-export async function listRuntimeResultAudit(sessionId: string): Promise<RuntimeResultAudit> {
+export async function listRuntimeResultAudit(
+  sessionId: string,
+  filters?: RuntimeResultAuditFilters,
+): Promise<RuntimeResultAudit> {
+  const params = new URLSearchParams();
+  if (filters?.tool_pack_id) {
+    params.set('tool_pack_id', filters.tool_pack_id);
+  }
+  if (filters?.result_sha256) {
+    params.set('result_sha256', filters.result_sha256);
+  }
+  const endpoint = `/sessions/${sessionId}/research/runtime-results`;
+  const query = params.toString();
   const response = await apiClient.get<ApiResponse<RuntimeResultAudit>>(
-    `/sessions/${sessionId}/research/runtime-results`,
+    `${endpoint}${query ? `?${query}` : ''}`,
   );
   return response.data.data;
 }
