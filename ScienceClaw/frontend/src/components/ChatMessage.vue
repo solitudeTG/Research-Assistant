@@ -149,11 +149,11 @@
                   v-if="props.sessionId"
                   class="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-1.5 py-0.5 text-[10px] font-medium text-[var(--text-tertiary)] transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:bg-gray-900/40 dark:hover:border-red-900/60 dark:hover:bg-red-900/20 dark:hover:text-red-300"
                   :disabled="memoryDeletionLoading[memory.memory_id]"
-                  title="Forget context-only memory"
+                  :title="memory.memory_status === 'conflict' ? 'Resolve by forgetting this context-only memory' : 'Forget context-only memory'"
                   @click="handleDeleteMemory(memory)"
                 >
                   <Trash2Icon class="h-3 w-3" />
-                  <span>Forget</span>
+                  <span>{{ memory.memory_status === 'conflict' ? 'Resolve conflict' : 'Forget' }}</span>
                 </button>
                 <span class="text-[10px] uppercase tracking-wide text-[var(--text-tertiary)]">
                   {{ memory.layer }} memory

@@ -54,6 +54,8 @@ def test_chat_message_surfaces_context_memory_conflicts():
     assert "memory.memory_status === 'conflict'" in chat_message
     assert "Conflicts with" in chat_message
     assert "memory.conflicts_with" in chat_message
+    assert "Resolve conflict" in chat_message
+    assert "memory.memory_status === 'conflict' ? 'Resolve conflict' : 'Forget'" in chat_message
     assert "memory_status?: 'active' | 'conflict'" in message_types
     assert "conflicts_with?: string[]" in message_types
     assert "context_memory_conflict_count?: number" in message_types
