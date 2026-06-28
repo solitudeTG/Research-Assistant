@@ -790,6 +790,12 @@ async def test_research_answer_trace_and_message_keep_memory_context_separate(mo
     assert completed_steps[-1]["metadata"]["citation_count"] == 1
     assert completed_steps[-1]["metadata"]["context_memory_count"] == 1
     assert completed_steps[-1]["metadata"]["context_memory_conflict_count"] == 1
+    assert completed_steps[-1]["metadata"]["context_boundaries"] == {
+        "citation_evidence": ["paper", "web", "database"],
+        "context_only_memory": ["memory"],
+        "process_trace": ["tool_logs", "runtime_results", "agent_lifecycle"],
+        "model_reasoning": ["model_reasoning"],
+    }
     assistant_research = session.events[-1]["data"]["metadata"]["research_assistant"]
     assert assistant_research["citations"][0]["source_type"] == "paper"
     assert assistant_research["context_memory"][0]["source_type"] == "memory"
@@ -1423,6 +1429,17 @@ async def test_research_report_completion_message_uses_generic_citation_evidence
     )
     assert "paper citations" not in assistant_messages[-1]["content"]
     assert response.data["citation_count"] == 2
+    completed_steps = [
+        event["data"]
+        for event in session.events
+        if event.get("event") == "step" and event.get("data", {}).get("status") == "completed"
+    ]
+    assert completed_steps[-1]["metadata"]["context_boundaries"] == {
+        "citation_evidence": ["paper", "web", "database"],
+        "context_only_memory": ["memory"],
+        "process_trace": ["tool_logs", "runtime_results", "agent_lifecycle"],
+        "model_reasoning": ["model_reasoning"],
+    }
 
 
 @pytest.mark.asyncio

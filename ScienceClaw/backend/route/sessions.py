@@ -51,7 +51,7 @@ from backend.deepagent.sessions import (
     async_get_science_session,
     async_list_science_sessions,
 )
-from backend.research_assistant.answering import answer_research_question
+from backend.research_assistant.answering import CONTEXT_BOUNDARIES, answer_research_question
 from backend.research_assistant.indexing import index_ingestion_result
 from backend.research_assistant.ingestion import ingest_uploaded_paper, is_research_document
 from backend.research_assistant.parsers import PaperParseError
@@ -2250,6 +2250,7 @@ async def answer_research_question_for_session(
                 "citation_count": answer.citation_count,
                 "context_memory_count": answer.context_memory_count,
                 "context_memory_conflict_count": answer.context_memory_conflict_count,
+                "context_boundaries": CONTEXT_BOUNDARIES,
                 "embedding_model": settings.research_embedding_model,
             },
         )
@@ -2693,7 +2694,7 @@ async def generate_research_report_for_session(
             step_id=step_id,
             status="completed",
             description="Markdown research artifact generated",
-            metadata=report.to_dict(),
+            metadata={**report.to_dict(), "context_boundaries": CONTEXT_BOUNDARIES},
         )
         _append_session_event(session, report_completed)
         _publish_session_event(session_id, current_user.id, report_completed)
