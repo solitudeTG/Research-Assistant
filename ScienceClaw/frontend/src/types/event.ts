@@ -50,6 +50,17 @@ export interface SourceQualityMetadata {
   quality_warnings?: string[];
 }
 
+export interface EvidenceAdmissionMetadata {
+  decision: 'skipped' | 'accepted' | 'insufficient' | string;
+  top_k: number;
+  threshold: number;
+  min_accepted_count: number;
+  accepted_count: number;
+  rejected_count: number;
+  highest_score?: number | null;
+  reason?: string;
+}
+
 export interface ToolEventData extends BaseEventData {
   tool_call_id: string;
   name: string;
@@ -73,6 +84,7 @@ export interface StepEventData extends BaseEventData {
   tools?: ToolEventData[]
   metadata?: {
     source_quality?: SourceQualityMetadata;
+    evidence_admission?: EvidenceAdmissionMetadata;
     [key: string]: any;
   }
 }

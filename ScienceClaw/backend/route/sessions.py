@@ -2497,6 +2497,7 @@ async def answer_research_question_for_session(
                 "context_memory_count": answer.context_memory_count,
                 "context_memory_conflict_count": answer.context_memory_conflict_count,
                 "context_boundaries": CONTEXT_BOUNDARIES,
+                "evidence_admission": answer.admission.to_dict() if answer.admission else {},
                 "embedding_model": settings.research_embedding_model,
                 **retrieval_metadata,
             },

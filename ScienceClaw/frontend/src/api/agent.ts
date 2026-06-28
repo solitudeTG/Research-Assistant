@@ -1,6 +1,6 @@
 import { apiClient, ApiResponse, createSSEConnection, SSECallbacks } from './client';
 import type { FileInfo } from './file';
-import type { RoundFileInfo, SourceQualityMetadata, ToolRuntimeResultSummary } from '../types/event';
+import type { EvidenceAdmissionMetadata, RoundFileInfo, SourceQualityMetadata, ToolRuntimeResultSummary } from '../types/event';
 import { ListSessionItem, GetSessionResponse, ExternalSkillItem, ExternalToolItem } from '../types/response';
 
 // Re-export or alias if needed for backward compatibility, 
@@ -118,6 +118,7 @@ export interface ResearchAnswer {
   context_memory_count?: number;
   context_memory_conflict_count?: number;
   context_boundaries?: ResearchContextBoundaries;
+  evidence_admission?: EvidenceAdmissionMetadata;
   audit?: ResearchAudit;
   question?: string;
 }

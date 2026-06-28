@@ -1069,10 +1069,13 @@ async def test_research_answer_trace_and_message_keep_memory_context_separate(mo
         "process_trace": ["tool_logs", "runtime_results", "agent_lifecycle"],
         "model_reasoning": ["model_reasoning"],
     }
+    assert completed_steps[-1]["metadata"]["evidence_admission"]["decision"] == "accepted"
+    assert completed_steps[-1]["metadata"]["evidence_admission"]["accepted_count"] == 1
     assistant_research = session.events[-1]["data"]["metadata"]["research_assistant"]
     assert assistant_research["citations"][0]["source_type"] == "paper"
     assert assistant_research["context_memory"][0]["source_type"] == "memory"
     assert assistant_research["context_memory_conflict_count"] == 1
+    assert assistant_research["evidence_admission"]["decision"] == "accepted"
 
 
 @pytest.mark.asyncio

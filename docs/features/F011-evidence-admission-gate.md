@@ -1,7 +1,7 @@
 ---
 id: F011
 doc_kind: feature
-status: planned
+status: completed
 owner: solitudeTG
 created: 2026-06-28
 updated: 2026-06-28
@@ -40,7 +40,7 @@ updated: 2026-06-28
 
 ## Current Status
 
-Planned. Depends on F010 for Project-scoped retrieval.
+Completed for MVP scope. A deterministic admission policy now handles obvious non-evidence skip turns, filters weak retrieval candidates, and exposes admission telemetry in answer payloads and ActivityPanel trace metadata.
 
 ## Decision Context
 
@@ -63,7 +63,7 @@ Mandatory AI routing before every retrieval was rejected for the MVP because it 
 
 ### Evidence
 
-- None yet.
+- [EV-003 Evidence Admission Gate Verification](../evidence/EV-003-evidence-admission-gate-verification.md)
 
 ### Decisions / ADRs
 
@@ -76,6 +76,7 @@ Mandatory AI routing before every retrieval was rejected for the MVP because it 
 ### Specs / Plans
 
 - [F001 Feature Map and Rules Spec](../specs/F001-feature-map-and-rules-spec.md)
+- [Evidence Admission Gate Implementation Plan](../superpowers/plans/2026-06-28-evidence-admission-gate.md)
 
 ### Related Features
 
@@ -90,25 +91,26 @@ Mandatory AI routing before every retrieval was rejected for the MVP because it 
 
 ## Acceptance Criteria
 
-- [ ] Obvious non-evidence utterances do not trigger RAG.
-- [ ] Low-score retrieval results are not injected as citation evidence.
-- [ ] Accepted evidence is traceable to Project scope and source identity.
-- [ ] UI/trace exposes admission decision metadata.
-- [ ] Tests cover inject and abstain paths.
+- [x] Obvious non-evidence utterances do not trigger RAG.
+- [x] Low-score retrieval results are not injected as citation evidence.
+- [x] Accepted evidence remains traceable to retrieval scope and source identity.
+- [x] UI/trace exposes admission decision metadata.
+- [x] Tests cover inject, skip, and abstain paths.
 
 ## Acceptance Map
 
 | Claim | Acceptance | Evidence | Status |
 | --- | --- | --- | --- |
-| Non-evidence turns skip RAG. | Deterministic rules cover obvious thanks/continue/rewrite cases. | Pending. | Planned |
-| Weak retrieval is not injected. | Low-score candidates produce evidence-insufficient behavior. | Pending. | Planned |
-| Admission is observable. | Trace exposes top-k, thresholds, accepted/rejected counts, and decision. | Pending. | Planned |
+| Non-evidence turns skip RAG. | Deterministic rules cover obvious thanks/continue/rewrite cases and answer path does not call retrieval. | `pytest backend/tests/test_research_admission.py backend/tests/test_research_answering.py::test_answer_research_question_skips_retrieval_for_non_evidence_turn -q`. | Passed |
+| Weak retrieval is not injected. | Low-score candidates produce evidence-insufficient behavior and no citations. | `pytest backend/tests/test_research_answering.py::test_answer_research_question_rejects_weak_retrieval_hits -q`. | Passed |
+| Admission is observable. | Trace exposes top-k, threshold, accepted/rejected counts, highest score, and decision. | `pytest backend/tests/test_research_session_routes.py::test_research_answer_trace_and_message_keep_memory_context_separate backend/tests/test_research_frontend_contracts.py::test_activity_panel_surfaces_evidence_admission_trace_metadata -q`. | Passed |
 
 ## State Timeline
 
 | Date | State | Trigger | Evidence | Note |
 | --- | --- | --- | --- | --- |
 | 2026-06-28 | planned | User approved four-Feature breakdown | This Feature | Created to own evidence thresholding and admission behavior. |
+| 2026-06-28 | completed | F011 implementation and verification | EV-003 | MVP deterministic admission gate landed. |
 
 ## Patch History
 
@@ -116,15 +118,18 @@ None yet.
 
 ## Evidence
 
-No verification evidence yet.
+- `pytest backend/tests -q` from `ScienceClaw`: 160 passed, 2071 warnings.
+- `npm.cmd run type-check` from `ScienceClaw/frontend`: passed.
+- `npm.cmd run build` from `ScienceClaw/frontend`: passed with existing Browserslist/CSS/chunk-size warnings.
+- Focused F011 tests cover skip, accepted, insufficient, route trace, and frontend ActivityPanel contracts.
 
 ## Recovery Snapshot
 
 - Read first: this Feature, `F004`, `F005`, `F008`, `F010`.
-- Current capability state: Research answer route can retrieve evidence, but does not yet have Project-scoped admission telemetry.
-- Known risks: Overly aggressive thresholds can cause false abstention; overly loose thresholds cause weak citations.
-- Next safe action: Add deterministic tests for skip, inject, and abstain decisions before tuning.
+- Current capability state: Research answer route now has deterministic admission telemetry and filters weak citation evidence.
+- Known risks: The first threshold is not empirically tuned; overly aggressive thresholds can cause false abstention and overly loose thresholds can cause weak citations.
+- Next safe action: Start F012 Chat-to-Library promotion or create an eval set for threshold tuning.
 
 ## Next Step
 
-Implement after F010 scopes retrieval to Project assets.
+Start F012 Chat-to-Library promotion.

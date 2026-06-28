@@ -311,6 +311,25 @@ def test_activity_panel_surfaces_source_quality_trace_metadata():
     assert "warnings=" in activity_panel
 
 
+def test_activity_panel_surfaces_evidence_admission_trace_metadata():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    event_types = (frontend_root / "types" / "event.ts").read_text(encoding="utf-8")
+    message_types = (frontend_root / "types" / "message.ts").read_text(encoding="utf-8")
+    agent_api = (frontend_root / "api" / "agent.ts").read_text(encoding="utf-8")
+    activity_panel = (frontend_root / "components" / "ActivityPanel.vue").read_text(encoding="utf-8")
+
+    assert "export interface EvidenceAdmissionMetadata" in event_types
+    assert "evidence_admission?: EvidenceAdmissionMetadata" in event_types
+    assert "evidence_admission?: EvidenceAdmissionMetadata" in message_types
+    assert "evidence_admission?: EvidenceAdmissionMetadata" in agent_api
+    assert "evidenceAdmissionSteps" in activity_panel
+    assert "Evidence admission" in activity_panel
+    assert "admission.decision" in activity_panel
+    assert "threshold={{ admission.threshold }}" in activity_panel
+    assert "accepted={{ admission.accepted_count }}" in activity_panel
+    assert "rejected={{ admission.rejected_count }}" in activity_panel
+
+
 def test_activity_panel_filters_recovered_runtime_audit_by_tool_pack():
     frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
     activity_panel = (frontend_root / "components" / "ActivityPanel.vue").read_text(encoding="utf-8")

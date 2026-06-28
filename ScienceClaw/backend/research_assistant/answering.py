@@ -8,6 +8,12 @@ import re
 import shortuuid
 
 from backend.research_assistant.audit import EvidenceAudit, audit_evidence_claims
+from backend.research_assistant.admission import (
+    EvidenceAdmissionResult,
+    admit_evidence_hits,
+    should_skip_research_retrieval,
+    skipped_admission_result,
+)
 from backend.research_assistant.embeddings import HashingEmbeddingProvider
 from backend.research_assistant.storage.database import (
     hybrid_search_evidence_in_database,
@@ -75,9 +81,21 @@ class ResearchAnswer:
     citations: list[ResearchCitation]
     context_memory: list[dict] = field(default_factory=list)
     audit: EvidenceAudit | None = None
+    admission: EvidenceAdmissionResult | None = None
     answer_id: str = field(default_factory=lambda: f"research-answer-{shortuuid.uuid()}")
 
     def __post_init__(self) -> None:
+        if self.admission is None:
+            object.__setattr__(
+                self,
+                "admission",
+                admit_evidence_hits(
+                    [
+                        _citation_to_admission_hit(citation, index)
+                        for index, citation in enumerate(self.citations, start=1)
+                    ]
+                ),
+            )
         if self.audit is None:
             object.__setattr__(
                 self,
@@ -107,6 +125,7 @@ class ResearchAnswer:
             "context_memory_count": self.context_memory_count,
             "context_memory_conflict_count": self.context_memory_conflict_count,
             "context_boundaries": CONTEXT_BOUNDARIES,
+            "evidence_admission": self.admission.to_dict() if self.admission else {},
             "audit": self.audit.to_dict() if self.audit else {},
         }
 
@@ -122,6 +141,23 @@ async def answer_research_question(
     embedding_model: str,
     limit: int = 5,
 ) -> ResearchAnswer:
+    context_memory = await _load_context_memory(
+        database_url=database_url,
+        session_id=session_id,
+        user_id=user_id,
+        question=question,
+    )
+    if should_skip_research_retrieval(question):
+        admission = skipped_admission_result()
+        content = _compose_skipped_answer()
+        return ResearchAnswer(
+            content=content,
+            citations=[],
+            context_memory=context_memory,
+            admission=admission,
+            audit=audit_evidence_claims(answer_content=content, citations=[]),
+        )
+
     provider = HashingEmbeddingProvider(
         dimensions=embedding_dimensions,
         model_name=embedding_model,
@@ -136,6 +172,7 @@ async def answer_research_question(
     if project_id is not None:
         search_kwargs["project_id"] = project_id
     hits = await hybrid_search_evidence_in_database(database_url, **search_kwargs)
+    admission = admit_evidence_hits(hits)
     citations = [
         ResearchCitation(
             evidence_id=hit.evidence_id,
@@ -150,25 +187,29 @@ async def answer_research_question(
             source_type=hit.source_type,
             source_identity=hit.source_identity,
         )
-        for hit in hits
+        for hit in admission.accepted_hits
     ]
-    context_memory = await _load_context_memory(
-        database_url=database_url,
-        session_id=session_id,
-        user_id=user_id,
-        question=question,
-    )
-    content = _compose_extractive_answer(citations)
+    content = _compose_extractive_answer(citations, admission=admission)
     return ResearchAnswer(
         content=content,
         citations=citations,
         context_memory=context_memory,
+        admission=admission,
         audit=audit_evidence_claims(answer_content=content, citations=citations),
     )
 
 
-def _compose_extractive_answer(citations: list[ResearchCitation]) -> str:
+def _compose_extractive_answer(
+    citations: list[ResearchCitation],
+    *,
+    admission: EvidenceAdmissionResult | None = None,
+) -> str:
     if not citations:
+        if admission and admission.top_k > 0:
+            return (
+                "Retrieved evidence was below the admission threshold; insufficient citation evidence "
+                "was found for this question. I cannot answer it as a cited research claim yet."
+            )
         return (
             "No citation evidence was found for this question. "
             "I cannot answer it as a cited research claim yet."
@@ -177,6 +218,21 @@ def _compose_extractive_answer(citations: list[ResearchCitation]) -> str:
     for index, citation in enumerate(citations, start=1):
         lines.append(f"{index}. {citation.quote} {citation.citation_label}")
     return "\n".join(lines)
+
+
+def _compose_skipped_answer() -> str:
+    return "This turn does not require citation evidence retrieval."
+
+
+def _citation_to_admission_hit(citation: ResearchCitation, index: int) -> Any:
+    return type(
+        "AdmissionCitationHit",
+        (),
+        {
+            "evidence_id": citation.evidence_id,
+            "rank_score": 1.0 / index,
+        },
+    )()
 
 
 async def _load_context_memory(

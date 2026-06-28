@@ -104,6 +104,84 @@ async def test_answer_research_question_passes_project_id_to_retrieval(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_answer_research_question_skips_retrieval_for_non_evidence_turn(monkeypatch):
+    async def fail_search(*args, **kwargs):
+        raise AssertionError("retrieval should be skipped")
+
+    async def fake_list_memory(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.hybrid_search_evidence_in_database",
+        fail_search,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_memory_entries_from_database",
+        fake_list_memory,
+    )
+
+    answer = await answer_research_question(
+        database_url="postgresql://test",
+        session_id="session-1",
+        question="谢谢",
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=3,
+    )
+
+    assert answer.citation_count == 0
+    assert answer.admission.decision == "skipped"
+    assert answer.to_dict()["evidence_admission"]["decision"] == "skipped"
+    assert "does not require citation evidence retrieval" in answer.content
+
+
+@pytest.mark.asyncio
+async def test_answer_research_question_rejects_weak_retrieval_hits(monkeypatch):
+    async def fake_search(*args, **kwargs):
+        return [
+            EvidenceHit(
+                evidence_id=41,
+                chunk_id="chunk-41",
+                paper_id="paper-1",
+                title="Weak Evidence",
+                source_type="paper",
+                section="Discussion",
+                page_start=5,
+                page_end=5,
+                quote="This quote is too weakly matched to cite.",
+                rank_score=0.0,
+            )
+        ]
+
+    async def fake_list_memory(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.hybrid_search_evidence_in_database",
+        fake_search,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_memory_entries_from_database",
+        fake_list_memory,
+    )
+
+    answer = await answer_research_question(
+        database_url="postgresql://test",
+        session_id="session-1",
+        question="What does the paper conclude?",
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=3,
+    )
+
+    assert answer.citation_count == 0
+    assert answer.admission.decision == "insufficient"
+    assert answer.admission.rejected_count == 1
+    assert answer.to_dict()["evidence_admission"]["highest_score"] == 0.0
+    assert "insufficient citation evidence" in answer.content
+
+
+@pytest.mark.asyncio
 async def test_answer_research_question_refuses_when_no_paper_evidence(monkeypatch):
     async def fake_search(*args, **kwargs):
         return []
