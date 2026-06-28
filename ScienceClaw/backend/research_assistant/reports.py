@@ -120,6 +120,10 @@ def _compose_markdown_report(
         f"- Generated at: `{generated_at}`",
         f"- Evidence scope: {_evidence_scope_label(answer)}",
         "",
+        "## Reader Summary",
+        "",
+        *_compose_reader_summary_lines(answer),
+        "",
         "## Trust Summary",
         "",
         *_compose_trust_summary_lines(answer),
@@ -203,6 +207,63 @@ def _compose_trust_summary_lines(answer: ResearchAnswer) -> list[str]:
     ]
 
 
+def _compose_reader_summary_lines(answer: ResearchAnswer) -> list[str]:
+    summary = _build_reader_summary(answer)
+    return [
+        f"- Status: {summary['status']}",
+        f"- Evidence basis: {summary['evidence_basis']}",
+        f"- Memory boundary: {summary['memory_boundary']}",
+        f"- Next action: {summary['next_action']}",
+    ]
+
+
+def _build_reader_summary(answer: ResearchAnswer) -> dict:
+    return {
+        "status": _reader_summary_status(answer),
+        "evidence_basis": _reader_summary_evidence_basis(answer),
+        "memory_boundary": _reader_summary_memory_boundary(answer),
+        "next_action": _reader_summary_next_action(answer),
+    }
+
+
+def _reader_summary_status(answer: ResearchAnswer) -> str:
+    if answer.audit.claim_count and answer.audit.approved_claim_count == answer.audit.claim_count:
+        return "All audited claims are approved by citation evidence."
+    if answer.audit.approved_claim_count:
+        return (
+            f"{answer.audit.approved_claim_count} of {answer.audit.claim_count} audited claims are approved; "
+            "unapproved claims remain evidence gaps."
+        )
+    return "No audited claims are approved yet."
+
+
+def _reader_summary_evidence_basis(answer: ResearchAnswer) -> str:
+    count = answer.citation_count
+    if count == 0:
+        return "No paper, web, or database citation evidence is attached."
+    noun = "citation evidence record" if count == 1 else "citation evidence records"
+    return f"{count} {noun} from {_evidence_scope_label(answer)}."
+
+
+def _reader_summary_memory_boundary(answer: ResearchAnswer) -> str:
+    count = answer.context_memory_count
+    if count == 0:
+        return "No context-only memory was used."
+    noun = "context-only memory record" if count == 1 else "context-only memory records"
+    conflict_note = ""
+    if answer.context_memory_conflict_count:
+        conflict_note = f"; {answer.context_memory_conflict_count} unresolved conflict"
+        if answer.context_memory_conflict_count != 1:
+            conflict_note += "s"
+    return f"{count} {noun} was used{conflict_note}; memory is not citation evidence."
+
+
+def _reader_summary_next_action(answer: ResearchAnswer) -> str:
+    if answer.audit.unsupported_claim_count or answer.audit.invalid_source_count or not answer.citations:
+        return "Resolve Evidence Gaps and Limitations before reusing this report as a cited output."
+    return "Use the Evidence-Grounded Answer, then inspect Claim Checks and Citation Evidence before reuse."
+
+
 def _build_trust_summary(answer: ResearchAnswer) -> dict:
     return {
         "audit_status": answer.audit.status,
@@ -223,6 +284,7 @@ def _build_evidence_map(*, report_id: str, answer: ResearchAnswer) -> dict:
         "report_id": report_id,
         "evidence_scope": _evidence_scope_slug(answer),
         "citation_source_types": _citation_source_types(answer),
+        "reader_summary": _build_reader_summary(answer),
         "trust_summary": _build_trust_summary(answer),
         "citation_count": answer.citation_count,
         "context_memory_count": answer.context_memory_count,

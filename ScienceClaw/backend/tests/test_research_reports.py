@@ -86,6 +86,11 @@ async def test_generate_markdown_research_report_writes_artifact_and_evidence_ma
 
     assert report.citation_count == 1
     assert "Evidence scope: uploaded papers only" in markdown
+    assert "## Reader Summary" in markdown
+    assert "- Status: All audited claims are approved by citation evidence." in markdown
+    assert "- Evidence basis: 1 citation evidence record from uploaded papers only." in markdown
+    assert "- Memory boundary: 1 context-only memory record was used; memory is not citation evidence." in markdown
+    assert "- Next action: Use the Evidence-Grounded Answer, then inspect Claim Checks and Citation Evidence before reuse." in markdown
     assert "## Trust Summary" in markdown
     assert "- Audit status: `approved`" in markdown
     assert "- Approved claims: 1 / 1" in markdown
@@ -134,6 +139,12 @@ async def test_generate_markdown_research_report_writes_artifact_and_evidence_ma
         "context_memory_count": 1,
         "context_memory_conflict_count": 0,
         "usage_note": "Use the Evidence-Grounded Answer section only after checking Claim Checks.",
+    }
+    assert evidence["reader_summary"] == {
+        "status": "All audited claims are approved by citation evidence.",
+        "evidence_basis": "1 citation evidence record from uploaded papers only.",
+        "memory_boundary": "1 context-only memory record was used; memory is not citation evidence.",
+        "next_action": "Use the Evidence-Grounded Answer, then inspect Claim Checks and Citation Evidence before reuse.",
     }
     assert evidence["context_memory_count"] == 1
     assert evidence["context_memory"][0]["memory_id"] == "mem-1"
@@ -315,6 +326,15 @@ async def test_generate_markdown_research_report_keeps_unsupported_claims_out_of
     assert (
         "- Resolve 1 unsupported or invalid-source claim before treating the report as complete."
     ) in markdown
+    assert "## Reader Summary" in markdown
+    assert (
+        "- Status: 1 of 2 audited claims are approved; unapproved claims remain evidence gaps."
+    ) in markdown
+    assert "- Evidence basis: 1 citation evidence record from uploaded papers only." in markdown
+    assert "- Memory boundary: No context-only memory was used." in markdown
+    assert (
+        "- Next action: Resolve Evidence Gaps and Limitations before reusing this report as a cited output."
+    ) in markdown
     assert (
         "| Hybrid retrieval proves clinical benefit. | `unsupported` | `0.40` |  | "
         "Nearest citation evidence: 17 with lexical support 0.40. No explicit citation label was attached to this claim. |"
@@ -336,6 +356,12 @@ async def test_generate_markdown_research_report_keeps_unsupported_claims_out_of
             "message": "Resolve 1 unsupported or invalid-source claim before treating the report as complete.",
         }
     ]
+    assert evidence["reader_summary"] == {
+        "status": "1 of 2 audited claims are approved; unapproved claims remain evidence gaps.",
+        "evidence_basis": "1 citation evidence record from uploaded papers only.",
+        "memory_boundary": "No context-only memory was used.",
+        "next_action": "Resolve Evidence Gaps and Limitations before reusing this report as a cited output.",
+    }
 
 
 @pytest.mark.asyncio
