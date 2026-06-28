@@ -47,6 +47,7 @@ export interface SourceQualityMetadata {
   source_type: 'paper' | 'web' | 'database' | string;
   identity_fields: string[];
   missing_fields: string[];
+  quality_warnings?: string[];
 }
 
 export interface ToolEventData extends BaseEventData {

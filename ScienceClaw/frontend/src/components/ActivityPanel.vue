@@ -338,6 +338,7 @@
                   <span>identity_fields={{ quality.identity_fields.join(',') || 'none' }}</span>
                   <span v-if="quality.missing_fields.length">missing={{ quality.missing_fields.join(',') }}</span>
                   <span v-else>missing=none</span>
+                  <span v-if="quality.quality_warnings?.length">warnings={{ quality.quality_warnings.join(',') }}</span>
                 </div>
               </div>
             </div>

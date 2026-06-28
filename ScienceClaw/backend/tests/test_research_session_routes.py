@@ -478,6 +478,47 @@ async def test_research_web_evidence_ingest_failure_persists_failed_trace(monkey
 
 
 @pytest.mark.asyncio
+async def test_research_web_evidence_ingest_warns_for_non_https_source(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession()
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    async def fake_persist_web_evidence_source(database_url, **kwargs):
+        return FakeStorageSummary(
+            paper_id=kwargs["source_id"],
+            chunk_count=len(kwargs["chunks"]),
+            evidence_record_count=len(kwargs["chunks"]),
+        )
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "persist_web_evidence_source_to_database", fake_persist_web_evidence_source)
+    monkeypatch.setattr(sessions, "_publish_session_event", lambda *args, **kwargs: None)
+
+    response = await sessions.ingest_web_evidence_for_session(
+        "session-1",
+        sessions.WebEvidenceIngestRequest(
+            url="http://example.com/research",
+            title="External Research Note",
+            chunks=[
+                sessions.WebEvidenceChunkRequest(
+                    section="Findings",
+                    content="Only source-identified web evidence can be cited.",
+                )
+            ],
+        ),
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    assert response.data["source_quality"]["status"] == "citation_grade"
+    assert response.data["source_quality"]["quality_warnings"] == ["url_not_https"]
+    completed_step = session.events[-1]["data"]
+    assert completed_step["metadata"]["source_quality"]["quality_warnings"] == ["url_not_https"]
+
+
+@pytest.mark.asyncio
 async def test_research_database_evidence_ingest_persists_source_and_trace(monkeypatch):
     sessions = _load_sessions_module(monkeypatch)
     session = FakeSession()

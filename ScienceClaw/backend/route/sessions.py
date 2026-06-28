@@ -183,12 +183,20 @@ class RuntimeResultAuditExportRequest(BaseModel):
 def _source_quality(source_type: str, identity: dict[str, Any]) -> dict[str, Any]:
     identity_fields = list(identity.keys())
     missing_fields = [field for field, value in identity.items() if not str(value or "").strip()]
-    return {
+    quality = {
         "status": "citation_grade" if not missing_fields else "identity_incomplete",
         "source_type": source_type,
         "identity_fields": identity_fields,
         "missing_fields": missing_fields,
     }
+    warnings: list[str] = []
+    if source_type == "web":
+        url = str(identity.get("url") or "").strip().lower()
+        if url and not url.startswith("https://"):
+            warnings.append("url_not_https")
+    if warnings:
+        quality["quality_warnings"] = warnings
+    return quality
 
 
 class ResearchMemoryPromotionRequest(BaseModel):

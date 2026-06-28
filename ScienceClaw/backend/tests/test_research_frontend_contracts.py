@@ -263,6 +263,9 @@ def test_activity_panel_surfaces_source_quality_trace_metadata():
     assert "identity_incomplete" in activity_panel
     assert "citation_evidence=true" in activity_panel
     assert "quality.missing_fields" in activity_panel
+    assert "quality_warnings?: string[]" in event_types
+    assert "quality.quality_warnings" in activity_panel
+    assert "warnings=" in activity_panel
 
 
 def test_activity_panel_filters_recovered_runtime_audit_by_tool_pack():
