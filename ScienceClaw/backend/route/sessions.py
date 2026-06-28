@@ -2716,7 +2716,12 @@ async def generate_research_report_for_session(
             ),
             "role": "assistant",
             "attachments": [],
-            "metadata": {"research_assistant": {"report": report.to_dict()}},
+            "metadata": {
+                "research_assistant": {
+                    "report": report.to_dict(),
+                    "context_boundaries": CONTEXT_BOUNDARIES,
+                }
+            },
         })
         _append_session_event(session, assistant_event)
         _publish_session_event(session_id, current_user.id, assistant_event)
@@ -2736,7 +2741,7 @@ async def generate_research_report_for_session(
         setattr(session, "status", SessionStatus.COMPLETED)
         await session.save()
 
-        return ApiResponse(data={**report.to_dict(), "round_files": round_files})
+        return ApiResponse(data={**report.to_dict(), "context_boundaries": CONTEXT_BOUNDARIES, "round_files": round_files})
     except ScienceSessionNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except HTTPException:

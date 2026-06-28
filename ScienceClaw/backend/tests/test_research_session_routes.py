@@ -1428,7 +1428,19 @@ async def test_research_report_completion_message_uses_generic_citation_evidence
         "2 citation evidence records."
     )
     assert "paper citations" not in assistant_messages[-1]["content"]
+    assert assistant_messages[-1]["metadata"]["research_assistant"]["context_boundaries"] == {
+        "citation_evidence": ["paper", "web", "database"],
+        "context_only_memory": ["memory"],
+        "process_trace": ["tool_logs", "runtime_results", "agent_lifecycle"],
+        "model_reasoning": ["model_reasoning"],
+    }
     assert response.data["citation_count"] == 2
+    assert response.data["context_boundaries"] == {
+        "citation_evidence": ["paper", "web", "database"],
+        "context_only_memory": ["memory"],
+        "process_trace": ["tool_logs", "runtime_results", "agent_lifecycle"],
+        "model_reasoning": ["model_reasoning"],
+    }
     completed_steps = [
         event["data"]
         for event in session.events
