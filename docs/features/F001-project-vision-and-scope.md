@@ -44,11 +44,14 @@ In Progress。
 
 当前仓库已经导入 ScienceClaw baseline application shell，并通过基础 backend/frontend 验证。Research Assistant 专属能力尚未完成，后续应按可验证能力增量继续开发。
 
+2026-06-28 文档治理更新：本 Feature 现在作为项目级 Vision / Scope / umbrella Feature 使用。P0 子能力的长期恢复入口已经拆分到 `F002` 到 `F008`，默认召回入口是 [Feature Index](INDEX.md)。本文件保留历史验收和证据聚合，后续能力变更应优先更新 owning Feature，而不是继续把所有细节追加到 F001。
+
 ## Links
 
 ### Evidence
 
 - Baseline import notes: [baseline-import-notes.md](../baseline-import-notes.md)
+- Feature governance split validation: [EV-001 Feature Governance Split Validation](../evidence/EV-001-feature-governance-split-validation.md)
 
 ### Decisions / ADRs
 
@@ -64,7 +67,14 @@ In Progress。
 
 ### Related Features
 
-- None yet.
+- [Feature Index](INDEX.md)
+- [F002 ScienceClaw Baseline Workbench Shell](F002-scienceclaw-baseline-workbench-shell.md)
+- [F003 Research Document Ingestion](F003-research-document-ingestion.md)
+- [F004 Citation Evidence Boundary](F004-citation-evidence-boundary.md)
+- [F005 Hybrid Retrieval and Grounded Answering](F005-hybrid-retrieval-grounded-answering.md)
+- [F006 Evidence Audit](F006-evidence-audit.md)
+- [F007 Research Artifact Generation](F007-research-artifact-generation.md)
+- [F008 Trace Honesty and Activity Panel](F008-trace-honesty-activity-panel.md)
 
 ### External Context
 
@@ -218,6 +228,7 @@ In Progress。
 | 2026-06-21 | Custom tools require research tool packs. | Persistent tool saves now require a domain-scoped research pack, store pack metadata beside the saved tool, and surface pack badges/filters in the Tools workbench. |
 | 2026-06-21 | Web citation evidence storage path added. | Source-identified web evidence can now be persisted as `web` evidence in PostgreSQL and returned by hybrid retrieval alongside paper/database citation evidence. |
 | 2026-06-21 | Web citation evidence session ingestion added. | A session-scoped `/research/web-evidence` API persists source-identified web chunks into citation evidence storage and emits real ActivityPanel step events for indexed or failed ingestion. |
+| 2026-06-28 | Feature governance split started. | `docs/features/INDEX.md` and F002-F008 created as owning recovery entries for the P0 workstreams; F001 remains the umbrella Feature and historical evidence aggregation point. |
 | 2026-06-21 | Database citation evidence session ingestion added. | Source-identified database result chunks can now be persisted as `database` evidence through `/research/database-evidence`, with database name/query identity and real ActivityPanel trace events. |
 | 2026-06-21 | Manual source evidence ingestion surfaced in Chat. | ScienceClaw Chat now exposes a compact source-ingestion popover that sends source-identified web/database chunks to the backend evidence ingestion APIs and relies on real session step events for trace. |
 | 2026-06-21 | Report evidence scope follows actual citation sources. | Markdown reports and sidecar evidence maps now describe the actual citation source types used by the report instead of hard-coding uploaded-paper scope when web/database evidence is cited. |
