@@ -32,6 +32,7 @@ async def hybrid_search_evidence(
     connection: Any,
     *,
     session_id: str,
+    project_id: str | None = None,
     query_text: str,
     query_embedding: Sequence[float],
     embedding_model: str,
@@ -47,7 +48,7 @@ async def hybrid_search_evidence(
                 ) AS lexical_rank
             FROM research_chunks c
             JOIN research_papers p ON p.paper_id = c.paper_id
-            WHERE p.session_id = $1
+            WHERE (($6::text IS NULL AND p.session_id = $1) OR p.project_id = $6)
               AND c.content_tsv @@ websearch_to_tsquery('english', $2)
             LIMIT $5
         ),
@@ -60,7 +61,7 @@ async def hybrid_search_evidence(
             FROM research_embeddings e
             JOIN research_chunks c ON c.chunk_id = e.chunk_id
             JOIN research_papers p ON p.paper_id = c.paper_id
-            WHERE p.session_id = $1
+            WHERE (($6::text IS NULL AND p.session_id = $1) OR p.project_id = $6)
               AND e.embedding_model = $4
             LIMIT $5
         ),
@@ -109,6 +110,7 @@ async def hybrid_search_evidence(
         _vector_literal(query_embedding),
         embedding_model,
         limit,
+        project_id,
     )
     return [_row_to_hit(row) for row in rows]
 

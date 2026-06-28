@@ -86,6 +86,46 @@
                 class="h-8 w-8 rounded-xl inline-flex items-center justify-center border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 hover:shadow-sm transition-all duration-200">
                 <FileSearch class="text-[var(--icon-secondary)]" :size="16" />
               </button>
+              <Popover>
+                <PopoverTrigger>
+                  <button
+                    class="h-8 rounded-xl inline-flex items-center justify-center gap-1.5 border px-2.5 text-xs font-semibold hover:shadow-sm transition-all duration-200 max-w-[220px]"
+                    :class="currentResearchProject
+                      ? 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300'
+                      : 'border-gray-200 bg-white text-[var(--text-secondary)] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'"
+                    title="Project context">
+                    <Package :size="14" />
+                    <span class="hidden sm:inline truncate">{{ currentResearchProject?.name || 'No Project' }}</span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent class="w-[360px] p-0 overflow-hidden bg-[var(--background-white-main)] border border-[var(--border-light)] shadow-xl rounded-xl" align="end" :side-offset="8">
+                  <div class="px-4 py-3 border-b border-[var(--border-light)]">
+                    <div class="text-sm font-semibold text-[var(--text-primary)]">Project context</div>
+                    <div class="text-xs text-[var(--text-tertiary)] truncate">Linked project assets are searchable citation context.</div>
+                  </div>
+                  <div class="p-3 flex flex-col gap-2">
+                    <select
+                      v-model="selectedResearchProjectId"
+                      @change="handleResearchProjectChange"
+                      :disabled="researchProjectLoading || researchProjectOptions.length === 0"
+                      class="source-evidence-input h-9">
+                      <option value="">No linked Project</option>
+                      <option
+                        v-for="project in researchProjectOptions"
+                        :key="project.project_id"
+                        :value="project.project_id">
+                        {{ project.name }}
+                      </option>
+                    </select>
+                    <div v-if="currentResearchProject" class="text-xs text-[var(--text-tertiary)] leading-5">
+                      {{ currentResearchProject.paper_count }} papers · {{ currentResearchProject.evidence_record_count }} citation records
+                    </div>
+                    <div v-else class="text-xs text-[var(--text-tertiary)] leading-5">
+                      General chats only use session-local uploaded evidence.
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
               <Popover v-model:open="sourceEvidenceOpen">
                 <PopoverTrigger>
                   <button
@@ -531,6 +571,10 @@ const pendingToolSave = ref<string | null>(null);
 const pendingToolReplaces = ref<string | null>(null);
 const savingTool = ref(false);
 
+const researchProjectOptions = ref<agentApi.ResearchProject[]>([]);
+const selectedResearchProjectId = ref('');
+const currentResearchProject = ref<agentApi.ResearchProject | null>(null);
+const researchProjectLoading = ref(false);
 const sourceEvidenceOpen = ref(false);
 const sourceEvidenceKind = ref<'web' | 'database'>('web');
 const sourceEvidenceSubmitting = ref(false);
@@ -1126,6 +1170,53 @@ const refreshResearchStatus = async (targetSessionId: string) => {
   }
 };
 
+const loadSessionResearchProject = async (targetSessionId: string) => {
+  researchProjectLoading.value = true;
+  try {
+    const [projects, binding] = await Promise.all([
+      agentApi.listResearchProjects(),
+      agentApi.getSessionResearchProject(targetSessionId),
+    ]);
+    researchProjectOptions.value = projects;
+    currentResearchProject.value = binding.project;
+    selectedResearchProjectId.value = binding.project?.project_id || '';
+    if (binding.project) {
+      activateResearchMode();
+    }
+  } catch (error) {
+    console.warn('Failed to load research project context:', error);
+    researchProjectOptions.value = [];
+    currentResearchProject.value = null;
+    selectedResearchProjectId.value = '';
+  } finally {
+    researchProjectLoading.value = false;
+  }
+};
+
+const handleResearchProjectChange = async () => {
+  if (!selectedResearchProjectId.value) {
+    selectedResearchProjectId.value = currentResearchProject.value?.project_id || '';
+    return;
+  }
+  if (!sessionId.value || researchProjectLoading.value) return;
+  researchProjectLoading.value = true;
+  try {
+    const binding = await agentApi.setSessionResearchProject(sessionId.value, selectedResearchProjectId.value);
+    currentResearchProject.value = binding.project;
+    selectedResearchProjectId.value = binding.project?.project_id || '';
+    if (binding.project) {
+      activateResearchMode();
+    }
+    showSuccessToast(t('Project context linked'));
+  } catch (error) {
+    console.warn('Failed to link research project context:', error);
+    selectedResearchProjectId.value = currentResearchProject.value?.project_id || '';
+    showErrorToast(t('Failed to link Project context'));
+  } finally {
+    researchProjectLoading.value = false;
+  }
+};
+
 const refreshRuntimeResultAudit = async (targetSessionId: string) => {
   try {
     const audit = await agentApi.listRuntimeResultAudit(targetSessionId);
@@ -1474,6 +1565,8 @@ const restoreSession = async () => {
 
   if (isStale()) { console.log('[restoreSession] stale after load, aborting'); return; }
   await refreshResearchStatus(restoreTarget);
+  if (isStale()) return;
+  await loadSessionResearchProject(restoreTarget);
   if (isStale()) return;
   await refreshRuntimeResultAudit(restoreTarget);
   if (isStale()) return;

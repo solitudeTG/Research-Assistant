@@ -194,6 +194,11 @@ export interface ResearchProjectPaperUploadResult {
   evidence_preview_path: string;
 }
 
+export interface SessionResearchProjectBinding {
+  session_id: string;
+  project: ResearchProject | null;
+}
+
 export interface SourceEvidenceChunkPayload {
   section: string;
   content: string;
@@ -367,6 +372,24 @@ export async function uploadResearchProjectPaper(
     `/sessions/research/projects/${projectId}/papers`,
     formData,
     { headers: { 'Content-Type': 'multipart/form-data' } },
+  );
+  return response.data.data;
+}
+
+export async function setSessionResearchProject(
+  sessionId: string,
+  projectId: string,
+): Promise<SessionResearchProjectBinding> {
+  const response = await apiClient.put<ApiResponse<SessionResearchProjectBinding>>(
+    `/sessions/${sessionId}/research/project`,
+    { project_id: projectId },
+  );
+  return response.data.data;
+}
+
+export async function getSessionResearchProject(sessionId: string): Promise<SessionResearchProjectBinding> {
+  const response = await apiClient.get<ApiResponse<SessionResearchProjectBinding>>(
+    `/sessions/${sessionId}/research/project`,
   );
   return response.data.data;
 }

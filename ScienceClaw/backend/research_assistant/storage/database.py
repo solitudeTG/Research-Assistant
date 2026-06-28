@@ -16,6 +16,7 @@ from backend.research_assistant.storage.repository import (
     delete_memory_entry,
     get_audit_result,
     get_evidence_record,
+    get_session_research_project,
     list_project_paper_assets,
     list_memory_entries,
     list_research_projects,
@@ -26,6 +27,7 @@ from backend.research_assistant.storage.repository import (
     persist_ingestion_result,
     persist_memory_entry,
     persist_report_evidence_map,
+    upsert_session_research_project,
 )
 
 
@@ -119,10 +121,51 @@ async def list_project_paper_assets_from_database(
         await connection.close()
 
 
+async def upsert_session_research_project_in_database(
+    database_url: str,
+    *,
+    session_id: str,
+    project_id: str,
+    user_id: str,
+) -> ResearchProject | None:
+    import asyncpg
+
+    connection = await asyncpg.connect(database_url)
+    try:
+        return await upsert_session_research_project(
+            connection,
+            session_id=session_id,
+            project_id=project_id,
+            user_id=user_id,
+        )
+    finally:
+        await connection.close()
+
+
+async def get_session_research_project_from_database(
+    database_url: str,
+    *,
+    session_id: str,
+    user_id: str,
+) -> ResearchProject | None:
+    import asyncpg
+
+    connection = await asyncpg.connect(database_url)
+    try:
+        return await get_session_research_project(
+            connection,
+            session_id=session_id,
+            user_id=user_id,
+        )
+    finally:
+        await connection.close()
+
+
 async def hybrid_search_evidence_in_database(
     database_url: str,
     *,
     session_id: str,
+    project_id: str | None = None,
     query_text: str,
     query_embedding: list[float],
     embedding_model: str,
@@ -135,6 +178,7 @@ async def hybrid_search_evidence_in_database(
         return await hybrid_search_evidence(
             connection,
             session_id=session_id,
+            project_id=project_id,
             query_text=query_text,
             query_embedding=query_embedding,
             embedding_model=embedding_model,

@@ -23,6 +23,7 @@ def test_research_store_schema_defines_pgvector_and_evidence_tables():
         "research_report_evidence_map",
         "research_audit_results",
         "research_memory_entries",
+        "research_session_projects",
     ]:
         assert f"create table if not exists {table_name}" in sql
 
@@ -38,3 +39,5 @@ def test_research_store_schema_defines_pgvector_and_evidence_tables():
     assert "project_id text" in sql
     assert "references research_projects(project_id)" in sql
     assert "research_papers_project_id_idx" in sql
+    assert "research_session_projects_session_id_idx" in sql
+    assert "research_session_projects_project_id_idx" in sql

@@ -63,6 +63,7 @@ from backend.research_assistant.storage.database import (
     get_audit_result_from_database,
     get_evidence_record_from_database,
     get_research_session_status_from_database,
+    get_session_research_project_from_database,
     list_project_paper_assets_from_database,
     list_memory_entries_from_database,
     list_research_projects_from_database,
@@ -70,6 +71,7 @@ from backend.research_assistant.storage.database import (
     persist_database_evidence_source_to_database,
     persist_memory_entry_to_database,
     persist_web_evidence_source_to_database,
+    upsert_session_research_project_in_database,
 )
 from backend.user.dependencies import get_current_user, require_user, User
 from backend.models import get_model_config
@@ -156,6 +158,10 @@ class ResearchProjectCreateRequest(BaseModel):
     description: Optional[str] = Field(default="", description="Optional research project description")
 
 
+class SessionResearchProjectRequest(BaseModel):
+    project_id: str = Field(..., min_length=1, description="Research Project to associate with this session")
+
+
 class WebEvidenceChunkRequest(BaseModel):
     section: str = Field(default="Web", min_length=1, description="Section or heading for this web evidence chunk")
     content: str = Field(..., min_length=1, description="Web evidence chunk content")
@@ -205,6 +211,25 @@ def _source_quality(source_type: str, identity: dict[str, Any]) -> dict[str, Any
     if warnings:
         quality["quality_warnings"] = warnings
     return quality
+
+
+async def _load_session_research_project_context(
+    *,
+    session_id: str,
+    user_id: str,
+) -> Any | None:
+    try:
+        return await get_session_research_project_from_database(
+            settings.research_database_url,
+            session_id=session_id,
+            user_id=user_id,
+        )
+    except Exception as exc:
+        logger.warning(
+            "session research project context unavailable; falling back to session-scoped retrieval: {}",
+            exc,
+        )
+        return None
 
 
 class ResearchMemoryPromotionRequest(BaseModel):
@@ -2056,6 +2081,67 @@ async def upload_research_project_paper_for_user(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@router.put("/{session_id}/research/project", response_model=ApiResponse)
+async def set_session_research_project_for_user(
+    session_id: str,
+    body: SessionResearchProjectRequest,
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """Associate a Chat session with one Research Project."""
+    try:
+        session = await async_get_science_session(session_id)
+        if session.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        project = await upsert_session_research_project_in_database(
+            settings.research_database_url,
+            session_id=session_id,
+            project_id=body.project_id,
+            user_id=current_user.id,
+        )
+        if project is None:
+            raise HTTPException(status_code=404, detail="Research Project not found")
+        return ApiResponse(data={"session_id": session_id, "project": project.to_dict()})
+    except ScienceSessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("set_session_research_project_for_user failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/{session_id}/research/project", response_model=ApiResponse)
+async def get_session_research_project_for_user(
+    session_id: str,
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """Return the Research Project associated with a Chat session, if any."""
+    try:
+        session = await async_get_science_session(session_id)
+        if session.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        project = await get_session_research_project_from_database(
+            settings.research_database_url,
+            session_id=session_id,
+            user_id=current_user.id,
+        )
+        return ApiResponse(
+            data={
+                "session_id": session_id,
+                "project": project.to_dict() if project else None,
+            }
+        )
+    except ScienceSessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("get_session_research_project_for_user failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @router.post("/{session_id}/research/web-evidence", response_model=ApiResponse)
 async def ingest_web_evidence_for_session(
     session_id: str,
@@ -2337,13 +2423,24 @@ async def answer_research_question_for_session(
         if session.user_id != current_user.id:
             raise HTTPException(status_code=403, detail="Access denied")
 
+        project = await _load_session_research_project_context(
+            session_id=session_id,
+            user_id=current_user.id,
+        )
+        project_id = project.project_id if project else None
+        retrieval_scope = "project" if project_id else "session"
+        retrieval_metadata = {
+            "retrieval_scope": retrieval_scope,
+            "project_id": project_id,
+        }
+
         user_event = _wrap_event("message", {
             "event_id": _new_event_id(),
             "timestamp": _now_ts(),
             "content": body.question,
             "role": "user",
             "attachments": [],
-            "metadata": {"research_assistant": {"mode": "citation_evidence"}},
+            "metadata": {"research_assistant": {"mode": "citation_evidence", **retrieval_metadata}},
         })
         _append_session_event(session, user_event)
         _publish_session_event(session_id, current_user.id, user_event)
@@ -2353,7 +2450,7 @@ async def answer_research_question_for_session(
             step_id=step_id,
             status="running",
             description="Retrieving citation evidence",
-            metadata={"question": body.question, "limit": body.limit},
+            metadata={"question": body.question, "limit": body.limit, **retrieval_metadata},
         )
         _append_session_event(session, retrieval_started)
         _publish_session_event(session_id, current_user.id, retrieval_started)
@@ -2362,6 +2459,7 @@ async def answer_research_question_for_session(
             answer = await answer_research_question(
                 database_url=settings.research_database_url,
                 session_id=session_id,
+                project_id=project_id,
                 user_id=current_user.id,
                 question=body.question,
                 embedding_dimensions=settings.research_embedding_dimensions,
@@ -2385,7 +2483,7 @@ async def answer_research_question_for_session(
                     step_id=step_id,
                     status="failed",
                     description="Citation evidence retrieval failed",
-                    metadata={"question": body.question, "error": str(exc)},
+                    metadata={"question": body.question, "error": str(exc), **retrieval_metadata},
                 ),
             )
             raise
@@ -2400,6 +2498,7 @@ async def answer_research_question_for_session(
                 "context_memory_conflict_count": answer.context_memory_conflict_count,
                 "context_boundaries": CONTEXT_BOUNDARIES,
                 "embedding_model": settings.research_embedding_model,
+                **retrieval_metadata,
             },
         )
         _append_session_event(session, retrieval_completed)
@@ -2411,7 +2510,7 @@ async def answer_research_question_for_session(
             "content": answer.content,
             "role": "assistant",
             "attachments": [],
-            "metadata": {"research_assistant": {**answer.to_dict(), "question": body.question}},
+            "metadata": {"research_assistant": {**answer.to_dict(), "question": body.question, **retrieval_metadata}},
         })
         _append_session_event(session, assistant_event)
         _publish_session_event(session_id, current_user.id, assistant_event)

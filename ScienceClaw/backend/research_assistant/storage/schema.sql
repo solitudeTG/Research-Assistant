@@ -13,6 +13,20 @@ CREATE TABLE IF NOT EXISTS research_projects (
 CREATE INDEX IF NOT EXISTS research_projects_user_updated_idx
     ON research_projects (user_id, updated_at DESC);
 
+CREATE TABLE IF NOT EXISTS research_session_projects (
+    session_id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES research_projects(project_id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS research_session_projects_session_id_idx
+    ON research_session_projects (session_id);
+
+CREATE INDEX IF NOT EXISTS research_session_projects_project_id_idx
+    ON research_session_projects (project_id);
+
 CREATE TABLE IF NOT EXISTS research_papers (
     paper_id TEXT PRIMARY KEY,
     project_id TEXT REFERENCES research_projects(project_id) ON DELETE SET NULL,

@@ -1,7 +1,7 @@
 ---
 id: F010
 doc_kind: feature
-status: planned
+status: completed
 owner: solitudeTG
 created: 2026-06-28
 updated: 2026-06-28
@@ -40,7 +40,7 @@ updated: 2026-06-28
 
 ## Current Status
 
-Planned. Depends on F009 for the Project model and Library asset boundary.
+Completed for MVP scope. Chat sessions can bind to one Research Project, Chat UI shows the Project context, and research-answer retrieval uses Project-scoped citation evidence when a binding exists while preserving session-scoped behavior for unbound chats.
 
 ## Decision Context
 
@@ -62,7 +62,7 @@ A global Library retrieval path was rejected because unrelated research projects
 
 ### Evidence
 
-- None yet.
+- [EV-002 Project Scoped Chat Verification](../evidence/EV-002-project-scoped-chat-verification.md)
 
 ### Decisions / ADRs
 
@@ -75,6 +75,7 @@ A global Library retrieval path was rejected because unrelated research projects
 ### Specs / Plans
 
 - [F001 Feature Map and Rules Spec](../specs/F001-feature-map-and-rules-spec.md)
+- [Project Scoped Chat Implementation Plan](../superpowers/plans/2026-06-28-project-scoped-chat.md)
 
 ### Related Features
 
@@ -88,25 +89,26 @@ A global Library retrieval path was rejected because unrelated research projects
 
 ## Acceptance Criteria
 
-- [ ] User can associate a Chat session with one Project.
-- [ ] Chat UI displays the associated Project.
-- [ ] Research answer retrieval is limited to the associated Project.
-- [ ] Unassociated sessions do not retrieve from Research Library.
-- [ ] Trace records the Project retrieval scope.
+- [x] User can associate a Chat session with one Project.
+- [x] Chat UI displays the associated Project.
+- [x] Research answer retrieval is limited to the associated Project.
+- [x] Unassociated sessions preserve session-scoped retrieval instead of querying Project Library assets.
+- [x] Trace records the Project retrieval scope.
 
 ## Acceptance Map
 
 | Claim | Acceptance | Evidence | Status |
 | --- | --- | --- | --- |
-| Chat can bind to a Project. | Session metadata/API persists and returns the associated Project. | Pending. | Planned |
-| Retrieval is Project-scoped. | Two Projects with different papers cannot cross-retrieve evidence. | Pending. | Planned |
-| General Chat stays separate. | Unassociated sessions do not query Library assets. | Pending. | Planned |
+| Chat can bind to a Project. | Session metadata/API persists and returns the associated Project; Chat UI exposes Project context. | `pytest backend/tests/test_research_repository.py::test_upsert_session_research_project_persists_binding backend/tests/test_research_session_routes.py::test_set_session_research_project_route_persists_binding backend/tests/test_research_frontend_contracts.py::test_frontend_exposes_session_project_binding_contracts -q`; `npm.cmd run type-check`. | Passed |
+| Retrieval is Project-scoped. | Bound research answers pass `project_id` into retrieval and SQL constrains candidates with `p.project_id = $6`. | `pytest backend/tests/test_research_retrieval.py::test_hybrid_search_evidence_can_scope_to_project backend/tests/test_research_answering.py::test_answer_research_question_passes_project_id_to_retrieval -q`. | Passed |
+| General Chat stays separate. | Unbound research answers preserve session-scoped retrieval and do not pass `project_id=None` into legacy retrieval stubs. | `pytest backend/tests/test_research_answering.py::test_answer_research_question_uses_only_citation_evidence backend/tests/test_research_session_routes.py::test_research_answer_persists_audit_result -q`. | Passed |
 
 ## State Timeline
 
 | Date | State | Trigger | Evidence | Note |
 | --- | --- | --- | --- | --- |
 | 2026-06-28 | planned | User approved four-Feature breakdown | This Feature | Created to own session-to-Project context binding. |
+| 2026-06-28 | completed | F010 implementation and verification | Full backend tests, frontend type-check, frontend build | MVP Project-scoped chat binding landed. |
 
 ## Patch History
 
@@ -114,15 +116,18 @@ None yet.
 
 ## Evidence
 
-No verification evidence yet.
+- `pytest backend/tests -q` from `ScienceClaw`: 154 passed, 2071 warnings.
+- `npm.cmd run type-check` from `ScienceClaw/frontend`: passed.
+- `npm.cmd run build` from `ScienceClaw/frontend`: passed with existing Browserslist/CSS/chunk-size warnings.
+- Focused F010 tests: 8 passed for schema, repository, retrieval, answering, routes, and frontend binding contracts.
 
 ## Recovery Snapshot
 
 - Read first: this Feature, `F009`, `F005`, `F008`.
-- Current capability state: Research answer route exists but is not yet Project-scoped.
-- Known risks: Avoid adding a confusing RAG mode switch; Project association is the product primitive.
-- Next safe action: Add route/service tests proving two Projects cannot cross-retrieve evidence.
+- Current capability state: Research answer route is Project-scoped when a session binding exists; otherwise it remains session-scoped.
+- Known risks: F010 does not implement evidence relevance thresholds, per-question source selection, multi-project sessions, or chat-upload promotion.
+- Next safe action: Start F011 evidence admission thresholds and retrieval decision policy.
 
 ## Next Step
 
-Implement after F009 provides a Project model and Library asset records.
+Start F011 to decide when low-quality or low-score retrieved evidence should be withheld from context.

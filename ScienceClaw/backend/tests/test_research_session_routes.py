@@ -286,6 +286,62 @@ async def test_upload_research_project_paper_indexes_into_project(monkeypatch, t
 
 
 @pytest.mark.asyncio
+async def test_set_session_research_project_route_persists_binding(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession()
+    captured = {}
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    async def fake_upsert(database_url, **kwargs):
+        captured["database_url"] = database_url
+        captured.update(kwargs)
+        return FakeProject(project_id=kwargs["project_id"])
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "upsert_session_research_project_in_database", fake_upsert)
+
+    response = await sessions.set_session_research_project_for_user(
+        "session-1",
+        sessions.SessionResearchProjectRequest(project_id="project-1"),
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    assert captured == {
+        "database_url": sessions.settings.research_database_url,
+        "session_id": "session-1",
+        "project_id": "project-1",
+        "user_id": "user-1",
+    }
+    assert response.data["project"]["project_id"] == "project-1"
+
+
+@pytest.mark.asyncio
+async def test_get_session_research_project_route_returns_binding(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession()
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    async def fake_get_project(database_url, **kwargs):
+        return FakeProject(project_id="project-1")
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "get_session_research_project_from_database", fake_get_project)
+
+    response = await sessions.get_session_research_project_for_user(
+        "session-1",
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    assert response.data["project"]["project_id"] == "project-1"
+
+
+@pytest.mark.asyncio
 async def test_runtime_result_audit_lists_persisted_process_trace_summaries(monkeypatch):
     sessions = _load_sessions_module(monkeypatch)
     session = FakeSession()

@@ -292,6 +292,79 @@ async def list_project_paper_assets(
     return [_project_paper_asset_from_row(row) for row in rows]
 
 
+async def upsert_session_research_project(
+    connection: Any,
+    *,
+    session_id: str,
+    project_id: str,
+    user_id: str,
+) -> ResearchProject | None:
+    row = await connection.fetchrow(
+        """
+        WITH binding AS (
+            INSERT INTO research_session_projects (
+                session_id,
+                project_id,
+                user_id,
+                updated_at
+            )
+            VALUES ($1, $2, $3, now())
+            ON CONFLICT (session_id) DO UPDATE SET
+                project_id = EXCLUDED.project_id,
+                user_id = EXCLUDED.user_id,
+                updated_at = now()
+            RETURNING session_id, project_id, user_id
+        )
+        SELECT
+            binding.session_id,
+            rp.project_id,
+            rp.user_id,
+            rp.name,
+            rp.description,
+            rp.created_at,
+            rp.updated_at
+        FROM binding
+        JOIN research_projects rp ON rp.project_id = binding.project_id
+        WHERE rp.user_id = $3
+        """,
+        session_id,
+        project_id,
+        user_id,
+    )
+    if row is None:
+        return None
+    return _project_from_row(row)
+
+
+async def get_session_research_project(
+    connection: Any,
+    *,
+    session_id: str,
+    user_id: str,
+) -> ResearchProject | None:
+    row = await connection.fetchrow(
+        """
+        SELECT
+            rsp.session_id,
+            rp.project_id,
+            rp.user_id,
+            rp.name,
+            rp.description,
+            rp.created_at,
+            rp.updated_at
+        FROM research_session_projects rsp
+        JOIN research_projects rp ON rp.project_id = rsp.project_id
+        WHERE rsp.session_id = $1
+            AND rp.user_id = $2
+        """,
+        session_id,
+        user_id,
+    )
+    if row is None:
+        return None
+    return _project_from_row(row)
+
+
 async def persist_ingestion_result(
     connection: Any,
     result: IngestionResult,
@@ -1074,15 +1147,24 @@ def _normalise_memory_layer(layer: str) -> str:
     return normalised
 
 
+def _row_get(row: Any, key: str, default: Any = None) -> Any:
+    if isinstance(row, dict):
+        return row.get(key, default)
+    try:
+        return row[key]
+    except (KeyError, IndexError):
+        return default
+
+
 def _project_from_row(row: Any) -> ResearchProject:
     return ResearchProject(
         project_id=str(row["project_id"]),
         user_id=str(row["user_id"]),
         name=str(row["name"]),
         description=str(row["description"] or ""),
-        paper_count=int(row.get("paper_count", 0) or 0),
-        chunk_count=int(row.get("chunk_count", 0) or 0),
-        evidence_record_count=int(row.get("evidence_record_count", 0) or 0),
+        paper_count=int(_row_get(row, "paper_count", 0) or 0),
+        chunk_count=int(_row_get(row, "chunk_count", 0) or 0),
+        evidence_record_count=int(_row_get(row, "evidence_record_count", 0) or 0),
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )

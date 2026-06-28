@@ -70,6 +70,40 @@ async def test_answer_research_question_uses_only_citation_evidence(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_answer_research_question_passes_project_id_to_retrieval(monkeypatch):
+    captured = {}
+
+    async def fake_search(database_url, **kwargs):
+        captured["database_url"] = database_url
+        captured.update(kwargs)
+        return []
+
+    async def fake_list_memory(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.hybrid_search_evidence_in_database",
+        fake_search,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_memory_entries_from_database",
+        fake_list_memory,
+    )
+
+    await answer_research_question(
+        database_url="postgresql://test",
+        session_id="session-1",
+        project_id="project-1",
+        question="How does hybrid retrieval work?",
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=3,
+    )
+
+    assert captured["project_id"] == "project-1"
+
+
+@pytest.mark.asyncio
 async def test_answer_research_question_refuses_when_no_paper_evidence(monkeypatch):
     async def fake_search(*args, **kwargs):
         return []

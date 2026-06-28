@@ -60,3 +60,24 @@ async def test_hybrid_search_evidence_returns_citable_paper_chunks():
     assert args[0] == "session-1"
     assert args[1] == "hybrid retrieval evidence"
     assert args[3] == "test-embedding"
+
+
+@pytest.mark.asyncio
+async def test_hybrid_search_evidence_can_scope_to_project():
+    connection = FetchingConnection()
+
+    await hybrid_search_evidence(
+        connection,
+        session_id="session-1",
+        project_id="project-1",
+        query_text="hybrid retrieval evidence",
+        query_embedding=[0.1] * 1536,
+        embedding_model="test-embedding",
+        limit=5,
+    )
+
+    sql, args = connection.calls[0]
+    normalized_sql = sql.lower()
+    assert "p.project_id = $6" in normalized_sql
+    assert args[0] == "session-1"
+    assert args[5] == "project-1"

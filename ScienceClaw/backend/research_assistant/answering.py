@@ -115,6 +115,7 @@ async def answer_research_question(
     *,
     database_url: str,
     session_id: str,
+    project_id: str | None = None,
     user_id: str | None = None,
     question: str,
     embedding_dimensions: int,
@@ -125,14 +126,16 @@ async def answer_research_question(
         dimensions=embedding_dimensions,
         model_name=embedding_model,
     )
-    hits = await hybrid_search_evidence_in_database(
-        database_url,
-        session_id=session_id,
-        query_text=question,
-        query_embedding=provider.embed_text(question),
-        embedding_model=provider.model_name,
-        limit=limit,
-    )
+    search_kwargs = {
+        "session_id": session_id,
+        "query_text": question,
+        "query_embedding": provider.embed_text(question),
+        "embedding_model": provider.model_name,
+        "limit": limit,
+    }
+    if project_id is not None:
+        search_kwargs["project_id"] = project_id
+    hits = await hybrid_search_evidence_in_database(database_url, **search_kwargs)
     citations = [
         ResearchCitation(
             evidence_id=hit.evidence_id,

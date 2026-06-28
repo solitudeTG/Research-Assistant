@@ -7,6 +7,7 @@ from backend.research_assistant.ingestion import ingest_uploaded_paper
 from backend.research_assistant.storage import repository
 from backend.research_assistant.storage.repository import (
     create_research_project,
+    get_session_research_project,
     list_project_paper_assets,
     list_research_projects,
     persist_chunk_embeddings,
@@ -14,6 +15,7 @@ from backend.research_assistant.storage.repository import (
     persist_web_evidence_source,
     persist_ingestion_result,
     persist_report_evidence_map,
+    upsert_session_research_project,
 )
 
 
@@ -157,6 +159,64 @@ async def test_list_project_paper_assets_reads_only_selected_project():
     assert papers[0].to_dict()["title"] == "Space-Time Beamforming"
     assert papers[0].to_dict()["status"] == "indexed"
     assert papers[0].to_dict()["citation_ready"] is True
+
+
+@pytest.mark.asyncio
+async def test_upsert_session_research_project_persists_binding():
+    connection = RecordingConnection()
+    connection.fetchrow_result = {
+        "session_id": "session-1",
+        "project_id": "project-1",
+        "user_id": "user-1",
+        "name": "LEO Beamforming",
+        "description": "Narrow beam papers",
+        "created_at": None,
+        "updated_at": None,
+    }
+
+    project = await upsert_session_research_project(
+        connection,
+        session_id="session-1",
+        project_id="project-1",
+        user_id="user-1",
+    )
+
+    sql, args = connection.fetchrow_calls[0]
+    assert "insert into research_session_projects" in sql.lower()
+    assert "on conflict (session_id)" in sql.lower()
+    assert "join research_projects" in sql.lower()
+    assert args == ("session-1", "project-1", "user-1")
+    assert project is not None
+    assert project.project_id == "project-1"
+
+
+@pytest.mark.asyncio
+async def test_get_session_research_project_reads_binding():
+    connection = RecordingConnection()
+    connection.fetchrow_result = {
+        "session_id": "session-1",
+        "project_id": "project-1",
+        "user_id": "user-1",
+        "name": "LEO Beamforming",
+        "description": "Narrow beam papers",
+        "created_at": None,
+        "updated_at": None,
+    }
+
+    project = await get_session_research_project(
+        connection,
+        session_id="session-1",
+        user_id="user-1",
+    )
+
+    sql, args = connection.fetchrow_calls[0]
+    assert "from research_session_projects" in sql.lower()
+    assert "join research_projects" in sql.lower()
+    assert "rsp.session_id = $1" in sql.lower()
+    assert "rp.user_id = $2" in sql.lower()
+    assert args == ("session-1", "user-1")
+    assert project is not None
+    assert project.project_id == "project-1"
 
 
 @pytest.mark.asyncio

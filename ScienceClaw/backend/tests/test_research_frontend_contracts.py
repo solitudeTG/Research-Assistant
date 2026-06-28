@@ -52,6 +52,26 @@ def test_frontend_exposes_research_library_project_contracts():
     assert library_page.is_file()
 
 
+def test_frontend_exposes_session_project_binding_contracts():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    agent_api = (frontend_root / "api" / "agent.ts").read_text(encoding="utf-8")
+    chat_page = (frontend_root / "pages" / "ChatPage.vue").read_text(encoding="utf-8")
+
+    assert "export interface SessionResearchProjectBinding" in agent_api
+    assert "export async function setSessionResearchProject" in agent_api
+    assert "export async function getSessionResearchProject" in agent_api
+    assert "`/sessions/${sessionId}/research/project`" in agent_api
+
+    assert "researchProjectOptions" in chat_page
+    assert "selectedResearchProjectId" in chat_page
+    assert "currentResearchProject" in chat_page
+    assert "loadSessionResearchProject" in chat_page
+    assert "handleResearchProjectChange" in chat_page
+    assert "agentApi.setSessionResearchProject" in chat_page
+    assert "agentApi.getSessionResearchProject" in chat_page
+    assert "Project context" in chat_page
+
+
 def test_agent_api_exposes_source_quality_ingestion_result_contract():
     agent_api = (
         Path(__file__).resolve().parents[2]
