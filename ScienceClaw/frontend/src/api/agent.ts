@@ -195,6 +195,13 @@ export interface ResearchProjectPaperUploadResult {
   evidence_preview_path: string;
 }
 
+export interface ResearchLibraryPromotionResult extends ResearchProjectPaperUploadResult {
+  source_session_id: string;
+  source_path: string;
+  library_path: string;
+  promotion_status: 'indexed' | string;
+}
+
 export interface SessionResearchProjectBinding {
   session_id: string;
   project: ResearchProject | null;
@@ -373,6 +380,20 @@ export async function uploadResearchProjectPaper(
     `/sessions/research/projects/${projectId}/papers`,
     formData,
     { headers: { 'Content-Type': 'multipart/form-data' } },
+  );
+  return response.data.data;
+}
+
+export async function promoteChatPaperToLibrary(
+  sessionId: string,
+  payload: {
+    project_id: string;
+    sandbox_path: string;
+  },
+): Promise<ResearchLibraryPromotionResult> {
+  const response = await apiClient.post<ApiResponse<ResearchLibraryPromotionResult>>(
+    `/sessions/${sessionId}/research/library/promote`,
+    payload,
   );
   return response.data.data;
 }

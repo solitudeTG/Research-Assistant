@@ -308,7 +308,8 @@
               </div>
             </div>
             <ChatMessage v-else-if="group.type === 'single' && group.message" :message="group.message"
-              @toolClick="handleToolClick" @suggestionClick="handleSuggestionClick" @convertToPdf="handleConvertToPdf" @generateResearchReport="handleGenerateResearchReport" :mode="mode"
+              @toolClick="handleToolClick" @suggestionClick="handleSuggestionClick" @convertToPdf="handleConvertToPdf" @generateResearchReport="handleGenerateResearchReport" @promoteToResearchLibrary="handlePromoteToResearchLibrary" :mode="mode"
+              :researchLibraryPromotionCandidate="group.message.type === 'assistant' && index === groupedMessages.length - 1 ? latestResearchLibraryPromotionCandidate : null"
               :sessionId="sessionId" :isLast="index === lastProcessGroupIndex" :isLoading="isLoading" />
           </template>
 
@@ -575,6 +576,8 @@ const researchProjectOptions = ref<agentApi.ResearchProject[]>([]);
 const selectedResearchProjectId = ref('');
 const currentResearchProject = ref<agentApi.ResearchProject | null>(null);
 const researchProjectLoading = ref(false);
+const latestResearchLibraryPromotionCandidate = ref<{ sandboxPath: string; title?: string } | null>(null);
+const researchLibraryPromoting = ref(false);
 const sourceEvidenceOpen = ref(false);
 const sourceEvidenceKind = ref<'web' | 'database'>('web');
 const sourceEvidenceSubmitting = ref(false);
@@ -1125,6 +1128,7 @@ const onFilesChanged = (files: FileInfo[]) => {
   attachments.value = [...files];
   if (hasIndexedResearchAttachment(files)) {
     activateResearchMode();
+    latestResearchLibraryPromotionCandidate.value = getResearchLibraryPromotionCandidate(files);
   }
 };
 
@@ -1149,6 +1153,18 @@ const hasIndexedResearchAttachment = (files: FileInfo[]) => {
     const status = file.metadata?.research_assistant?.status;
     return status === 'indexed';
   });
+};
+
+const getResearchLibraryPromotionCandidate = (files: FileInfo[]) => {
+  const file = files.find((candidate) => candidate.metadata?.research_assistant?.status === 'indexed');
+  if (!file) return null;
+  const sandboxPath = file.metadata?.sandbox_path || file.file_id;
+  if (typeof sandboxPath !== 'string' || !sandboxPath.trim()) return null;
+  const title = file.metadata?.research_assistant?.title || file.filename;
+  return {
+    sandboxPath,
+    title: typeof title === 'string' ? title : undefined,
+  };
 };
 
 const hasIndexedResearchEvent = (event: any) => {
@@ -1381,6 +1397,38 @@ const handleGenerateResearchReport = async (question: string) => {
   }
 };
 
+const handlePromoteToResearchLibrary = async (payload: { sandboxPath: string; title?: string }) => {
+  if (!sessionId.value || _unmounted || researchLibraryPromoting.value) return;
+  if (!currentResearchProject.value) {
+    showErrorToast(t('Link a Project context before adding papers to Research Library'));
+    return;
+  }
+
+  researchLibraryPromoting.value = true;
+  selectedActivityTurn.value = -1;
+  activityItems.value = [];
+  pendingToolCallIds.value = [];
+  lastTurnHadError.value = false;
+  activityPanelRef.value?.show();
+
+  try {
+    await agentApi.promoteChatPaperToLibrary(sessionId.value, {
+      project_id: currentResearchProject.value.project_id,
+      sandbox_path: payload.sandboxPath,
+    });
+    latestResearchLibraryPromotionCandidate.value = null;
+    await loadSessionResearchProject(sessionId.value);
+    activateResearchMode();
+    showSuccessToast(t('Added to Research Library'));
+  } catch (error) {
+    console.error('Research Library promotion error:', error);
+    lastTurnHadError.value = true;
+    showErrorToast(t('Failed to add to Research Library'));
+  } finally {
+    researchLibraryPromoting.value = false;
+  }
+};
+
 const chat = async (message: string = '', files: FileInfo[] = [], reconnect: boolean = false) => {
   console.log('[chat] called, sessionId:', sessionId.value, 'reconnect:', reconnect, 'message:', message?.slice(0, 30), 'files:', files?.length, '_unmounted:', _unmounted);
   if (!sessionId.value || _unmounted) { console.log('[chat] aborted: no sessionId or unmounted'); return; }
@@ -1388,6 +1436,7 @@ const chat = async (message: string = '', files: FileInfo[] = [], reconnect: boo
   const hasIndexedAttachment = hasIndexedResearchAttachment(files);
   if (hasIndexedAttachment) {
     activateResearchMode();
+    latestResearchLibraryPromotionCandidate.value = getResearchLibraryPromotionCandidate(files);
   }
   if (!reconnect && message.trim() && (hasIndexedAttachment || (researchModeAvailable.value && researchModeEnabled.value && files.length === 0))) {
     await researchChat(message);

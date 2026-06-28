@@ -2617,3 +2617,103 @@ async def test_research_upload_marks_session_completed_after_indexing(monkeypatc
     assert response.data["metadata"]["research_assistant"]["status"] == "indexed"
     assert session.status == sessions.SessionStatus.COMPLETED
     assert session.events[-1]["data"]["description"] == "Paper evidence indexed: paper.pdf"
+
+
+@pytest.mark.asyncio
+async def test_promote_chat_paper_to_library_reuses_library_indexing_path(monkeypatch, tmp_path):
+    sessions = _load_sessions_module(monkeypatch)
+    workspace = tmp_path / "workspace"
+    source_dir = workspace / "session-1"
+    source_dir.mkdir(parents=True)
+    source_path = source_dir / "paper.pdf"
+    source_path.write_bytes(b"%PDF-1.4\nfake")
+    session = FakeSession(vm_root_dir=source_dir)
+    captured = {}
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    def fake_ingest_uploaded_paper(**kwargs):
+        captured["ingest"] = kwargs
+        paper = types.SimpleNamespace(
+            paper_id="paper-1",
+            title="Paper 1",
+            authors=["Ada Lovelace"],
+            parser="pdf-text",
+        )
+        return types.SimpleNamespace(
+            paper=paper,
+            chunks=[types.SimpleNamespace(chunk_id="chunk-1")],
+            artifact=types.SimpleNamespace(
+                manifest_path="/library/research_data/paper-1/canonical_paper.json",
+                evidence_preview_path="/library/research_data/paper-1/evidence_preview.md",
+            ),
+        )
+
+    async def fake_index_ingestion_result(**kwargs):
+        captured["index"] = kwargs
+        return types.SimpleNamespace(
+            evidence_record_count=1,
+            embedding_count=1,
+            embedding_model="local-hashing-v1",
+        )
+
+    monkeypatch.setattr(sessions, "_WORKSPACE_DIR", str(workspace))
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "is_research_document", lambda path: True)
+    monkeypatch.setattr(sessions, "ingest_uploaded_paper", fake_ingest_uploaded_paper)
+    monkeypatch.setattr(sessions, "index_ingestion_result", fake_index_ingestion_result)
+    monkeypatch.setattr(sessions, "_publish_session_event", lambda *args, **kwargs: None)
+
+    response = await sessions.promote_session_paper_to_research_library(
+        "session-1",
+        sessions.ResearchLibraryPromotionRequest(
+            project_id="project-1",
+            sandbox_path=str(source_path),
+        ),
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    library_workspace = workspace / "research_library" / "project-1"
+    assert captured["ingest"]["file_path"] == library_workspace / "paper.pdf"
+    assert captured["ingest"]["session_id"] == "research-library-project-1"
+    assert captured["ingest"]["workspace_dir"] == library_workspace
+    assert captured["index"]["project_id"] == "project-1"
+    assert response.data["project_id"] == "project-1"
+    assert response.data["source_session_id"] == "session-1"
+    assert response.data["promotion_status"] == "indexed"
+    assert response.data["citation_ready"] is True
+    assert session.events[-1]["data"]["status"] == "completed"
+    assert session.events[-1]["data"]["metadata"]["promotion_status"] == "indexed"
+
+
+@pytest.mark.asyncio
+async def test_promote_chat_paper_to_library_rejects_outside_session_workspace(monkeypatch, tmp_path):
+    sessions = _load_sessions_module(monkeypatch)
+    workspace = tmp_path / "workspace"
+    source_dir = workspace / "session-1"
+    source_dir.mkdir(parents=True)
+    outside_path = tmp_path / "outside.pdf"
+    outside_path.write_bytes(b"%PDF-1.4\nfake")
+    session = FakeSession(vm_root_dir=source_dir)
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    monkeypatch.setattr(sessions, "_WORKSPACE_DIR", str(workspace))
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+
+    with pytest.raises(sessions.HTTPException) as excinfo:
+        await sessions.promote_session_paper_to_research_library(
+            "session-1",
+            sessions.ResearchLibraryPromotionRequest(
+                project_id="project-1",
+                sandbox_path=str(outside_path),
+            ),
+            types.SimpleNamespace(id="user-1"),
+        )
+
+    assert excinfo.value.status_code == 400
+    assert "session workspace" in excinfo.value.detail

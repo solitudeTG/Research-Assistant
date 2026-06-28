@@ -162,6 +162,11 @@ class SessionResearchProjectRequest(BaseModel):
     project_id: str = Field(..., min_length=1, description="Research Project to associate with this session")
 
 
+class ResearchLibraryPromotionRequest(BaseModel):
+    project_id: str = Field(..., min_length=1, description="Research Project to receive the promoted paper")
+    sandbox_path: str = Field(..., min_length=1, description="Session workspace path for the temporary Chat paper")
+
+
 class WebEvidenceChunkRequest(BaseModel):
     section: str = Field(default="Web", min_length=1, description="Section or heading for this web evidence chunk")
     content: str = Field(..., min_length=1, description="Web evidence chunk content")
@@ -2078,6 +2083,142 @@ async def upload_research_project_paper_for_user(
         raise
     except Exception as exc:
         logger.exception("upload_research_project_paper_for_user failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/{session_id}/research/library/promote", response_model=ApiResponse)
+async def promote_session_paper_to_research_library(
+    session_id: str,
+    body: ResearchLibraryPromotionRequest,
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """Promote a temporary Chat paper into a trusted Research Project library."""
+    try:
+        session = await async_get_science_session(session_id)
+        if session.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Access denied")
+
+        source_path = _Path(body.sandbox_path).resolve()
+        session_workspace = (_Path(_WORKSPACE_DIR) / session_id).resolve()
+        try:
+            source_path.relative_to(session_workspace)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="Promoted paper must come from the current session workspace",
+            ) from exc
+
+        if not source_path.is_file():
+            raise HTTPException(status_code=404, detail="Session paper file not found")
+        if not is_research_document(source_path):
+            raise HTTPException(status_code=400, detail="Only research documents can be added to Research Library")
+
+        project_id = body.project_id.strip()
+        library_session_id = f"research-library-{project_id}"
+        workspace_dir = _Path(_WORKSPACE_DIR) / "research_library" / project_id
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        workspace_dir.chmod(0o777)
+
+        target_path = workspace_dir / source_path.name
+        if target_path.exists():
+            stem = target_path.stem
+            suffix = target_path.suffix
+            i = 1
+            while target_path.exists():
+                target_path = workspace_dir / f"{stem}_{i}{suffix}"
+                i += 1
+
+        promote_step_id = f"research-promote-{_new_event_id()}"
+        await _append_save_publish_session_event(
+            session,
+            session_id=session_id,
+            user_id=current_user.id,
+            event=_research_upload_step_event(
+                step_id=promote_step_id,
+                status="running",
+                description=f"Promoting paper to Research Library: {source_path.name}",
+                metadata={
+                    "project_id": project_id,
+                    "source_path": str(source_path),
+                    "library_path": str(target_path),
+                    "promotion_status": "running",
+                },
+            ),
+        )
+
+        try:
+            shutil.copy2(source_path, target_path)
+            ingestion = ingest_uploaded_paper(
+                file_path=target_path,
+                session_id=library_session_id,
+                user_id=current_user.id,
+                workspace_dir=workspace_dir,
+            )
+            indexing_summary = await index_ingestion_result(
+                database_url=settings.research_database_url,
+                result=ingestion,
+                embedding_dimensions=settings.research_embedding_dimensions,
+                embedding_model=settings.research_embedding_model,
+                project_id=project_id,
+            )
+        except Exception as exc:
+            failed_metadata = {
+                "project_id": project_id,
+                "source_path": str(source_path),
+                "library_path": str(target_path),
+                "promotion_status": "failed",
+                "error": str(exc),
+            }
+            await _append_save_publish_session_event(
+                session,
+                session_id=session_id,
+                user_id=current_user.id,
+                event=_research_upload_step_event(
+                    step_id=promote_step_id,
+                    status="failed",
+                    description=f"Research Library promotion failed for {source_path.name}",
+                    metadata=failed_metadata,
+                ),
+            )
+            raise
+
+        result = {
+            "project_id": project_id,
+            "source_session_id": session_id,
+            "source_path": str(source_path),
+            "library_path": str(target_path),
+            "paper_id": ingestion.paper.paper_id,
+            "title": ingestion.paper.title,
+            "authors": ingestion.paper.authors,
+            "parser": ingestion.paper.parser,
+            "chunk_count": len(ingestion.chunks),
+            "evidence_record_count": indexing_summary.evidence_record_count,
+            "embedding_count": indexing_summary.embedding_count,
+            "embedding_model": indexing_summary.embedding_model,
+            "promotion_status": "indexed",
+            "status": "indexed",
+            "citation_ready": indexing_summary.evidence_record_count > 0,
+            "manifest_path": ingestion.artifact.manifest_path,
+            "evidence_preview_path": ingestion.artifact.evidence_preview_path,
+        }
+        await _append_save_publish_session_event(
+            session,
+            session_id=session_id,
+            user_id=current_user.id,
+            event=_research_upload_step_event(
+                step_id=promote_step_id,
+                status="completed",
+                description=f"Paper promoted to Research Library: {source_path.name}",
+                metadata=result,
+            ),
+        )
+        return ApiResponse(data=result)
+    except ScienceSessionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("promote_session_paper_to_research_library failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 

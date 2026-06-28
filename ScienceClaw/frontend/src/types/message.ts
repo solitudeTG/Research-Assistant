@@ -91,6 +91,9 @@ export interface ResearchAnswerMetadata {
   answer_id?: string;
   content?: string;
   question?: string;
+  title?: string;
+  sandbox_path?: string;
+  source_path?: string;
   citations?: ResearchCitationMetadata[];
   citation_count?: number;
   context_memory?: ResearchContextMemoryMetadata[];

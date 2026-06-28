@@ -72,6 +72,22 @@ def test_frontend_exposes_session_project_binding_contracts():
     assert "Project context" in chat_page
 
 
+def test_frontend_exposes_chat_to_library_promotion_contract():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    agent_api = (frontend_root / "api" / "agent.ts").read_text(encoding="utf-8")
+    chat_message = (frontend_root / "components" / "ChatMessage.vue").read_text(encoding="utf-8")
+    chat_page = (frontend_root / "pages" / "ChatPage.vue").read_text(encoding="utf-8")
+
+    assert "export interface ResearchLibraryPromotionResult" in agent_api
+    assert "export async function promoteChatPaperToLibrary" in agent_api
+    assert "`/sessions/${sessionId}/research/library/promote`" in agent_api
+    assert "researchLibraryPromotionCandidate" in chat_message
+    assert "Add to Research Library" in chat_message
+    assert "emit('promoteToResearchLibrary'" in chat_message
+    assert "@promoteToResearchLibrary=\"handlePromoteToResearchLibrary\"" in chat_page
+    assert "agentApi.promoteChatPaperToLibrary" in chat_page
+
+
 def test_agent_api_exposes_source_quality_ingestion_result_contract():
     agent_api = (
         Path(__file__).resolve().parents[2]

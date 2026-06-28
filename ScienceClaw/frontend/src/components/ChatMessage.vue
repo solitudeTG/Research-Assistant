@@ -329,6 +329,15 @@
         >
           <FileText class="w-4 h-4" />
         </button>
+        <button
+          v-if="researchLibraryPromotionCandidate"
+          class="msg-action-btn msg-action-btn--library"
+          @click="handlePromoteToResearchLibrary"
+          title="Add to Research Library"
+        >
+          <BookOpen class="w-4 h-4" />
+          <span class="hidden sm:inline text-[11px] font-medium ml-1 whitespace-nowrap">Add to Research Library</span>
+        </button>
         <template v-if="roundFiles.length > 0">
           <div class="msg-action-divider"></div>
           <button
@@ -385,7 +394,7 @@ import DOMPurify from 'dompurify';
 import hljs from 'highlight.js';
 import katex from 'katex';
 import mermaid from 'mermaid';
-import { CheckIcon, ThumbsUpIcon, ThumbsDownIcon, CopyIcon, ClockIcon, WrenchIcon, ArrowDownIcon, ArrowUpIcon, FolderOpen, FileText, SaveIcon, Trash2Icon } from 'lucide-vue-next';
+import { CheckIcon, ThumbsUpIcon, ThumbsDownIcon, CopyIcon, ClockIcon, WrenchIcon, ArrowDownIcon, ArrowUpIcon, FolderOpen, FileText, SaveIcon, Trash2Icon, BookOpen } from 'lucide-vue-next';
 import PdfIcon from './icons/PdfIcon.vue';
 import { computed, ref, onMounted, nextTick, watch } from 'vue';
 import { ToolContent } from '../types/message';
@@ -403,6 +412,11 @@ import { deleteResearchMemory, getResearchAuditResult, getResearchEvidenceRecord
 import { showErrorToast, showSuccessToast } from '../utils/toast';
 
 import RobotAvatar from './icons/RobotAvatar.vue';
+
+interface ResearchLibraryPromotionCandidate {
+  sandboxPath: string;
+  title?: string;
+}
 
 // Markdown 增强组件引用
 const markdownEnhancementsRef = ref<InstanceType<typeof MarkdownEnhancements> | null>(null);
@@ -729,6 +743,7 @@ const props = defineProps<{
   mode?: string;
   isLast?: boolean;
   isLoading?: boolean;
+  researchLibraryPromotionCandidate?: ResearchLibraryPromotionCandidate | null;
 }>();
 
 const botName = computed(() => {
@@ -743,6 +758,7 @@ const emit = defineEmits<{
   (e: 'suggestionClick', question: string): void;
   (e: 'convertToPdf'): void;
   (e: 'generateResearchReport', question: string): void;
+  (e: 'promoteToResearchLibrary', payload: ResearchLibraryPromotionCandidate): void;
 }>();
 
 // Feedback state
@@ -788,10 +804,41 @@ const canGenerateResearchReport = computed(() => {
   return researchCitations.value.length > 0 && reportQuestion.value.trim().length > 0;
 });
 
+const researchLibraryPromotionCandidate = computed<ResearchLibraryPromotionCandidate | null>(() => {
+  if (props.researchLibraryPromotionCandidate?.sandboxPath) {
+    return props.researchLibraryPromotionCandidate;
+  }
+
+  const research = messageContent.value.metadata?.research_assistant;
+  const sandboxPath = research?.sandbox_path || research?.source_path;
+  if (typeof sandboxPath === 'string' && sandboxPath.trim()) {
+    return {
+      sandboxPath,
+      title: typeof research?.title === 'string' ? research.title : undefined,
+    };
+  }
+
+  const researchFile = roundFiles.value.find((file) => file.category === 'research_data' && file.file_id);
+  if (researchFile) {
+    return {
+      sandboxPath: researchFile.file_id,
+      title: researchFile.filename,
+    };
+  }
+
+  return null;
+});
+
 const handleGenerateResearchReport = () => {
   const question = reportQuestion.value.trim();
   if (!question) return;
   emit('generateResearchReport', question);
+};
+
+const handlePromoteToResearchLibrary = () => {
+  const candidate = researchLibraryPromotionCandidate.value;
+  if (!candidate) return;
+  emit('promoteToResearchLibrary', candidate);
 };
 
 // 处理 Markdown 内容区域的点击事件（图片 Lightbox + 代码块全屏）
@@ -1396,6 +1443,12 @@ const parseContent = (markdown: string) => {
   @apply w-auto px-1.5;
   @apply text-blue-600 dark:text-blue-400;
   @apply hover:bg-blue-100/80 dark:hover:bg-blue-900/30;
+}
+
+.msg-action-btn--library {
+  @apply flex items-center gap-0 w-auto px-1.5;
+  @apply text-emerald-600 dark:text-emerald-400;
+  @apply hover:bg-emerald-100/80 dark:hover:bg-emerald-900/30;
 }
 
 .msg-action-divider {
@@ -2191,6 +2244,7 @@ const parseContent = (markdown: string) => {
     @apply opacity-100 flex-wrap;
   }
   .msg-action-btn { @apply w-8 h-8; }
+  .msg-action-btn--library { @apply w-8 px-0; }
   .msg-stats-capsule { @apply mt-1; }
   .markdown-content table { font-size: 0.85em; }
 }
