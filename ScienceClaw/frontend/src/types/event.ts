@@ -42,6 +42,13 @@ export interface ToolRuntimeResultSummary {
   citation_evidence: false;
 }
 
+export interface SourceQualityMetadata {
+  status: 'citation_grade' | 'identity_incomplete' | string;
+  source_type: 'paper' | 'web' | 'database' | string;
+  identity_fields: string[];
+  missing_fields: string[];
+}
+
 export interface ToolEventData extends BaseEventData {
   tool_call_id: string;
   name: string;
@@ -63,6 +70,10 @@ export interface StepEventData extends BaseEventData {
   id: string
   description: string
   tools?: ToolEventData[]
+  metadata?: {
+    source_quality?: SourceQualityMetadata;
+    [key: string]: any;
+  }
 }
 
 export interface MessageChunkEventData extends BaseEventData {

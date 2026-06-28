@@ -237,6 +237,21 @@ def test_activity_panel_surfaces_recovered_runtime_audit_details():
     assert "safeStringify(item.summary.preview)" in activity_panel
 
 
+def test_activity_panel_surfaces_source_quality_trace_metadata():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    event_types = (frontend_root / "types" / "event.ts").read_text(encoding="utf-8")
+    activity_panel = (frontend_root / "components" / "ActivityPanel.vue").read_text(encoding="utf-8")
+
+    assert "export interface SourceQualityMetadata" in event_types
+    assert "source_quality?: SourceQualityMetadata" in event_types
+    assert "sourceQualitySteps" in activity_panel
+    assert "Source quality" in activity_panel
+    assert "citation_grade" in activity_panel
+    assert "identity_incomplete" in activity_panel
+    assert "citation_evidence=true" in activity_panel
+    assert "quality.missing_fields" in activity_panel
+
+
 def test_activity_panel_filters_recovered_runtime_audit_by_tool_pack():
     frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
     activity_panel = (frontend_root / "components" / "ActivityPanel.vue").read_text(encoding="utf-8")

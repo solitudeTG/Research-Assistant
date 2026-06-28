@@ -413,10 +413,18 @@ const handleStepEvent = (stepData: StepEventData) => {
     const planStep = plan.value.steps.find(s => s.id === stepData.id);
     if (planStep) {
       planStep.status = stepData.status;
+      if (stepData.description) planStep.description = stepData.description;
+      if (stepData.metadata) planStep.metadata = stepData.metadata;
       if (pendingToolCallIds.value.length > 0 && (stepData.status === 'running' || stepData.status === 'completed')) {
         flushPendingToolsToStep(planStep);
         plan.value = { ...plan.value };
       }
+    } else {
+      plan.value.steps.push({
+        ...stepData,
+        tools: stepData.tools ?? [],
+      });
+      plan.value = { ...plan.value };
     }
   }
 

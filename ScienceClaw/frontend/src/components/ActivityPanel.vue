@@ -300,6 +300,50 @@
         </template>
 
         <!-- ═══ Sandbox Preview Section ═══ -->
+        <template v-if="sourceQualitySteps.length > 0">
+          <div
+            @click="sourceQualityExpanded = !sourceQualityExpanded"
+            class="flex-shrink-0 flex items-center gap-2 cursor-pointer select-none group/sec px-4 py-2.5 border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors"
+          >
+            <ChevronRightIcon :size="12"
+              class="text-gray-400 dark:text-gray-500 transition-transform duration-150 flex-shrink-0"
+              :class="{ 'rotate-90': sourceQualityExpanded }" />
+            <ShieldCheck :size="13" class="text-cyan-500 flex-shrink-0" />
+            <span class="text-[12px] font-semibold transition-colors"
+              :class="sourceQualityExpanded ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500 group-hover/sec:text-gray-600 dark:group-hover/sec:text-gray-300'">
+              Source quality
+            </span>
+            <span class="text-[10px] text-gray-400 dark:text-gray-500 font-bold tabular-nums ml-auto bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded-md">
+              {{ sourceQualitySteps.length }}
+            </span>
+          </div>
+          <div v-if="sourceQualityExpanded" class="border-b border-gray-100 dark:border-gray-800 px-4 py-2 overflow-y-auto min-h-0 section-content-enter" style="flex: 0.65 1 0%; min-height: 44px;">
+            <div class="flex flex-col gap-2">
+              <div v-for="{ step, quality } in sourceQualitySteps" :key="step.id"
+                class="text-[11px] leading-[1.5] text-[var(--text-secondary)] bg-[var(--fill-tsp-gray-main)] rounded-lg px-3 py-2 border border-[var(--border-light)]">
+                <div class="flex items-center gap-2 min-w-0">
+                  <span class="font-semibold text-[var(--text-secondary)] truncate">{{ step.description }}</span>
+                  <span
+                    class="ml-auto flex-shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[10px]"
+                    :class="quality.status === 'citation_grade'
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
+                      : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300'"
+                  >
+                    {{ quality.status === 'citation_grade' ? 'citation_grade' : 'identity_incomplete' }}
+                  </span>
+                </div>
+                <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] text-[var(--text-tertiary)]">
+                  <span>source_type={{ quality.source_type }}</span>
+                  <span>citation_evidence=true</span>
+                  <span>identity_fields={{ quality.identity_fields.join(',') || 'none' }}</span>
+                  <span v-if="quality.missing_fields.length">missing={{ quality.missing_fields.join(',') }}</span>
+                  <span v-else>missing=none</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+
         <SandboxPreview
           ref="sandboxPreviewRef"
           :mode="activeSandboxMode"
@@ -378,6 +422,7 @@ const thinkingExpanded = ref(true);
 const todosExpanded = ref(true);
 const toolsExpanded = ref(true);
 const runtimeAuditExpanded = ref(false);
+const sourceQualityExpanded = ref(false);
 const selectedRuntimeAuditPack = ref('all');
 
 // Step filter: when a To-do step is selected, only show its associated tools
@@ -441,6 +486,15 @@ const toolItems = computed(() =>
 
 const runtimeAuditItems = computed(() =>
   props.runtimeAudit?.runtime_results ?? []
+);
+
+type ActivityPlanStep = NonNullable<PlanEventData['steps']>[number];
+type SourceQuality = NonNullable<NonNullable<ActivityPlanStep['metadata']>['source_quality']>;
+
+const sourceQualitySteps = computed(() =>
+  (props.plan?.steps ?? [])
+    .map(step => ({ step, quality: step.metadata?.source_quality }))
+    .filter((item): item is { step: ActivityPlanStep; quality: SourceQuality } => !!item.quality)
 );
 
 const runtimeAuditPackOptions = computed(() => {

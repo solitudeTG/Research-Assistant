@@ -853,6 +853,7 @@ const syncStepIntoActivityPlan = (stepData: StepEventData) => {
     existingStep.status = stepData.status;
     if (stepData.description) existingStep.description = stepData.description;
     if (stepData.tools?.length) existingStep.tools = stepData.tools;
+    if (stepData.metadata) existingStep.metadata = stepData.metadata;
   } else {
     existingPlan.steps.push({
       ...stepData,
@@ -874,6 +875,7 @@ const handleStepEvent = (stepData: StepEventData) => {
     const planStep = plan.value.steps.find(s => s.id === stepData.id);
     if (planStep) {
       planStep.status = stepData.status;
+      if (stepData.metadata) planStep.metadata = stepData.metadata;
 
       // When a step becomes running or completed, retroactively associate any buffered tools
       if (pendingToolCallIds.value.length > 0 && (stepData.status === 'running' || stepData.status === 'completed')) {
