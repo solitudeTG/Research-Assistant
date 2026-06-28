@@ -146,6 +146,7 @@ async def test_generate_markdown_research_report_writes_artifact_and_evidence_ma
         "memory_boundary": "1 context-only memory record was used; memory is not citation evidence.",
         "next_action": "Use the Evidence-Grounded Answer, then inspect Claim Checks and Citation Evidence before reuse.",
     }
+    assert report.to_dict()["reader_summary"] == evidence["reader_summary"]
     assert evidence["context_memory_count"] == 1
     assert evidence["context_memory"][0]["memory_id"] == "mem-1"
     assert evidence["context_memory"][0]["source_type"] == "memory"

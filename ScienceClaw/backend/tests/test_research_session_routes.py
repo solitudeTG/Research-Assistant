@@ -1424,6 +1424,12 @@ async def test_research_report_completion_message_uses_generic_citation_evidence
         return session
 
     async def fake_report(*args, **kwargs):
+        reader_summary = {
+            "status": "All audited claims are approved by citation evidence.",
+            "evidence_basis": "2 citation evidence records from uploaded papers only.",
+            "memory_boundary": "No context-only memory was used.",
+            "next_action": "Use the Evidence-Grounded Answer, then inspect Claim Checks and Citation Evidence before reuse.",
+        }
         return types.SimpleNamespace(
             report_id="report-1",
             title="Evidence Boundary Note",
@@ -1431,6 +1437,7 @@ async def test_research_report_completion_message_uses_generic_citation_evidence
             markdown_path=str(tmp_path / "research_reports" / "report-1.md"),
             evidence_map_path=str(tmp_path / "research_reports" / "report-1.evidence.json"),
             citation_count=2,
+            reader_summary=reader_summary,
             to_dict=lambda: {
                 "report_id": "report-1",
                 "title": "Evidence Boundary Note",
@@ -1438,6 +1445,7 @@ async def test_research_report_completion_message_uses_generic_citation_evidence
                 "markdown_path": str(tmp_path / "research_reports" / "report-1.md"),
                 "evidence_map_path": str(tmp_path / "research_reports" / "report-1.evidence.json"),
                 "citation_count": 2,
+                "reader_summary": reader_summary,
             },
         )
 
@@ -1467,7 +1475,14 @@ async def test_research_report_completion_message_uses_generic_citation_evidence
         "process_trace": ["tool_logs", "runtime_results", "agent_lifecycle"],
         "model_reasoning": ["model_reasoning"],
     }
+    assert assistant_messages[-1]["metadata"]["research_assistant"]["report"]["reader_summary"] == {
+        "status": "All audited claims are approved by citation evidence.",
+        "evidence_basis": "2 citation evidence records from uploaded papers only.",
+        "memory_boundary": "No context-only memory was used.",
+        "next_action": "Use the Evidence-Grounded Answer, then inspect Claim Checks and Citation Evidence before reuse.",
+    }
     assert response.data["citation_count"] == 2
+    assert response.data["reader_summary"]["evidence_basis"] == "2 citation evidence records from uploaded papers only."
     assert response.data["context_boundaries"] == {
         "citation_evidence": ["paper", "web", "database"],
         "context_only_memory": ["memory"],
@@ -1485,6 +1500,7 @@ async def test_research_report_completion_message_uses_generic_citation_evidence
         "process_trace": ["tool_logs", "runtime_results", "agent_lifecycle"],
         "model_reasoning": ["model_reasoning"],
     }
+    assert completed_steps[-1]["metadata"]["reader_summary"]["next_action"].startswith("Use the Evidence-Grounded Answer")
 
 
 @pytest.mark.asyncio

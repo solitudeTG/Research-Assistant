@@ -80,6 +80,13 @@ export interface ResearchAuditMetadata {
   claims: ResearchAuditClaimMetadata[];
 }
 
+export interface ResearchReportReaderSummary {
+  status: string;
+  evidence_basis: string;
+  memory_boundary: string;
+  next_action: string;
+}
+
 export interface ResearchAnswerMetadata {
   answer_id?: string;
   content?: string;
@@ -98,6 +105,7 @@ export interface ResearchAnswerMetadata {
     markdown_path: string;
     evidence_map_path: string;
     citation_count: number;
+    reader_summary?: ResearchReportReaderSummary;
   };
 }
 

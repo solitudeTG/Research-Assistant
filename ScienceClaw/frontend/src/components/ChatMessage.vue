@@ -139,6 +139,29 @@
           </div>
         </details>
       </div>
+      <div v-if="reportReaderSummary" class="border-t border-gray-100 dark:border-gray-800 px-4 py-3 bg-gray-50/60 dark:bg-gray-900/30">
+        <div class="mb-2 text-xs font-semibold text-[var(--text-secondary)]">
+          Report reader summary
+        </div>
+        <div class="grid gap-1.5 text-[11px] leading-relaxed text-[var(--text-secondary)] sm:grid-cols-2">
+          <div>
+            <span class="font-medium text-[var(--text-primary)]">Status:</span>
+            {{ reportReaderSummary.status }}
+          </div>
+          <div>
+            <span class="font-medium text-[var(--text-primary)]">Evidence basis:</span>
+            {{ reportReaderSummary.evidence_basis }}
+          </div>
+          <div>
+            <span class="font-medium text-[var(--text-primary)]">Memory boundary:</span>
+            {{ reportReaderSummary.memory_boundary }}
+          </div>
+          <div>
+            <span class="font-medium text-[var(--text-primary)]">Next action:</span>
+            {{ reportReaderSummary.next_action }}
+          </div>
+        </div>
+      </div>
       <div v-if="researchContextMemory.length > 0" class="border-t border-gray-100 dark:border-gray-800 px-4 py-3 bg-gray-50/60 dark:bg-gray-900/30">
         <div class="flex items-center justify-between gap-3 mb-2">
           <div class="text-xs font-semibold text-[var(--text-secondary)]">
@@ -834,6 +857,9 @@ const researchContextMemory = computed(() => {
 });
 const researchContextBoundaries = computed<ResearchContextBoundaries | null>(() => {
   return messageContent.value.metadata?.research_assistant?.context_boundaries || null;
+});
+const reportReaderSummary = computed(() => {
+  return messageContent.value.metadata?.research_assistant?.report?.reader_summary || null;
 });
 
 const evidenceDetails = ref<Record<number, ResearchEvidenceRecord>>({});

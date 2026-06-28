@@ -91,6 +91,24 @@ def test_chat_message_surfaces_research_context_boundary_manifest():
     assert "Process trace" in chat_message
 
 
+def test_chat_message_surfaces_report_reader_summary_metadata():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    chat_message = (frontend_root / "components" / "ChatMessage.vue").read_text(encoding="utf-8")
+    message_types = (frontend_root / "types" / "message.ts").read_text(encoding="utf-8")
+    agent_api = (frontend_root / "api" / "agent.ts").read_text(encoding="utf-8")
+
+    assert "export interface ResearchReportReaderSummary" in message_types
+    assert "reader_summary?: ResearchReportReaderSummary" in message_types
+    assert "export interface ResearchReportReaderSummary" in agent_api
+    assert "reader_summary?: ResearchReportReaderSummary" in agent_api
+    assert "reportReaderSummary" in chat_message
+    assert "Report reader summary" in chat_message
+    assert "reportReaderSummary.status" in chat_message
+    assert "reportReaderSummary.evidence_basis" in chat_message
+    assert "reportReaderSummary.memory_boundary" in chat_message
+    assert "reportReaderSummary.next_action" in chat_message
+
+
 def test_chat_page_sends_user_confirmation_for_tool_save():
     frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
     chat_page = (frontend_root / "pages" / "ChatPage.vue").read_text(encoding="utf-8")

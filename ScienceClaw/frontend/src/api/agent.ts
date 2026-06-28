@@ -122,6 +122,13 @@ export interface ResearchAnswer {
   question?: string;
 }
 
+export interface ResearchReportReaderSummary {
+  status: string;
+  evidence_basis: string;
+  memory_boundary: string;
+  next_action: string;
+}
+
 export interface ResearchReport {
   report_id: string;
   title: string;
@@ -129,6 +136,7 @@ export interface ResearchReport {
   markdown_path: string;
   evidence_map_path: string;
   citation_count: number;
+  reader_summary?: ResearchReportReaderSummary;
   round_files?: RoundFileInfo[];
 }
 

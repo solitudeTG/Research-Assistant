@@ -28,6 +28,7 @@ class MarkdownReportArtifact:
     markdown_path: str
     evidence_map_path: str
     citation_count: int
+    reader_summary: dict
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -102,6 +103,7 @@ async def generate_markdown_research_report(
         markdown_path=str(markdown_path),
         evidence_map_path=str(evidence_map_path),
         citation_count=answer.citation_count,
+        reader_summary=evidence_map["reader_summary"],
     )
 
 

@@ -237,6 +237,7 @@ In Progress。
 - Recent report quality increment: unsupported or invalid-source report claims now have a dedicated Evidence Gaps section and sidecar `evidence_gaps` list, so missing evidence is actionable without promoting rejected claims into approved findings.
 - Current report quality increment: partial or no-citation reports now include `Limitations and Next Steps` plus sidecar `limitations`, so users can see why an artifact is not yet a complete cited output.
 - Current reader-summary report increment: Markdown reports now include a deterministic `Reader Summary` before Trust Summary, and sidecar JSON includes matching `reader_summary` fields. The summary states whether audited claims are approved, what citation evidence basis was used, how context-only memory was bounded, and whether the next action is reuse or resolving Evidence Gaps/Limitations.
+- Current reader-summary UI increment: generated report artifacts now carry `reader_summary` in the route response, completed step metadata, and assistant message metadata; frontend API/message types accept it, and ChatMessage shows a compact `Report reader summary` block for recovered report messages.
 - Current citation identity increment: retrieval carries `source_identity` through `ResearchCitation`, and Markdown report Citation Evidence entries render URL/database/query/file/retrieval timestamp fields when available.
 - Current retrieval boundary increment: hybrid retrieval now filters out incomplete web/database source identities at SQL time, preserving the paper/web/database citation contract even when storage contains stale or bypass-written external rows.
 - Current audit quality increment: explicitly cited multi-source claims can now be approved when the cited paper/web/database evidence jointly supports the claim, while single-source overclaims and unlabeled claims remain rejected.
@@ -597,6 +598,9 @@ F001 reached three Patch History rows on 2026-06-25. The fixes are accepted as u
 - 2026-06-28 report Reader Summary follow-up:
   - Red test: `test_research_reports.py -k "writes_artifact_and_evidence_map"` failed because Markdown reports and sidecar JSON had Trust Summary but no reader-facing status/evidence/memory/next-action summary.
   - Green focused verification: report artifact test -> `1 passed`; partial-report guard test -> `1 passed`; full report suite -> `6 passed`; `py_compile` for `reports.py` passed after reports gained deterministic `Reader Summary` Markdown and sidecar `reader_summary`.
+- 2026-06-28 report Reader Summary route/UI follow-up:
+  - Red tests: report artifact test failed because `MarkdownReportArtifact.to_dict()` omitted `reader_summary`; frontend contract test failed because report metadata types and ChatMessage did not expose recovered report summaries.
+  - Green focused verification: report artifact test -> `1 passed`; frontend contract -> `1 passed`; report/session-route/frontend contract suite -> `65 passed`; frontend `vue-tsc` passed after route/message payloads and Chat UI surfaced report `reader_summary`.
 - Baseline verification recorded in [baseline-import-notes.md](../baseline-import-notes.md):
   - `python -m compileall ScienceClaw\backend`
   - `npm.cmd ci` in `ScienceClaw\frontend`
