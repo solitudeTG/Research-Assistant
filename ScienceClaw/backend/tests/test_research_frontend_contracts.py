@@ -29,6 +29,19 @@ def test_agent_api_exposes_web_and_database_evidence_ingestion():
     assert "`/sessions/${sessionId}/research/database-evidence`" in agent_api
 
 
+def test_agent_api_exposes_source_quality_ingestion_result_contract():
+    agent_api = (
+        Path(__file__).resolve().parents[2]
+        / "frontend"
+        / "src"
+        / "api"
+        / "agent.ts"
+    ).read_text(encoding="utf-8")
+
+    assert "SourceQualityMetadata" in agent_api
+    assert "source_quality: SourceQualityMetadata" in agent_api
+
+
 def test_chat_page_surfaces_source_evidence_ingestion_controls():
     chat_page = (
         Path(__file__).resolve().parents[2]

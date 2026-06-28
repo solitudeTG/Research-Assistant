@@ -1,6 +1,6 @@
 import { apiClient, ApiResponse, createSSEConnection, SSECallbacks } from './client';
 import type { FileInfo } from './file';
-import type { RoundFileInfo, ToolRuntimeResultSummary } from '../types/event';
+import type { RoundFileInfo, SourceQualityMetadata, ToolRuntimeResultSummary } from '../types/event';
 import { ListSessionItem, GetSessionResponse, ExternalSkillItem, ExternalToolItem } from '../types/response';
 
 // Re-export or alias if needed for backward compatibility, 
@@ -175,6 +175,7 @@ export interface SourceEvidenceIngestResult {
   retrieved_at: string;
   chunk_count: number;
   evidence_record_count: number;
+  source_quality: SourceQualityMetadata;
   url?: string;
   database_name?: string;
   query?: string;
