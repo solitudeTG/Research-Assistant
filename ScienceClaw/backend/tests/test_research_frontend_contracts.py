@@ -75,6 +75,22 @@ def test_frontend_types_expose_research_context_boundaries():
     assert "context_boundaries?: ResearchContextBoundaries" in agent_api
 
 
+def test_chat_message_surfaces_research_context_boundary_manifest():
+    chat_message = (
+        Path(__file__).resolve().parents[2]
+        / "frontend"
+        / "src"
+        / "components"
+        / "ChatMessage.vue"
+    ).read_text(encoding="utf-8")
+
+    assert "researchContextBoundaries" in chat_message
+    assert "Context boundary manifest" in chat_message
+    assert "context_boundaries" in chat_message
+    assert "Model reasoning" in chat_message
+    assert "Process trace" in chat_message
+
+
 def test_chat_page_sends_user_confirmation_for_tool_save():
     frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
     chat_page = (frontend_root / "pages" / "ChatPage.vue").read_text(encoding="utf-8")

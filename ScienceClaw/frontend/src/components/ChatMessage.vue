@@ -79,6 +79,27 @@
               <span class="font-medium text-[var(--text-primary)]">Context only:</span>
               {{ researchAudit.boundaries.context_only.join(', ') || 'none' }}
             </div>
+            <div v-if="researchContextBoundaries" class="rounded-md bg-gray-50 dark:bg-gray-900/40 px-2 py-1.5">
+              <div class="mb-1 font-medium text-[var(--text-primary)]">Context boundary manifest</div>
+              <div class="grid gap-1 sm:grid-cols-2">
+                <div>
+                  <span class="font-medium text-[var(--text-primary)]">Citation evidence:</span>
+                  {{ formatBoundaryValues(researchContextBoundaries.citation_evidence) }}
+                </div>
+                <div>
+                  <span class="font-medium text-[var(--text-primary)]">Context-only memory:</span>
+                  {{ formatBoundaryValues(researchContextBoundaries.context_only_memory) }}
+                </div>
+                <div>
+                  <span class="font-medium text-[var(--text-primary)]">Process trace:</span>
+                  {{ formatBoundaryValues(researchContextBoundaries.process_trace) }}
+                </div>
+                <div>
+                  <span class="font-medium text-[var(--text-primary)]">Model reasoning:</span>
+                  {{ formatBoundaryValues(researchContextBoundaries.model_reasoning) }}
+                </div>
+              </div>
+            </div>
             <div v-if="researchAudit.claims.length > 0" class="space-y-1">
               <div
                 v-for="(claim, claimIndex) in researchAudit.claims"
@@ -355,7 +376,7 @@ import { transformSrc, domPurifyConfig } from '../utils/content';
 import { formatMarkdown } from '../utils/markdownFormatter';
 import MarkdownEnhancements from './MarkdownEnhancements.vue';
 import { useFilePanel } from '../composables/useFilePanel';
-import { deleteResearchMemory, getResearchAuditResult, getResearchEvidenceRecord, promoteResearchMemory, type ResearchAudit, type ResearchAuditClaim, type ResearchContextMemory, type ResearchEvidenceRecord } from '../api/agent';
+import { deleteResearchMemory, getResearchAuditResult, getResearchEvidenceRecord, promoteResearchMemory, type ResearchAudit, type ResearchAuditClaim, type ResearchContextBoundaries, type ResearchContextMemory, type ResearchEvidenceRecord } from '../api/agent';
 import { showErrorToast, showSuccessToast } from '../utils/toast';
 
 import RobotAvatar from './icons/RobotAvatar.vue';
@@ -811,6 +832,9 @@ const researchContextMemory = computed(() => {
     (memory: ResearchContextMemory) => !forgottenMemoryIds.value[memory.memory_id],
   );
 });
+const researchContextBoundaries = computed<ResearchContextBoundaries | null>(() => {
+  return messageContent.value.metadata?.research_assistant?.context_boundaries || null;
+});
 
 const evidenceDetails = ref<Record<number, ResearchEvidenceRecord>>({});
 const evidenceDetailLoading = ref<Record<number, boolean>>({});
@@ -826,6 +850,10 @@ const formatSourceIdentity = (sourceIdentity: Record<string, unknown>): string =
   const entries = Object.entries(sourceIdentity || {}).filter(([, value]) => value !== null && value !== undefined && value !== '');
   if (entries.length === 0) return 'none';
   return entries.map(([key, value]) => `${key}: ${String(value)}`).join(', ');
+};
+
+const formatBoundaryValues = (values?: string[]): string => {
+  return values?.length ? values.join(', ') : 'none';
 };
 
 const loadEvidenceDetail = async (evidenceId: number) => {
