@@ -64,6 +64,17 @@ def test_chat_message_surfaces_context_memory_conflicts():
     assert "context_memory_conflict_count?: number" in agent_api
 
 
+def test_frontend_types_expose_research_context_boundaries():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    message_types = (frontend_root / "types" / "message.ts").read_text(encoding="utf-8")
+    agent_api = (frontend_root / "api" / "agent.ts").read_text(encoding="utf-8")
+
+    assert "export interface ResearchContextBoundaries" in message_types
+    assert "context_boundaries?: ResearchContextBoundaries" in message_types
+    assert "export interface ResearchContextBoundaries" in agent_api
+    assert "context_boundaries?: ResearchContextBoundaries" in agent_api
+
+
 def test_chat_page_sends_user_confirmation_for_tool_save():
     frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
     chat_page = (frontend_root / "pages" / "ChatPage.vue").read_text(encoding="utf-8")

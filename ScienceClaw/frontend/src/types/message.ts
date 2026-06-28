@@ -52,6 +52,13 @@ export interface ResearchContextMemoryMetadata {
   conflicts_with?: string[];
 }
 
+export interface ResearchContextBoundaries {
+  citation_evidence: ('paper' | 'web' | 'database' | string)[];
+  context_only_memory: ('memory' | string)[];
+  process_trace: string[];
+  model_reasoning: ('model_reasoning' | string)[];
+}
+
 export interface ResearchAuditClaimMetadata {
   claim_text: string;
   status: 'approved' | 'unsupported' | 'invalid_source';
@@ -82,6 +89,7 @@ export interface ResearchAnswerMetadata {
   context_memory?: ResearchContextMemoryMetadata[];
   context_memory_count?: number;
   context_memory_conflict_count?: number;
+  context_boundaries?: ResearchContextBoundaries;
   audit?: ResearchAuditMetadata;
   report?: {
     report_id: string;

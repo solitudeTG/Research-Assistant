@@ -59,6 +59,12 @@ async def test_answer_research_question_uses_only_citation_evidence(monkeypatch)
     assert answer.citation_count == 1
     assert answer.answer_id.startswith("research-answer-")
     assert answer.to_dict()["answer_id"] == answer.answer_id
+    assert answer.to_dict()["context_boundaries"] == {
+        "citation_evidence": ["paper", "web", "database"],
+        "context_only_memory": ["memory"],
+        "process_trace": ["tool_logs", "runtime_results", "agent_lifecycle"],
+        "model_reasoning": ["model_reasoning"],
+    }
     assert answer.audit.status == "approved"
     assert answer.to_dict()["audit"]["approved_claim_count"] == 1
 

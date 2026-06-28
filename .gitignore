@@ -66,6 +66,7 @@ logs/
 # Testing
 .coverage
 .pytest_cache/
+.pytest_tmp/
 htmlcov/
 .tox/
 .hypothesis/
@@ -90,6 +91,7 @@ Desktop.ini
 .cache/
 .cursor
 .trae
+.agentmentor/
 workspace
 .plan
 sync-to-huawei-swr-docker.sh

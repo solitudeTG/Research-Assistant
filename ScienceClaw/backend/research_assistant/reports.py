@@ -9,6 +9,7 @@ from pathlib import Path
 import shortuuid
 
 from backend.research_assistant.answering import (
+    CONTEXT_BOUNDARIES,
     ResearchAnswer,
     ResearchCitation,
     answer_research_question,
@@ -226,6 +227,7 @@ def _build_evidence_map(*, report_id: str, answer: ResearchAnswer) -> dict:
         "citation_count": answer.citation_count,
         "context_memory_count": answer.context_memory_count,
         "context_memory_conflict_count": answer.context_memory_conflict_count,
+        "context_boundaries": CONTEXT_BOUNDARIES,
         "context_memory": answer.context_memory,
         "evidence_gaps": _build_evidence_gaps(answer),
         "limitations": _build_limitations(answer),

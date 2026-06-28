@@ -7,7 +7,7 @@ owner: solitudeTG
 feature_refs: [docs/features/F001-project-vision-and-scope.md]
 decision_area: p0-research-data-and-retrieval-stack
 created: 2026-06-19
-updated: 2026-06-19
+updated: 2026-06-28
 feature_ids: [F001]
 ---
 
@@ -53,6 +53,10 @@ PostgreSQL + pgvector 更适合作为 paper/chunk/evidence/citation/audit/report
 - MongoDB 相关既有功能可以继续运行，但新增 Research Assistant 核心领域数据不得默认写入 MongoDB。
 - 未来接入 web/database evidence 时，必须复用同一套 evidence contract，而不是另建一套 citation 语义。
 
+## Decision Boundary
+
+This ADR governs the P0 research-domain stack: scholarly PDF parsing, canonical paper artifacts, PostgreSQL/pgvector storage, hybrid retrieval, citation evidence contracts, and Markdown report evidence maps. It does not decide later report exporters, full web-search/crawl ingestion, live database connector execution, multi-agent orchestration, or model-provider selection beyond preserving the citation-evidence boundary.
+
 ## Alternatives
 
 - Pure lightweight PDF/text extraction as primary path: rejected because it loses scholarly structure and weakens citation/evidence audit.
@@ -72,3 +76,18 @@ PostgreSQL + pgvector 更适合作为 paper/chunk/evidence/citation/audit/report
 - 在 P0 paper ingestion 设计中定义 canonical paper model。
 - 在 P0 schema 设计中明确 PostgreSQL 表、pgvector 字段、full-text index 和 evidence record contract。
 - 在后续 Feature 中决定是否把 Docling 作为非 PDF/复杂 PDF 的 secondary parser，还是仅作为 degraded fallback。
+
+## Rejected Options
+
+- Pure lightweight PDF/text extraction as the primary path, because it loses scholarly structure and weakens citation/evidence audit.
+- Vector-only P0 retrieval, because research terminology, names, years, identifiers, and citation markers need lexical recall.
+- First-version DOCX/PDF report export, because it would move P0 away from the evidence loop into formatting/export complexity.
+- P0 web search as the first source path, because source reliability, snapshots, crawling failure, search contamination, and provenance governance would expand the initial risk surface.
+- MongoDB as the research evidence store, because paper/chunk/evidence/citation/audit data needs relational constraints, full-text search, and vector retrieval in one research-domain store.
+
+## Before Changing This Decision
+
+- Update [F001 Project Vision and Scope](../features/F001-project-vision-and-scope.md) with the changed capability boundary and verification evidence.
+- Prove the replacement still keeps citation evidence separate from memory, model reasoning, process trace, and tool logs.
+- Provide a migration or rollback path for existing PostgreSQL research-domain data before changing the storage boundary.
+- Run focused research storage/retrieval/report tests plus the AgentMentor strict knowledge check.

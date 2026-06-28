@@ -51,6 +51,13 @@ export interface ResearchContextMemory {
   conflicts_with?: string[];
 }
 
+export interface ResearchContextBoundaries {
+  citation_evidence: ('paper' | 'web' | 'database' | string)[];
+  context_only_memory: ('memory' | string)[];
+  process_trace: string[];
+  model_reasoning: ('model_reasoning' | string)[];
+}
+
 export interface ResearchPromotedMemory extends ResearchContextMemory {
   session_id: string;
   promotion_reason: 'approved_audit_claim' | string;
@@ -110,6 +117,7 @@ export interface ResearchAnswer {
   context_memory?: ResearchContextMemory[];
   context_memory_count?: number;
   context_memory_conflict_count?: number;
+  context_boundaries?: ResearchContextBoundaries;
   audit?: ResearchAudit;
   question?: string;
 }

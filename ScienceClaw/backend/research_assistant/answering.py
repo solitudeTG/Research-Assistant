@@ -43,6 +43,12 @@ _MEMORY_NEGATION_TERMS = {"avoid", "cannot", "don't", "dont", "never", "no", "no
 _MEMORY_RELEVANCE_THRESHOLD = 0.3
 _MEMORY_DECAY_HALF_LIFE_DAYS = 180
 _MEMORY_DECAY_FLOOR = 0.25
+CONTEXT_BOUNDARIES = {
+    "citation_evidence": ["paper", "web", "database"],
+    "context_only_memory": ["memory"],
+    "process_trace": ["tool_logs", "runtime_results", "agent_lifecycle"],
+    "model_reasoning": ["model_reasoning"],
+}
 
 
 @dataclass(frozen=True)
@@ -100,6 +106,7 @@ class ResearchAnswer:
             "context_memory": self.context_memory,
             "context_memory_count": self.context_memory_count,
             "context_memory_conflict_count": self.context_memory_conflict_count,
+            "context_boundaries": CONTEXT_BOUNDARIES,
             "audit": self.audit.to_dict() if self.audit else {},
         }
 
