@@ -14,6 +14,7 @@ def test_research_store_schema_defines_pgvector_and_evidence_tables():
 
     assert "create extension if not exists vector" in sql
     for table_name in [
+        "research_projects",
         "research_papers",
         "research_chunks",
         "research_embeddings",
@@ -34,3 +35,6 @@ def test_research_store_schema_defines_pgvector_and_evidence_tables():
     assert "subject_id text not null" in sql
     assert "claims jsonb not null default '[]'::jsonb" in sql
     assert "unique (subject_type, subject_id)" in sql
+    assert "project_id text" in sql
+    assert "references research_projects(project_id)" in sql
+    assert "research_papers_project_id_idx" in sql

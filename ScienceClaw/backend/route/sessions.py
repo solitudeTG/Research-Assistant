@@ -58,11 +58,14 @@ from backend.research_assistant.parsers import PaperParseError
 from backend.research_assistant.reports import generate_markdown_research_report
 from backend.research_assistant.tool_validation import tool_source_sha256, validate_staged_tool
 from backend.research_assistant.storage.database import (
+    create_research_project_in_database,
     delete_memory_entry_from_database,
     get_audit_result_from_database,
     get_evidence_record_from_database,
     get_research_session_status_from_database,
+    list_project_paper_assets_from_database,
     list_memory_entries_from_database,
+    list_research_projects_from_database,
     persist_audit_result_to_database,
     persist_database_evidence_source_to_database,
     persist_memory_entry_to_database,
@@ -146,6 +149,11 @@ class ResearchAnswerRequest(BaseModel):
 class ResearchReportRequest(BaseModel):
     question: str = Field(..., description="Research question or note topic grounded in citation evidence")
     limit: int = Field(default=8, ge=1, le=20, description="Maximum evidence chunks to include")
+
+
+class ResearchProjectCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1, description="Research project name")
+    description: Optional[str] = Field(default="", description="Optional research project description")
 
 
 class WebEvidenceChunkRequest(BaseModel):
@@ -1915,6 +1923,138 @@ async def upload_session_file(
 # ═══════════════════════════════════════════════════════════════════
 # Real-time session notifications (SSE)
 # ═══════════════════════════════════════════════════════════════════
+
+@router.post("/research/projects", response_model=ApiResponse)
+async def create_research_project_for_user(
+    body: ResearchProjectCreateRequest,
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """Create a Research Project as the trusted Library asset boundary."""
+    name = body.name.strip()
+    description = (body.description or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Project name is required")
+    try:
+        project = await create_research_project_in_database(
+            settings.research_database_url,
+            project_id=f"research-project-{shortuuid.uuid()}",
+            user_id=current_user.id,
+            name=name,
+            description=description,
+        )
+        return ApiResponse(data=project.to_dict())
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("create_research_project_for_user failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/research/projects", response_model=ApiResponse)
+async def list_research_projects_for_user(
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """List Research Projects and asset counts for the current user."""
+    try:
+        projects = await list_research_projects_from_database(
+            settings.research_database_url,
+            user_id=current_user.id,
+        )
+        return ApiResponse(data={"projects": [project.to_dict() for project in projects]})
+    except Exception as exc:
+        logger.exception("list_research_projects_for_user failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/research/projects/{project_id}/papers", response_model=ApiResponse)
+async def list_research_project_papers_for_user(
+    project_id: str,
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """List papers indexed under a Research Project."""
+    try:
+        papers = await list_project_paper_assets_from_database(
+            settings.research_database_url,
+            project_id=project_id,
+            user_id=current_user.id,
+        )
+        return ApiResponse(
+            data={
+                "project_id": project_id,
+                "papers": [paper.to_dict() for paper in papers],
+            }
+        )
+    except Exception as exc:
+        logger.exception("list_research_project_papers_for_user failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/research/projects/{project_id}/papers", response_model=ApiResponse)
+async def upload_research_project_paper_for_user(
+    project_id: str,
+    file: UploadFile = FastAPIFile(...),
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """Upload and index a paper directly into a Research Project library."""
+    try:
+        library_session_id = f"research-library-{project_id}"
+        workspace_dir = _Path(_WORKSPACE_DIR) / "research_library" / project_id
+        workspace_dir.mkdir(parents=True, exist_ok=True)
+        workspace_dir.chmod(0o777)
+
+        safe_filename = _Path(file.filename or "upload").name
+        if not safe_filename or safe_filename in {".", ".."}:
+            safe_filename = "upload"
+
+        target_path = workspace_dir / safe_filename
+        if target_path.exists():
+            stem = target_path.stem
+            suffix = target_path.suffix
+            i = 1
+            while target_path.exists():
+                target_path = workspace_dir / f"{stem}_{i}{suffix}"
+                i += 1
+
+        target_path.write_bytes(await file.read())
+        if not is_research_document(target_path):
+            raise HTTPException(status_code=400, detail="Only research documents can be added to Research Library")
+
+        ingestion = ingest_uploaded_paper(
+            file_path=target_path,
+            session_id=library_session_id,
+            user_id=current_user.id,
+            workspace_dir=workspace_dir,
+        )
+        indexing_summary = await index_ingestion_result(
+            database_url=settings.research_database_url,
+            result=ingestion,
+            embedding_dimensions=settings.research_embedding_dimensions,
+            embedding_model=settings.research_embedding_model,
+            project_id=project_id,
+        )
+        return ApiResponse(
+            data={
+                "project_id": project_id,
+                "paper_id": ingestion.paper.paper_id,
+                "title": ingestion.paper.title,
+                "authors": ingestion.paper.authors,
+                "parser": ingestion.paper.parser,
+                "chunk_count": len(ingestion.chunks),
+                "evidence_record_count": indexing_summary.evidence_record_count,
+                "embedding_count": indexing_summary.embedding_count,
+                "embedding_model": indexing_summary.embedding_model,
+                "status": "indexed",
+                "citation_ready": indexing_summary.evidence_record_count > 0,
+                "manifest_path": ingestion.artifact.manifest_path,
+                "evidence_preview_path": ingestion.artifact.evidence_preview_path,
+            }
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("upload_research_project_paper_for_user failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
 
 @router.post("/{session_id}/research/web-evidence", response_model=ApiResponse)
 async def ingest_web_evidence_for_session(

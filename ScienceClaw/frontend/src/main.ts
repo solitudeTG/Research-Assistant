@@ -20,6 +20,7 @@ import ScienceToolDetail from './pages/ScienceToolDetail.vue'
 import TasksPage from './pages/TasksPage.vue'
 import LoginPage from './pages/LoginPage.vue'
 import MainLayout from './pages/MainLayout.vue'
+import ResearchLibraryPage from './pages/ResearchLibraryPage.vue'
 import { configure } from "vue-gtag";
 import SharePage from './pages/SharePage.vue';
 import ShareLayout from './pages/ShareLayout.vue';
@@ -71,6 +72,11 @@ export const router = createRouter({
         {
           path: 'science-tools/:toolName',
           component: ScienceToolDetail,
+          meta: { requiresAuth: true }
+        },
+        {
+          path: 'research-library',
+          component: ResearchLibraryPage,
           meta: { requiresAuth: true }
         },
         {

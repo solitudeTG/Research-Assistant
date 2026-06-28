@@ -25,8 +25,16 @@ async def index_ingestion_result(
     result: IngestionResult,
     embedding_dimensions: int,
     embedding_model: str = "local-hashing-v1",
+    project_id: str | None = None,
 ) -> IndexingSummary:
-    persist_summary = await persist_ingestion_result_to_database(database_url, result)
+    if project_id is None:
+        persist_summary = await persist_ingestion_result_to_database(database_url, result)
+    else:
+        persist_summary = await persist_ingestion_result_to_database(
+            database_url,
+            result,
+            project_id=project_id,
+        )
     provider = HashingEmbeddingProvider(dimensions=embedding_dimensions, model_name=embedding_model)
     embeddings = build_chunk_embeddings(result, provider)
     await persist_chunk_embeddings_to_database(

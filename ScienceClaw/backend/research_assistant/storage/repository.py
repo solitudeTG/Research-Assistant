@@ -17,6 +17,82 @@ class PersistSummary:
 
 
 @dataclass(frozen=True)
+class ResearchProject:
+    project_id: str
+    user_id: str
+    name: str
+    description: str
+    paper_count: int = 0
+    chunk_count: int = 0
+    evidence_record_count: int = 0
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    def to_dict(self) -> dict:
+        return {
+            "project_id": self.project_id,
+            "user_id": self.user_id,
+            "name": self.name,
+            "description": self.description,
+            "paper_count": self.paper_count,
+            "chunk_count": self.chunk_count,
+            "evidence_record_count": self.evidence_record_count,
+            "created_at": _datetime_value(self.created_at),
+            "updated_at": _datetime_value(self.updated_at),
+        }
+
+
+@dataclass(frozen=True)
+class ResearchProjectPaperAsset:
+    paper_id: str
+    project_id: str
+    session_id: str
+    user_id: str
+    title: str
+    authors: list[str]
+    abstract: str
+    source_path: str
+    parser: str
+    source_identity: dict[str, Any]
+    chunk_count: int
+    evidence_record_count: int
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    @property
+    def status(self) -> str:
+        if self.evidence_record_count > 0 and self.chunk_count > 0:
+            return "indexed"
+        if self.chunk_count > 0:
+            return "parsed"
+        return "uploaded"
+
+    @property
+    def citation_ready(self) -> bool:
+        return self.evidence_record_count > 0
+
+    def to_dict(self) -> dict:
+        return {
+            "paper_id": self.paper_id,
+            "project_id": self.project_id,
+            "session_id": self.session_id,
+            "user_id": self.user_id,
+            "title": self.title,
+            "authors": self.authors,
+            "abstract": self.abstract,
+            "source_path": self.source_path,
+            "parser": self.parser,
+            "source_identity": self.source_identity,
+            "chunk_count": self.chunk_count,
+            "evidence_record_count": self.evidence_record_count,
+            "status": self.status,
+            "citation_ready": self.citation_ready,
+            "created_at": _datetime_value(self.created_at),
+            "updated_at": _datetime_value(self.updated_at),
+        }
+
+
+@dataclass(frozen=True)
 class ResearchAuditResult:
     audit_id: str
     session_id: str
@@ -103,12 +179,131 @@ class ResearchMemoryEntry:
         }
 
 
-async def persist_ingestion_result(connection: Any, result: IngestionResult) -> PersistSummary:
+async def create_research_project(
+    connection: Any,
+    *,
+    project_id: str,
+    user_id: str,
+    name: str,
+    description: str = "",
+) -> ResearchProject:
+    row = await connection.fetchrow(
+        """
+        INSERT INTO research_projects (
+            project_id,
+            user_id,
+            name,
+            description,
+            updated_at
+        )
+        VALUES ($1, $2, $3, $4, now())
+        RETURNING
+            project_id,
+            user_id,
+            name,
+            description,
+            created_at,
+            updated_at
+        """,
+        project_id,
+        user_id,
+        name,
+        description,
+    )
+    return _project_from_row(row)
+
+
+async def list_research_projects(
+    connection: Any,
+    *,
+    user_id: str,
+) -> list[ResearchProject]:
+    rows = await connection.fetch(
+        """
+        SELECT
+            rp.project_id,
+            rp.user_id,
+            rp.name,
+            rp.description,
+            count(DISTINCT p.paper_id)::int AS paper_count,
+            count(DISTINCT c.chunk_id)::int AS chunk_count,
+            count(DISTINCT er.evidence_id)::int AS evidence_record_count,
+            rp.created_at,
+            rp.updated_at
+        FROM research_projects rp
+        LEFT JOIN research_papers p ON p.project_id = rp.project_id
+        LEFT JOIN research_chunks c ON c.paper_id = p.paper_id
+        LEFT JOIN research_evidence_records er ON er.chunk_id = c.chunk_id
+        WHERE rp.user_id = $1
+        GROUP BY rp.project_id, rp.user_id, rp.name, rp.description, rp.created_at, rp.updated_at
+        ORDER BY rp.updated_at DESC
+        """,
+        user_id,
+    )
+    return [_project_from_row(row) for row in rows]
+
+
+async def list_project_paper_assets(
+    connection: Any,
+    *,
+    project_id: str,
+    user_id: str,
+) -> list[ResearchProjectPaperAsset]:
+    rows = await connection.fetch(
+        """
+        SELECT
+            p.paper_id,
+            p.project_id,
+            p.session_id,
+            p.user_id,
+            p.title,
+            p.authors,
+            p.abstract,
+            p.source_path,
+            p.parser,
+            p.source_identity,
+            count(DISTINCT c.chunk_id)::int AS chunk_count,
+            count(DISTINCT er.evidence_id)::int AS evidence_record_count,
+            p.created_at,
+            p.updated_at
+        FROM research_papers p
+        LEFT JOIN research_chunks c ON c.paper_id = p.paper_id
+        LEFT JOIN research_evidence_records er ON er.chunk_id = c.chunk_id
+        WHERE p.project_id = $1
+            AND p.user_id = $2
+        GROUP BY
+            p.paper_id,
+            p.project_id,
+            p.session_id,
+            p.user_id,
+            p.title,
+            p.authors,
+            p.abstract,
+            p.source_path,
+            p.parser,
+            p.source_identity,
+            p.created_at,
+            p.updated_at
+        ORDER BY p.updated_at DESC
+        """,
+        project_id,
+        user_id,
+    )
+    return [_project_paper_asset_from_row(row) for row in rows]
+
+
+async def persist_ingestion_result(
+    connection: Any,
+    result: IngestionResult,
+    *,
+    project_id: str | None = None,
+) -> PersistSummary:
     async with connection.transaction():
         await connection.execute(
             """
             INSERT INTO research_papers (
                 paper_id,
+                project_id,
                 session_id,
                 user_id,
                 title,
@@ -119,8 +314,9 @@ async def persist_ingestion_result(connection: Any, result: IngestionResult) -> 
                 source_identity,
                 updated_at
             )
-            VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9::jsonb, now())
+            VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9, $10::jsonb, now())
             ON CONFLICT (paper_id) DO UPDATE SET
+                project_id = EXCLUDED.project_id,
                 session_id = EXCLUDED.session_id,
                 user_id = EXCLUDED.user_id,
                 title = EXCLUDED.title,
@@ -132,6 +328,7 @@ async def persist_ingestion_result(connection: Any, result: IngestionResult) -> 
                 updated_at = now()
             """,
             result.paper.paper_id,
+            project_id,
             result.paper.session_id,
             result.paper.user_id,
             result.paper.title,
@@ -875,3 +1072,42 @@ def _normalise_memory_layer(layer: str) -> str:
     if normalised not in {"l1", "l2", "l3"}:
         raise ValueError("memory layer must be one of L1, L2, or L3")
     return normalised
+
+
+def _project_from_row(row: Any) -> ResearchProject:
+    return ResearchProject(
+        project_id=str(row["project_id"]),
+        user_id=str(row["user_id"]),
+        name=str(row["name"]),
+        description=str(row["description"] or ""),
+        paper_count=int(row.get("paper_count", 0) or 0),
+        chunk_count=int(row.get("chunk_count", 0) or 0),
+        evidence_record_count=int(row.get("evidence_record_count", 0) or 0),
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+    )
+
+
+def _project_paper_asset_from_row(row: Any) -> ResearchProjectPaperAsset:
+    return ResearchProjectPaperAsset(
+        paper_id=str(row["paper_id"]),
+        project_id=str(row["project_id"]),
+        session_id=str(row["session_id"]),
+        user_id=str(row["user_id"]),
+        title=str(row["title"]),
+        authors=_json_value(row["authors"], default=[]),
+        abstract=str(row["abstract"] or ""),
+        source_path=str(row["source_path"]),
+        parser=str(row["parser"]),
+        source_identity=_json_value(row["source_identity"], default={}),
+        chunk_count=int(row["chunk_count"] or 0),
+        evidence_record_count=int(row["evidence_record_count"] or 0),
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+    )
+
+
+def _datetime_value(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return value.isoformat()

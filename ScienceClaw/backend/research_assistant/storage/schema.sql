@@ -1,8 +1,21 @@
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
+CREATE TABLE IF NOT EXISTS research_projects (
+    project_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS research_projects_user_updated_idx
+    ON research_projects (user_id, updated_at DESC);
+
 CREATE TABLE IF NOT EXISTS research_papers (
     paper_id TEXT PRIMARY KEY,
+    project_id TEXT REFERENCES research_projects(project_id) ON DELETE SET NULL,
     session_id TEXT NOT NULL,
     user_id TEXT NOT NULL,
     title TEXT NOT NULL,
@@ -14,6 +27,12 @@ CREATE TABLE IF NOT EXISTS research_papers (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE research_papers
+    ADD COLUMN IF NOT EXISTS project_id TEXT REFERENCES research_projects(project_id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS research_papers_project_id_idx
+    ON research_papers (project_id);
 
 CREATE TABLE IF NOT EXISTS research_chunks (
     chunk_id TEXT PRIMARY KEY,

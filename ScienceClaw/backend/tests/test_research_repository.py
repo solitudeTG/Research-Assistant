@@ -6,6 +6,9 @@ from backend.research_assistant.audit import EvidenceAudit, EvidenceAuditClaim
 from backend.research_assistant.ingestion import ingest_uploaded_paper
 from backend.research_assistant.storage import repository
 from backend.research_assistant.storage.repository import (
+    create_research_project,
+    list_project_paper_assets,
+    list_research_projects,
     persist_chunk_embeddings,
     persist_database_evidence_source,
     persist_web_evidence_source,
@@ -50,6 +53,113 @@ class RecordingConnection:
 
 
 @pytest.mark.asyncio
+async def test_create_research_project_inserts_and_returns_project():
+    connection = RecordingConnection()
+    connection.fetchrow_result = {
+        "project_id": "project-1",
+        "user_id": "user-1",
+        "name": "LEO Beamforming",
+        "description": "Narrow beam papers",
+        "created_at": None,
+        "updated_at": None,
+    }
+
+    project = await create_research_project(
+        connection,
+        project_id="project-1",
+        user_id="user-1",
+        name="LEO Beamforming",
+        description="Narrow beam papers",
+    )
+
+    sql, args = connection.fetchrow_calls[0]
+    assert "insert into research_projects" in sql.lower()
+    assert "returning" in sql.lower()
+    assert args == ("project-1", "user-1", "LEO Beamforming", "Narrow beam papers")
+    assert project.to_dict() == {
+        "project_id": "project-1",
+        "user_id": "user-1",
+        "name": "LEO Beamforming",
+        "description": "Narrow beam papers",
+        "paper_count": 0,
+        "chunk_count": 0,
+        "evidence_record_count": 0,
+        "created_at": None,
+        "updated_at": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_list_research_projects_reads_user_project_summaries():
+    connection = RecordingConnection()
+    connection.fetch_result = [
+        {
+            "project_id": "project-1",
+            "user_id": "user-1",
+            "name": "LEO Beamforming",
+            "description": "Narrow beam papers",
+            "paper_count": 2,
+            "chunk_count": 8,
+            "evidence_record_count": 8,
+            "created_at": None,
+            "updated_at": None,
+        }
+    ]
+
+    projects = await list_research_projects(connection, user_id="user-1")
+
+    sql, args = connection.fetch_calls[0]
+    assert "from research_projects" in sql.lower()
+    assert "left join research_papers" in sql.lower()
+    assert "where rp.user_id = $1" in sql.lower()
+    assert args == ("user-1",)
+    assert len(projects) == 1
+    assert projects[0].project_id == "project-1"
+    assert projects[0].paper_count == 2
+    assert projects[0].chunk_count == 8
+    assert projects[0].evidence_record_count == 8
+
+
+@pytest.mark.asyncio
+async def test_list_project_paper_assets_reads_only_selected_project():
+    connection = RecordingConnection()
+    connection.fetch_result = [
+        {
+            "paper_id": "paper-1",
+            "project_id": "project-1",
+            "session_id": "session-1",
+            "user_id": "user-1",
+            "title": "Space-Time Beamforming",
+            "authors": '["Ada Lovelace"]',
+            "abstract": "Narrow beams for LEO.",
+            "source_path": "/tmp/paper.pdf",
+            "parser": "grobid-tei",
+            "source_identity": '{"file_path":"/tmp/paper.pdf"}',
+            "chunk_count": 4,
+            "evidence_record_count": 4,
+            "created_at": None,
+            "updated_at": None,
+        }
+    ]
+
+    papers = await list_project_paper_assets(
+        connection,
+        project_id="project-1",
+        user_id="user-1",
+    )
+
+    sql, args = connection.fetch_calls[0]
+    assert "from research_papers" in sql.lower()
+    assert "where p.project_id = $1" in sql.lower()
+    assert "and p.user_id = $2" in sql.lower()
+    assert args == ("project-1", "user-1")
+    assert len(papers) == 1
+    assert papers[0].to_dict()["title"] == "Space-Time Beamforming"
+    assert papers[0].to_dict()["status"] == "indexed"
+    assert papers[0].to_dict()["citation_ready"] is True
+
+
+@pytest.mark.asyncio
 async def test_persist_ingestion_result_writes_paper_chunks_and_evidence(tmp_path: Path):
     paper_path = tmp_path / "sample.md"
     paper_path.write_text(
@@ -90,6 +200,42 @@ async def test_persist_ingestion_result_writes_paper_chunks_and_evidence(tmp_pat
         if "insert into research_evidence_records" in sql.lower()
     )
     assert "on conflict" in evidence_sql
+
+
+@pytest.mark.asyncio
+async def test_persist_ingestion_result_can_attach_paper_to_project(tmp_path: Path):
+    paper_path = tmp_path / "sample.md"
+    paper_path.write_text(
+        "\n".join(
+            [
+                "Title: Project Scoped Paper",
+                "Authors: Ada Lovelace",
+                "Abstract: Project assets need boundaries.",
+                "",
+                "1 Method",
+                "Research Project isolates paper evidence.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    ingestion = ingest_uploaded_paper(
+        file_path=paper_path,
+        session_id="library-project-1",
+        user_id="user-1",
+        workspace_dir=tmp_path,
+    )
+    connection = RecordingConnection()
+
+    await persist_ingestion_result(connection, ingestion, project_id="project-1")
+
+    paper_sql, paper_args = connection.executed[0]
+    assert "project_id" in paper_sql.lower()
+    assert paper_args[0:4] == (
+        ingestion.paper.paper_id,
+        "project-1",
+        "library-project-1",
+        "user-1",
+    )
 
 
 @pytest.mark.asyncio

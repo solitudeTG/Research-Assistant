@@ -10,10 +10,15 @@ from backend.research_assistant.storage.repository import (
     ResearchAuditResult,
     ResearchEvidenceRecord,
     ResearchMemoryEntry,
+    ResearchProject,
+    ResearchProjectPaperAsset,
+    create_research_project,
     delete_memory_entry,
     get_audit_result,
     get_evidence_record,
+    list_project_paper_assets,
     list_memory_entries,
+    list_research_projects,
     persist_chunk_embeddings,
     persist_audit_result,
     persist_database_evidence_source,
@@ -46,12 +51,70 @@ class ResearchSessionStatus:
 async def persist_ingestion_result_to_database(
     database_url: str,
     result: IngestionResult,
+    *,
+    project_id: str | None = None,
 ) -> PersistSummary:
     import asyncpg
 
     connection = await asyncpg.connect(database_url)
     try:
-        return await persist_ingestion_result(connection, result)
+        return await persist_ingestion_result(connection, result, project_id=project_id)
+    finally:
+        await connection.close()
+
+
+async def create_research_project_in_database(
+    database_url: str,
+    *,
+    project_id: str,
+    user_id: str,
+    name: str,
+    description: str = "",
+) -> ResearchProject:
+    import asyncpg
+
+    connection = await asyncpg.connect(database_url)
+    try:
+        return await create_research_project(
+            connection,
+            project_id=project_id,
+            user_id=user_id,
+            name=name,
+            description=description,
+        )
+    finally:
+        await connection.close()
+
+
+async def list_research_projects_from_database(
+    database_url: str,
+    *,
+    user_id: str,
+) -> list[ResearchProject]:
+    import asyncpg
+
+    connection = await asyncpg.connect(database_url)
+    try:
+        return await list_research_projects(connection, user_id=user_id)
+    finally:
+        await connection.close()
+
+
+async def list_project_paper_assets_from_database(
+    database_url: str,
+    *,
+    project_id: str,
+    user_id: str,
+) -> list[ResearchProjectPaperAsset]:
+    import asyncpg
+
+    connection = await asyncpg.connect(database_url)
+    try:
+        return await list_project_paper_assets(
+            connection,
+            project_id=project_id,
+            user_id=user_id,
+        )
     finally:
         await connection.close()
 

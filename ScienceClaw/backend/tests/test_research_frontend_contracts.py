@@ -29,6 +29,29 @@ def test_agent_api_exposes_web_and_database_evidence_ingestion():
     assert "`/sessions/${sessionId}/research/database-evidence`" in agent_api
 
 
+def test_frontend_exposes_research_library_project_contracts():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    agent_api = (frontend_root / "api" / "agent.ts").read_text(encoding="utf-8")
+    main_ts = (frontend_root / "main.ts").read_text(encoding="utf-8")
+    left_panel = (frontend_root / "components" / "LeftPanel.vue").read_text(encoding="utf-8")
+    library_page = frontend_root / "pages" / "ResearchLibraryPage.vue"
+
+    assert "export interface ResearchProject" in agent_api
+    assert "export interface ResearchProjectPaperAsset" in agent_api
+    assert "export async function createResearchProject" in agent_api
+    assert "export async function listResearchProjects" in agent_api
+    assert "export async function listResearchProjectPapers" in agent_api
+    assert "export async function uploadResearchProjectPaper" in agent_api
+    assert "`/sessions/research/projects`" in agent_api
+    assert "`/sessions/research/projects/${projectId}/papers`" in agent_api
+
+    assert "ResearchLibraryPage" in main_ts
+    assert "research-library" in main_ts
+    assert "handleResearchLibraryTabClick" in left_panel
+    assert "BookOpen" in left_panel
+    assert library_page.is_file()
+
+
 def test_agent_api_exposes_source_quality_ingestion_result_contract():
     agent_api = (
         Path(__file__).resolve().parents[2]

@@ -57,7 +57,7 @@ Automatically indexing every Chat upload was rejected because arbitrary files wo
 
 ## Current Status
 
-Planned. This Feature is the first implementation slice in the Research Project + Library capability sequence.
+In Progress. The first vertical slice now creates/lists Research Projects, lists Project paper assets, uploads papers directly into a Project Library path, and exposes a ScienceClaw-styled Research Library page.
 
 ## Links
 
@@ -92,25 +92,26 @@ Planned. This Feature is the first implementation slice in the Research Project 
 
 ## Acceptance Criteria
 
-- [ ] User can create a Research Project from Research Library.
-- [ ] User can select a Project and see its paper assets.
-- [ ] User can upload a paper from Research Library into the selected Project.
-- [ ] Uploaded paper records expose parsing/indexing/citation-readiness status.
-- [ ] UI follows ScienceClaw workbench density, spacing, and restrained visual language.
+- [x] User can create a Research Project from Research Library.
+- [x] User can select a Project and see its paper assets.
+- [x] User can upload a paper from Research Library into the selected Project.
+- [x] Uploaded paper records expose parsing/indexing/citation-readiness status.
+- [x] UI follows ScienceClaw workbench density, spacing, and restrained visual language.
 
 ## Acceptance Map
 
 | Claim | Acceptance | Evidence | Status |
 | --- | --- | --- | --- |
-| Research Project exists as a visible asset boundary. | Library UI and backend API create/list/select projects. | Pending. | Planned |
-| Papers can be uploaded into a Project. | Library upload indexes or records a paper under the selected Project. | Pending. | Planned |
-| Project assets are inspectable. | Library table shows Project-scoped paper rows and status. | Pending. | Planned |
+| Research Project exists as a visible asset boundary. | Library UI and backend API create/list/select projects. | `147 passed` backend suite on 2026-06-28; `npm.cmd run type-check`; `npm.cmd run build`. | Implemented |
+| Papers can be uploaded into a Project. | Library upload indexes or records a paper under the selected Project. | `test_upload_research_project_paper_indexes_into_project`; `test_persist_ingestion_result_can_attach_paper_to_project`. | Implemented |
+| Project assets are inspectable. | Library table shows Project-scoped paper rows and status. | `test_list_project_paper_assets_reads_only_selected_project`; frontend contract test for `ResearchLibraryPage.vue`. | Implemented |
 
 ## State Timeline
 
 | Date | State | Trigger | Evidence | Note |
 | --- | --- | --- | --- | --- |
 | 2026-06-28 | planned | User approved four-Feature breakdown | This Feature | Created to own Research Library and Project asset management. |
+| 2026-06-28 | in_progress | First F009 implementation slice | Focused tests and type-check | Project/Library core is implemented; project-scoped Chat remains F010. |
 
 ## Patch History
 
@@ -118,16 +119,22 @@ None yet.
 
 ## Evidence
 
-No verification evidence yet.
+Verification evidence from 2026-06-28:
+
+- `PYTHONPATH=E:\Self-Project\Research-Assistant\ScienceClaw;E:\Self-Project\Research-Assistant pytest backend/tests -q` -> `147 passed`.
+- Focused backend/frontend contract suite -> `87 passed`.
+- `npm.cmd run type-check` from `ScienceClaw/frontend` -> passed.
+- `npm.cmd run build` from `ScienceClaw/frontend` -> passed with existing Browserslist/CSS/chunk-size warnings.
+- `knowledge_check.py --feature-index docs/features/F009-research-project-library-core.md` -> pending for closeout after this update.
 
 ## Recovery Snapshot
 
 - Read first: this Feature, `F003`, `F004`, `F005`, `ADR-001`.
-- Current capability state: Session-scoped research ingestion/retrieval exists; Project/Library asset management is not yet implemented.
-- Known risks: Data model changes must not break existing session-scoped tests; UI must not diverge from ScienceClaw style.
-- Next safe action: Add backend/API tests for Project creation and Project paper listing before implementation.
+- Current capability state: Research Project schema/API, Library upload, Project paper listing, frontend API, route, nav entry, and Research Library page exist.
+- Known risks: Project-scoped Chat retrieval is not implemented in this Feature and must be handled by `F010`; admission thresholds remain `F011`; Chat upload promotion remains `F012`.
+- Next safe action: Run full research backend suite and frontend build, then start `F010` with tests proving cross-Project retrieval isolation.
 - Unblock condition: None.
 
 ## Next Step
 
-Implement the smallest vertical slice: project table/API, Research Library page shell, project list, and paper asset list.
+Close out the first F009 slice with full verification, commit, and push; then start F010 Project Scoped Chat.

@@ -37,6 +37,47 @@ class FakeStorageSummary:
         self.evidence_record_count = evidence_record_count
 
 
+class FakeProject:
+    def __init__(self, *, project_id="project-1", name="LEO Beamforming"):
+        self.project_id = project_id
+        self.name = name
+
+    def to_dict(self):
+        return {
+            "project_id": self.project_id,
+            "user_id": "user-1",
+            "name": self.name,
+            "description": "Narrow beam papers",
+            "paper_count": 0,
+            "chunk_count": 0,
+            "evidence_record_count": 0,
+            "created_at": None,
+            "updated_at": None,
+        }
+
+
+class FakeProjectPaper:
+    def to_dict(self):
+        return {
+            "paper_id": "paper-1",
+            "project_id": "project-1",
+            "session_id": "session-1",
+            "user_id": "user-1",
+            "title": "Space-Time Beamforming",
+            "authors": ["Ada Lovelace"],
+            "abstract": "Narrow beams for LEO.",
+            "source_path": "/tmp/paper.pdf",
+            "parser": "grobid-tei",
+            "source_identity": {"file_path": "/tmp/paper.pdf"},
+            "chunk_count": 4,
+            "evidence_record_count": 4,
+            "status": "indexed",
+            "citation_ready": True,
+            "created_at": None,
+            "updated_at": None,
+        }
+
+
 def test_research_answer_and_report_routes_use_citation_evidence_wording():
     sessions_source = (
         Path(__file__).resolve().parents[1]
@@ -107,6 +148,141 @@ def _load_sessions_module(monkeypatch):
     )
     sys.modules.pop("backend.route.sessions", None)
     return importlib.import_module("backend.route.sessions")
+
+
+@pytest.mark.asyncio
+async def test_create_research_project_route_persists_project(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    persisted = {}
+
+    async def fake_create_project(database_url, **kwargs):
+        persisted["database_url"] = database_url
+        persisted.update(kwargs)
+        return FakeProject(project_id=kwargs["project_id"], name=kwargs["name"])
+
+    monkeypatch.setattr(sessions, "create_research_project_in_database", fake_create_project)
+    monkeypatch.setattr(sessions.shortuuid, "uuid", lambda: "project-uuid")
+
+    response = await sessions.create_research_project_for_user(
+        sessions.ResearchProjectCreateRequest(
+            name="LEO Beamforming",
+            description="Narrow beam papers",
+        ),
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    assert persisted == {
+        "database_url": sessions.settings.research_database_url,
+        "project_id": "research-project-project-uuid",
+        "user_id": "user-1",
+        "name": "LEO Beamforming",
+        "description": "Narrow beam papers",
+    }
+    assert response.data["project_id"] == "research-project-project-uuid"
+    assert response.data["name"] == "LEO Beamforming"
+
+
+@pytest.mark.asyncio
+async def test_list_research_projects_route_returns_user_projects(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    called = {}
+
+    async def fake_list_projects(database_url, **kwargs):
+        called["database_url"] = database_url
+        called.update(kwargs)
+        return [FakeProject()]
+
+    monkeypatch.setattr(sessions, "list_research_projects_from_database", fake_list_projects)
+
+    response = await sessions.list_research_projects_for_user(
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    assert called == {
+        "database_url": sessions.settings.research_database_url,
+        "user_id": "user-1",
+    }
+    assert response.data["projects"][0]["project_id"] == "project-1"
+
+
+@pytest.mark.asyncio
+async def test_list_research_project_papers_route_returns_project_assets(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    called = {}
+
+    async def fake_list_project_papers(database_url, **kwargs):
+        called["database_url"] = database_url
+        called.update(kwargs)
+        return [FakeProjectPaper()]
+
+    monkeypatch.setattr(sessions, "list_project_paper_assets_from_database", fake_list_project_papers)
+
+    response = await sessions.list_research_project_papers_for_user(
+        "project-1",
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    assert called == {
+        "database_url": sessions.settings.research_database_url,
+        "project_id": "project-1",
+        "user_id": "user-1",
+    }
+    assert response.data["project_id"] == "project-1"
+    assert response.data["papers"][0]["title"] == "Space-Time Beamforming"
+
+
+@pytest.mark.asyncio
+async def test_upload_research_project_paper_indexes_into_project(monkeypatch, tmp_path):
+    sessions = _load_sessions_module(monkeypatch)
+    captured = {}
+    paper = types.SimpleNamespace(
+        paper_id="paper-1",
+        title="Space-Time Beamforming",
+        authors=["Ada Lovelace"],
+        parser="grobid-tei",
+    )
+    ingestion = types.SimpleNamespace(
+        paper=paper,
+        chunks=[types.SimpleNamespace(chunk_id="chunk-1")],
+        artifact=types.SimpleNamespace(
+            manifest_path=str(tmp_path / "canonical_paper.json"),
+            evidence_preview_path=str(tmp_path / "evidence_preview.md"),
+        ),
+    )
+
+    async def fake_index_ingestion_result(**kwargs):
+        captured["index"] = kwargs
+        return types.SimpleNamespace(
+            paper_id="paper-1",
+            chunk_count=1,
+            evidence_record_count=1,
+            embedding_count=1,
+            embedding_model="local-hashing-v1",
+        )
+
+    def fake_ingest_uploaded_paper(**kwargs):
+        captured["ingest"] = kwargs
+        return ingestion
+
+    monkeypatch.setattr(sessions, "_WORKSPACE_DIR", str(tmp_path))
+    monkeypatch.setattr(sessions, "is_research_document", lambda path: True)
+    monkeypatch.setattr(sessions, "ingest_uploaded_paper", fake_ingest_uploaded_paper)
+    monkeypatch.setattr(sessions, "index_ingestion_result", fake_index_ingestion_result)
+
+    response = await sessions.upload_research_project_paper_for_user(
+        "project-1",
+        FakeUpload(),
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    assert captured["ingest"]["session_id"] == "research-library-project-1"
+    assert captured["ingest"]["user_id"] == "user-1"
+    assert captured["ingest"]["workspace_dir"] == tmp_path / "research_library" / "project-1"
+    assert captured["index"]["project_id"] == "project-1"
+    assert response.data["project_id"] == "project-1"
+    assert response.data["paper_id"] == "paper-1"
+    assert response.data["status"] == "indexed"
+    assert response.data["citation_ready"] is True
 
 
 @pytest.mark.asyncio

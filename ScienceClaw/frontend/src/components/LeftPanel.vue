@@ -17,6 +17,18 @@
         <div v-if="isChatActive" class="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-gradient-to-b from-blue-400 to-indigo-500 rounded-r-full"></div>
       </button>
 
+      <!-- Research Library Tab -->
+      <button @click="handleResearchLibraryTabClick"
+        class="nav-btn size-10 rounded-xl flex items-center justify-center transition-all duration-250 group relative"
+        :class="isResearchLibraryActive
+          ? 'bg-gradient-to-br from-emerald-500 to-cyan-600 text-white shadow-md shadow-emerald-500/25'
+          : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300'"
+        title="Research Library"
+      >
+        <BookOpen :size="19" :stroke-width="isResearchLibraryActive ? 2.5 : 1.8" />
+        <div v-if="isResearchLibraryActive" class="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-gradient-to-b from-emerald-400 to-cyan-500 rounded-r-full"></div>
+      </button>
+
       <!-- Skills Tab -->
       <button @click="handleSkillsTabClick"
         class="nav-btn size-10 rounded-xl flex items-center justify-center transition-all duration-250 group relative"
@@ -232,7 +244,7 @@
 import {
   Plus, Command, MessageSquareDashed, Blocks, MessageSquare,
   Wrench, CalendarClock, Settings2, Search, X, ChevronRight, Pin,
-  Play
+  Play, BookOpen
 } from 'lucide-vue-next';
 import SessionItem from './SessionItem.vue';
 import UserMenu from './UserMenu.vue';
@@ -310,7 +322,8 @@ const filterTabs = computed(() => [
 ])
 
 // Navigation State
-const isChatActive = computed(() => route.path === '/' || route.path.startsWith('/chat/session') || (route.path.startsWith('/chat') && !route.path.includes('skills') && !route.path.includes('tools') && !route.path.startsWith('/chat/tasks')))
+const isResearchLibraryActive = computed(() => route.path.startsWith('/chat/research-library'))
+const isChatActive = computed(() => route.path === '/' || route.path.startsWith('/chat/session') || (route.path.startsWith('/chat') && !route.path.includes('skills') && !route.path.includes('tools') && !route.path.startsWith('/chat/tasks') && !isResearchLibraryActive.value))
 const isSkillsActive = computed(() => route.path.includes('/chat/skills'))
 const isToolsActive = computed(() => route.path.includes('/chat/tools') && !route.path.startsWith('/chat/tasks'))
 const isTasksActive = computed(() => route.path.startsWith('/chat/tasks'))
@@ -335,6 +348,13 @@ const handleSkillsTabClick = () => {
     toggleLeftPanel()
   }
   router.push('/chat/skills')
+}
+
+const handleResearchLibraryTabClick = () => {
+  if (isLeftPanelShow.value) {
+    toggleLeftPanel()
+  }
+  router.push('/chat/research-library')
 }
 
 const handleToolsTabClick = () => {
@@ -431,8 +451,8 @@ onUnmounted(() => {
 })
 
 watch(() => route.path, async (newPath, oldPath) => {
-  const wasChatSession = oldPath?.startsWith('/chat/') && !oldPath.includes('skills') && !oldPath.includes('tools') && !oldPath.startsWith('/chat/tasks')
-  const isChatSession = newPath?.startsWith('/chat/') && !newPath.includes('skills') && !newPath.includes('tools') && !newPath.startsWith('/chat/tasks')
+  const wasChatSession = oldPath?.startsWith('/chat/') && !oldPath.includes('skills') && !oldPath.includes('tools') && !oldPath.startsWith('/chat/tasks') && !oldPath.startsWith('/chat/research-library')
+  const isChatSession = newPath?.startsWith('/chat/') && !newPath.includes('skills') && !newPath.includes('tools') && !newPath.startsWith('/chat/tasks') && !newPath.startsWith('/chat/research-library')
   if (!(wasChatSession && isChatSession)) {
     await updateSessions()
   }

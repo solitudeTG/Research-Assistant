@@ -147,6 +147,53 @@ export interface ResearchSessionStatus {
   has_indexed_papers: boolean;
 }
 
+export interface ResearchProject {
+  project_id: string;
+  user_id: string;
+  name: string;
+  description: string;
+  paper_count: number;
+  chunk_count: number;
+  evidence_record_count: number;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ResearchProjectPaperAsset {
+  paper_id: string;
+  project_id: string;
+  session_id: string;
+  user_id: string;
+  title: string;
+  authors: string[];
+  abstract: string;
+  source_path: string;
+  parser: string;
+  source_identity: Record<string, unknown>;
+  chunk_count: number;
+  evidence_record_count: number;
+  status: 'uploaded' | 'parsed' | 'indexed' | string;
+  citation_ready: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ResearchProjectPaperUploadResult {
+  project_id: string;
+  paper_id: string;
+  title: string;
+  authors: string[];
+  parser: string;
+  chunk_count: number;
+  evidence_record_count: number;
+  embedding_count: number;
+  embedding_model: string;
+  status: 'indexed' | string;
+  citation_ready: boolean;
+  manifest_path: string;
+  evidence_preview_path: string;
+}
+
 export interface SourceEvidenceChunkPayload {
   section: string;
   content: string;
@@ -281,6 +328,45 @@ export async function answerResearchQuestion(
 export async function getResearchStatus(sessionId: string): Promise<ResearchSessionStatus> {
   const response = await apiClient.get<ApiResponse<ResearchSessionStatus>>(
     `/sessions/${sessionId}/research/status`,
+  );
+  return response.data.data;
+}
+
+export async function createResearchProject(payload: {
+  name: string;
+  description?: string;
+}): Promise<ResearchProject> {
+  const response = await apiClient.post<ApiResponse<ResearchProject>>(
+    `/sessions/research/projects`,
+    payload,
+  );
+  return response.data.data;
+}
+
+export async function listResearchProjects(): Promise<ResearchProject[]> {
+  const response = await apiClient.get<ApiResponse<{ projects: ResearchProject[] }>>(
+    `/sessions/research/projects`,
+  );
+  return response.data.data.projects;
+}
+
+export async function listResearchProjectPapers(projectId: string): Promise<ResearchProjectPaperAsset[]> {
+  const response = await apiClient.get<ApiResponse<{ project_id: string; papers: ResearchProjectPaperAsset[] }>>(
+    `/sessions/research/projects/${projectId}/papers`,
+  );
+  return response.data.data.papers;
+}
+
+export async function uploadResearchProjectPaper(
+  projectId: string,
+  file: File,
+): Promise<ResearchProjectPaperUploadResult> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await apiClient.post<ApiResponse<ResearchProjectPaperUploadResult>>(
+    `/sessions/research/projects/${projectId}/papers`,
+    formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
   );
   return response.data.data;
 }
