@@ -962,6 +962,7 @@ async def test_promote_research_memory_requires_approved_audit_claim(monkeypatch
     sessions = _load_sessions_module(monkeypatch)
     session = FakeSession()
     persisted_memory = {}
+    published = []
 
     async def fake_get_session(session_id):
         assert session_id == "session-1"
@@ -1001,6 +1002,7 @@ async def test_promote_research_memory_requires_approved_audit_claim(monkeypatch
     monkeypatch.setattr(sessions, "get_audit_result_from_database", fake_get_audit)
     monkeypatch.setattr(sessions, "list_memory_entries_from_database", fake_list_memory)
     monkeypatch.setattr(sessions, "persist_memory_entry_to_database", fake_persist_memory)
+    monkeypatch.setattr(sessions, "_publish_session_event", lambda *args: published.append(args))
 
     response = await sessions.promote_research_memory_for_session(
         "session-1",
@@ -1025,6 +1027,23 @@ async def test_promote_research_memory_requires_approved_audit_claim(monkeypatch
     assert persisted_memory["source_subject_id"] == "answer-1"
     assert response.data["created"] is True
     assert response.data["duplicate"] is False
+    assert session.save_count == 1
+    memory_step = session.events[-1]["data"]
+    assert memory_step["status"] == "completed"
+    assert memory_step["description"] == "Context-only research memory saved"
+    assert memory_step["metadata"] == {
+        "memory_id": response.data["memory_id"],
+        "layer": "l2",
+        "source_type": "memory",
+        "context_only": True,
+        "citation_evidence": False,
+        "promotion_reason": "approved_audit_claim",
+        "subject_type": "answer",
+        "subject_id": "answer-1",
+        "evidence_ids": [17],
+        "duplicate": False,
+    }
+    assert published[-1] == ("session-1", "user-1", session.events[-1])
 
 
 @pytest.mark.asyncio
@@ -1226,6 +1245,7 @@ async def test_delete_research_memory_for_session_deletes_context_only_memory(mo
     sessions = _load_sessions_module(monkeypatch)
     session = FakeSession()
     deleted_args = {}
+    published = []
 
     async def fake_get_session(session_id):
         assert session_id == "session-1"
@@ -1243,6 +1263,7 @@ async def test_delete_research_memory_for_session_deletes_context_only_memory(mo
 
     monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
     monkeypatch.setattr(sessions, "delete_memory_entry_from_database", fake_delete_memory)
+    monkeypatch.setattr(sessions, "_publish_session_event", lambda *args: published.append(args))
 
     response = await sessions.delete_research_memory_for_session(
         "session-1",
@@ -1262,6 +1283,18 @@ async def test_delete_research_memory_for_session_deletes_context_only_memory(mo
         "session_id": "session-1",
         "memory_id": "mem-1",
     }
+    assert session.save_count == 1
+    memory_step = session.events[-1]["data"]
+    assert memory_step["status"] == "completed"
+    assert memory_step["description"] == "Context-only research memory forgotten"
+    assert memory_step["metadata"] == {
+        "memory_id": "mem-1",
+        "source_type": "memory",
+        "context_only": True,
+        "citation_evidence": False,
+        "deleted": True,
+    }
+    assert published[-1] == ("session-1", "user-1", session.events[-1])
 
 
 @pytest.mark.asyncio

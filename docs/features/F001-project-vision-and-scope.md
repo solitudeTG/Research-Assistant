@@ -247,6 +247,7 @@ In Progress。
 - Current context-boundary UI increment: Chat answer cards now surface the same `context_boundaries` manifest inside the existing Evidence Audit details, keeping the UI compact while making citation evidence, memory, process trace, and model reasoning boundaries visible to readers.
 - Current trace-boundary increment: research answer and Markdown report completed step events now carry the same `context_boundaries` manifest in real backend trace metadata, so ActivityPanel/recovered trace consumers can audit the boundary without treating memory, process trace, or model reasoning as citation evidence.
 - Current report-message boundary increment: Markdown report route responses and assistant message metadata now include the same `context_boundaries` manifest as answer messages, report sidecars, and trace events, keeping report recovery aligned with the citation/context/process/model boundary contract.
+- Current memory lifecycle trace increment: approved-claim memory promotion and session-scoped memory deletion now append, save, and publish real backend step events with `source_type=memory`, `context_only=true`, and `citation_evidence=false`, so ActivityPanel/recovered trace consumers can observe research memory lifecycle changes without treating memory as citation evidence.
 - Next safe action: Configure a real provider key/current model name and add LLM-backed research answer/report E2E, or move to richer context-memory conflict arbitration, richer Evidence Audit, report quality, richer runtime audit inspection/download polish, or the next scoped research workflow.
 
 ## Patch History
@@ -589,6 +590,9 @@ F001 reached three Patch History rows on 2026-06-25. The fixes are accepted as u
 - 2026-06-28 report-message context-boundary follow-up:
   - Red test: `test_research_session_routes.py -k "report_completion_message"` failed because generated report assistant message metadata and route response data omitted `context_boundaries`.
   - Green focused verification: report route test passed after report responses/messages reused the shared citation/context/process/model boundary manifest.
+- 2026-06-28 context-only memory lifecycle trace follow-up:
+  - Red tests: `test_research_session_routes.py -k "promote_research_memory_requires_approved_audit_claim"` failed because approved-claim memory promotion persisted memory without saving or publishing a session trace event; `test_research_session_routes.py -k "delete_research_memory_for_session_deletes_context_only_memory"` failed because memory deletion was also silent.
+  - Green focused verification: both lifecycle trace tests -> `2 passed`; full session route suite -> `38 passed`; `py_compile` for `sessions.py` passed after promotion/deletion emitted real completed step events with `source_type=memory`, `context_only=true`, and `citation_evidence=false`.
 - Baseline verification recorded in [baseline-import-notes.md](../baseline-import-notes.md):
   - `python -m compileall ScienceClaw\backend`
   - `npm.cmd ci` in `ScienceClaw\frontend`

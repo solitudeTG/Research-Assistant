@@ -2522,6 +2522,29 @@ async def promote_research_memory_for_session(
                     "duplicate": True,
                 }
             )
+            memory_event = _research_upload_step_event(
+                step_id=f"research-memory-{_new_event_id()}",
+                status="completed",
+                description="Context-only research memory already saved",
+                metadata={
+                    "memory_id": data["memory_id"],
+                    "layer": data.get("layer", "l2"),
+                    "source_type": "memory",
+                    "context_only": True,
+                    "citation_evidence": False,
+                    "promotion_reason": "approved_audit_claim",
+                    "subject_type": body.subject_type,
+                    "subject_id": body.subject_id,
+                    "evidence_ids": approved_claim.get("evidence_ids", []),
+                    "duplicate": True,
+                },
+            )
+            await _append_save_publish_session_event(
+                session,
+                session_id=session_id,
+                user_id=current_user.id,
+                event=memory_event,
+            )
             return ApiResponse(data=data)
 
         memory_id = f"research-memory-{_new_event_id()}"
@@ -2536,6 +2559,29 @@ async def promote_research_memory_for_session(
             content=body.claim_text,
             source_subject_type=body.subject_type,
             source_subject_id=body.subject_id,
+        )
+        memory_event = _research_upload_step_event(
+            step_id=f"research-memory-{_new_event_id()}",
+            status="completed",
+            description="Context-only research memory saved",
+            metadata={
+                "memory_id": memory_id,
+                "layer": "l2",
+                "source_type": "memory",
+                "context_only": True,
+                "citation_evidence": False,
+                "promotion_reason": "approved_audit_claim",
+                "subject_type": body.subject_type,
+                "subject_id": body.subject_id,
+                "evidence_ids": approved_claim.get("evidence_ids", []),
+                "duplicate": False,
+            },
+        )
+        await _append_save_publish_session_event(
+            session,
+            session_id=session_id,
+            user_id=current_user.id,
+            event=memory_event,
         )
         return ApiResponse(
             data={
@@ -2583,6 +2629,24 @@ async def delete_research_memory_for_session(
         if not deleted:
             raise HTTPException(status_code=404, detail="Research memory entry not found")
 
+        memory_event = _research_upload_step_event(
+            step_id=f"research-memory-{_new_event_id()}",
+            status="completed",
+            description="Context-only research memory forgotten",
+            metadata={
+                "memory_id": memory_id,
+                "source_type": "memory",
+                "context_only": True,
+                "citation_evidence": False,
+                "deleted": True,
+            },
+        )
+        await _append_save_publish_session_event(
+            session,
+            session_id=session_id,
+            user_id=current_user.id,
+            event=memory_event,
+        )
         return ApiResponse(
             data={
                 "memory_id": memory_id,
