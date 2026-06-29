@@ -4,7 +4,7 @@ doc_kind: feature
 status: active
 owner: solitudeTG
 created: 2026-06-28
-updated: 2026-06-28
+updated: 2026-06-29
 ---
 
 # F003: Research Document Ingestion
@@ -105,14 +105,26 @@ In Progress. Initial ingestion/parser/indexing slices have verification evidence
 | Date | State | Trigger | Evidence | Note |
 | --- | --- | --- | --- | --- |
 | 2026-06-28 | active | Feature split from F001 | This Feature and `INDEX.md` | Created to own ingestion/parser recovery. |
+| 2026-06-29 | patched | Real Research Library PDF upload E2E exposed storage-text failures | API E2E, browser UI verification, focused repository/session tests | F003.1 added PostgreSQL-safe text and bounded citation quote handling at the storage boundary. |
 
 ## Patch History
 
-None yet.
+| Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| F003.1 | 2026-06-29 | pending | Uploading a real PDF from `paper_data` into Research Library returned 500 during indexing. | Parsed PDF text contained NUL bytes rejected by PostgreSQL text, and full chunk text used as citation quote exceeded the B-tree unique-index row limit. | Storage-boundary tests for NUL removal and bounded evidence quotes; full chunk text remains in `research_chunks.content`; real PDF E2E verified 19 chunks, 19 evidence records, and 19 embeddings. | verified |
 
 ## Evidence
 
 Focused ingestion evidence should be moved here the next time ingestion/parser behavior changes. Current historical evidence remains in `F001`.
+
+Verification evidence from 2026-06-29:
+
+- Real upload source: `E:\Self-Project\Research-Assistant\paper_data\Space-Time_Beamforming_for_LEO_Satellite_Communications_Enabling_Extremely_Narrow_Beams(1).pdf`.
+- First failing E2E: `asyncpg.exceptions.CharacterNotInRepertoireError: invalid byte sequence for encoding "UTF8": 0x00` while writing `research_chunks`.
+- Second failing E2E after NUL protection: `asyncpg.exceptions.ProgramLimitExceededError: index row size ... exceeds btree ... for index "research_evidence_records_chunk_id_evidence_type_quote_key"`.
+- Passing E2E after fix: upload returned `parser=grobid-tei`, `chunk_count=19`, `evidence_record_count=19`, `embedding_count=19`, `status=indexed`, `citation_ready=true`.
+- Browser UI verification: Research Library project `E2E 论文上传验证 0629-1034` showed `1 篇论文`, `19 条证据`, paper title `Space-Time Beamforming for LEO Satellite Communications: Enabling Extremely Narrow Beams`, parser `grobid-tei`, and status `已索引`.
+- `$env:PYTHONPATH='E:\Self-Project\Research-Assistant\ScienceClaw'; pytest ScienceClaw/backend/tests/test_research_repository.py ScienceClaw/backend/tests/test_research_database.py ScienceClaw/backend/tests/test_research_session_routes.py -q --basetemp=.pytest_tmp\e2e-upload-related` -> `83 passed`.
 
 ## Recovery Snapshot
 

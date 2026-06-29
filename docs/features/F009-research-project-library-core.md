@@ -113,12 +113,14 @@ In Progress. The first vertical slice now creates/lists Research Projects, lists
 | 2026-06-28 | planned | User approved four-Feature breakdown | This Feature | Created to own Research Library and Project asset management. |
 | 2026-06-28 | in_progress | First F009 implementation slice | Focused tests and type-check | Project/Library core is implemented; project-scoped Chat remains F010. |
 | 2026-06-29 | patched | User E2E found Research Library create action appeared unresponsive | Browser E2E, backend schema check, focused tests, type-check, build | F009.1 restored static Library routing and startup schema initialization. |
+| 2026-06-29 | patched | Real Research Library PDF upload E2E exposed indexing failures | API E2E, browser UI verification, focused repository/session tests | F009.2 verified Library upload with a real `paper_data` PDF after storage text protections. |
 
 ## Patch History
 
 | Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
 | --- | --- | --- | --- | --- | --- | --- |
 | F009.1 | 2026-06-29 | `5bf49d8` | Real E2E validation showed the Research Library create action did not complete. | Fixed chat child routes were declared after `:sessionId`, and the running backend did not initialize `research_assistant/storage/schema.sql` on startup. | Static route-order contract test, research schema initialization unit test, PostgreSQL table check, and browser E2E project creation. | verified |
+| F009.2 | 2026-06-29 | pending | Real PDF upload from Research Library returned 500 before a paper asset became visible. | Ingestion storage accepted parser output that could contain NUL bytes and used full chunk text as citation quote, exceeding PostgreSQL text/index constraints. | Repository regression tests plus real `paper_data` PDF E2E showing one indexed paper with 19 chunks and 19 citation evidence records in the Library UI. | verified |
 
 ## Evidence
 
@@ -128,6 +130,14 @@ Verification evidence from 2026-06-28:
 - Focused backend/frontend contract suite -> `87 passed`.
 - `npm.cmd run type-check` from `ScienceClaw/frontend` -> passed.
 - `npm.cmd run build` from `ScienceClaw/frontend` -> passed with existing Browserslist/CSS/chunk-size warnings.
+
+Verification evidence from 2026-06-29 Library upload E2E:
+
+- Real upload source: `E:\Self-Project\Research-Assistant\paper_data\Space-Time_Beamforming_for_LEO_Satellite_Communications_Enabling_Extremely_Narrow_Beams(1).pdf`.
+- API upload into project `E2E 论文上传验证 0629-1034` returned `parser=grobid-tei`, `chunk_count=19`, `evidence_record_count=19`, `embedding_count=19`, `status=indexed`, `citation_ready=true`.
+- Browser UI showed the project with `1 篇论文` and `19 条证据`; selecting it showed the paper title, parser `grobid-tei`, `19` chunks, `19` citation evidence records, and status `已索引`.
+- Backend logs after passing upload contained no `upload_research_project_paper_for_user`, `ProgramLimitExceeded`, `CharacterNotInRepertoire`, `Internal Server Error`, or `ERROR` entries for the final run.
+- `$env:PYTHONPATH='E:\Self-Project\Research-Assistant\ScienceClaw'; pytest ScienceClaw/backend/tests/test_research_repository.py ScienceClaw/backend/tests/test_research_database.py ScienceClaw/backend/tests/test_research_session_routes.py -q --basetemp=.pytest_tmp\e2e-upload-related` -> `83 passed`.
 - `knowledge_check.py --feature-index docs/features/F009-research-project-library-core.md` -> pending for closeout after this update.
 
 Verification evidence from 2026-06-29:

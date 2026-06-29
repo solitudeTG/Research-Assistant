@@ -4,6 +4,13 @@ import pytest
 
 from backend.research_assistant.audit import EvidenceAudit, EvidenceAuditClaim
 from backend.research_assistant.ingestion import ingest_uploaded_paper
+from backend.research_assistant.models import (
+    CanonicalPaper,
+    EvidenceSource,
+    IngestionArtifact,
+    IngestionResult,
+    PaperChunk,
+)
 from backend.research_assistant.storage import repository
 from backend.research_assistant.storage.repository import (
     create_research_project,
@@ -296,6 +303,101 @@ async def test_persist_ingestion_result_can_attach_paper_to_project(tmp_path: Pa
         "library-project-1",
         "user-1",
     )
+
+
+@pytest.mark.asyncio
+async def test_persist_ingestion_result_removes_nul_bytes_before_database_write():
+    ingestion = IngestionResult(
+        paper=CanonicalPaper(
+            paper_id="paper-nul",
+            title="Title\x00With NUL",
+            authors=["Ada\x00Lovelace"],
+            abstract="Abstract\x00text",
+            file_path="/tmp/paper.pdf",
+            session_id="session-1",
+            user_id="user-1",
+            parser="pdf-text",
+        ),
+        chunks=[
+            PaperChunk(
+                chunk_id="chunk-nul",
+                text="Chunk\x00text",
+                source=EvidenceSource(
+                    paper_id="paper-nul",
+                    file_path="/tmp/paper.pdf",
+                    section="Result\x00section",
+                    page=1,
+                ),
+            )
+        ],
+        artifact=IngestionArtifact(
+            manifest_path="/tmp/manifest.json",
+            evidence_preview_path="/tmp/evidence.json",
+        ),
+    )
+    connection = RecordingConnection()
+
+    await persist_ingestion_result(connection, ingestion, project_id="project-1")
+
+    _, paper_args = connection.executed[0]
+    assert "\x00" not in paper_args[4]
+    assert "\x00" not in paper_args[5]
+    assert "\x00" not in paper_args[6]
+
+    _, chunk_rows = connection.executemany_calls[0]
+    assert "\x00" not in chunk_rows[0][2]
+    assert "\x00" not in chunk_rows[0][6]
+    assert "\x00" not in chunk_rows[0][7]
+
+    _, evidence_rows = connection.executemany_calls[1]
+    assert "\x00" not in evidence_rows[0][1]
+    assert "\x00" not in evidence_rows[0][2]
+    assert "\x00" not in evidence_rows[0][5]
+
+
+@pytest.mark.asyncio
+async def test_persist_ingestion_result_bounds_evidence_quote_without_truncating_chunk_content():
+    long_text = "A" * 6000
+    ingestion = IngestionResult(
+        paper=CanonicalPaper(
+            paper_id="paper-long",
+            title="Long Evidence",
+            authors=[],
+            abstract="",
+            file_path="/tmp/paper.pdf",
+            session_id="session-1",
+            user_id="user-1",
+            parser="pdf-text",
+        ),
+        chunks=[
+            PaperChunk(
+                chunk_id="chunk-long",
+                text=long_text,
+                source=EvidenceSource(
+                    paper_id="paper-long",
+                    file_path="/tmp/paper.pdf",
+                    section="Results",
+                    page=1,
+                ),
+            )
+        ],
+        artifact=IngestionArtifact(
+            manifest_path="/tmp/manifest.json",
+            evidence_preview_path="/tmp/evidence.json",
+        ),
+    )
+    connection = RecordingConnection()
+
+    await persist_ingestion_result(connection, ingestion)
+
+    _, chunk_rows = connection.executemany_calls[0]
+    assert chunk_rows[0][6] == long_text
+
+    _, evidence_rows = connection.executemany_calls[1]
+    quote = evidence_rows[0][1]
+    assert len(quote) < len(long_text)
+    assert len(quote.encode("utf-8")) <= 1200
+    assert quote.endswith("...")
 
 
 @pytest.mark.asyncio

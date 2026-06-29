@@ -8,6 +8,8 @@ from typing import Any
 from backend.research_assistant.audit import EvidenceAudit
 from backend.research_assistant.models import IngestionResult
 
+MAX_EVIDENCE_QUOTE_BYTES = 1200
+
 
 @dataclass(frozen=True)
 class PersistSummary:
@@ -404,11 +406,11 @@ async def persist_ingestion_result(
             project_id,
             result.paper.session_id,
             result.paper.user_id,
-            result.paper.title,
+            _postgres_text(result.paper.title),
             _json(result.paper.authors),
-            result.paper.abstract,
-            result.paper.file_path,
-            result.paper.parser,
+            _postgres_text(result.paper.abstract),
+            _postgres_text(result.paper.file_path),
+            _postgres_text(result.paper.parser),
             _json(
                 {
                     "file_path": result.paper.file_path,
@@ -443,11 +445,11 @@ async def persist_ingestion_result(
                 (
                     chunk.chunk_id,
                     chunk.source.paper_id,
-                    chunk.source.section,
+                    _postgres_text(chunk.source.section),
                     chunk.source.page,
                     chunk.source.page,
                     index,
-                    chunk.text,
+                    _postgres_text(chunk.text),
                     _json(
                         {
                             "paper_id": chunk.source.paper_id,
@@ -482,8 +484,8 @@ async def persist_ingestion_result(
             [
                 (
                     chunk.chunk_id,
-                    chunk.text,
-                    chunk.source.section,
+                    _evidence_quote(chunk.text),
+                    _postgres_text(chunk.source.section),
                     chunk.source.page,
                     chunk.source.page,
                     _json(
@@ -552,10 +554,10 @@ async def persist_web_evidence_source(
             source_id,
             session_id,
             user_id,
-            title,
+            _postgres_text(title),
             _json([]),
             "",
-            url,
+            _postgres_text(url),
             "web-source",
             _json(source_identity),
         )
@@ -564,11 +566,11 @@ async def persist_web_evidence_source(
             (
                 str(chunk["chunk_id"]),
                 source_id,
-                str(chunk.get("section") or "Web"),
+                _postgres_text(chunk.get("section") or "Web"),
                 None,
                 None,
                 index,
-                str(chunk.get("content") or ""),
+                _postgres_text(chunk.get("content") or ""),
                 _json(
                     {
                         **source_identity,
@@ -606,8 +608,8 @@ async def persist_web_evidence_source(
         evidence_rows = [
             (
                 str(chunk["chunk_id"]),
-                str(chunk.get("quote") or chunk.get("content") or ""),
-                str(chunk.get("section") or "Web"),
+                _evidence_quote(chunk.get("quote") or chunk.get("content") or ""),
+                _postgres_text(chunk.get("section") or "Web"),
                 None,
                 None,
                 _json(
@@ -696,10 +698,10 @@ async def persist_database_evidence_source(
             source_id,
             session_id,
             user_id,
-            title,
+            _postgres_text(title),
             _json([]),
             "",
-            f"database:{database_name}",
+            _postgres_text(f"database:{database_name}"),
             "database-source",
             _json(source_identity),
         )
@@ -708,11 +710,11 @@ async def persist_database_evidence_source(
             (
                 str(chunk["chunk_id"]),
                 source_id,
-                str(chunk.get("section") or "Database"),
+                _postgres_text(chunk.get("section") or "Database"),
                 None,
                 None,
                 index,
-                str(chunk.get("content") or ""),
+                _postgres_text(chunk.get("content") or ""),
                 _json(
                     {
                         **source_identity,
@@ -750,8 +752,8 @@ async def persist_database_evidence_source(
         evidence_rows = [
             (
                 str(chunk["chunk_id"]),
-                str(chunk.get("quote") or chunk.get("content") or ""),
-                str(chunk.get("section") or "Database"),
+                _evidence_quote(chunk.get("quote") or chunk.get("content") or ""),
+                _postgres_text(chunk.get("section") or "Database"),
                 None,
                 None,
                 _json(
@@ -1040,10 +1042,10 @@ async def persist_memory_entry(
         session_id,
         user_id,
         _normalise_memory_layer(layer),
-        title,
-        content,
-        source_subject_type,
-        source_subject_id,
+        _postgres_text(title),
+        _postgres_text(content),
+        _postgres_text(source_subject_type) if source_subject_type is not None else None,
+        _postgres_text(source_subject_id) if source_subject_id is not None else None,
     )
 
 
@@ -1125,7 +1127,44 @@ async def delete_memory_entry(
 
 
 def _json(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    return json.dumps(_postgres_text_safe(value), ensure_ascii=False, separators=(",", ":"))
+
+
+def _postgres_text_safe(value: Any) -> Any:
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, list):
+        return [_postgres_text_safe(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_postgres_text_safe(item) for item in value)
+    if isinstance(value, dict):
+        return {
+            _postgres_text_safe(key): _postgres_text_safe(item)
+            for key, item in value.items()
+        }
+    return value
+
+
+def _postgres_text(value: Any) -> str:
+    return str(_postgres_text_safe(value))
+
+
+def _evidence_quote(value: Any) -> str:
+    text = _postgres_text(value).strip()
+    if len(text.encode("utf-8")) <= MAX_EVIDENCE_QUOTE_BYTES:
+        return text
+
+    marker = "..."
+    budget = MAX_EVIDENCE_QUOTE_BYTES - len(marker.encode("utf-8"))
+    output: list[str] = []
+    used = 0
+    for char in text:
+        char_size = len(char.encode("utf-8"))
+        if used + char_size > budget:
+            break
+        output.append(char)
+        used += char_size
+    return "".join(output).rstrip() + marker
 
 
 def _json_value(value: Any, *, default: Any) -> Any:
