@@ -1681,6 +1681,7 @@ const restoreSession = async () => {
         console.log('[ChatPage] has pending chat, files:', pending.files?.length || 0);
         if (pending.mode) mode.value = pending.mode;
         if (pending.selectedModelId) selectedModelId.value = pending.selectedModelId;
+        await loadSessionResearchProject(sessionId.value);
         chat(pending.message, pending.files || []);
       } else {
         console.log('[ChatPage] no pending chat, restoring session');

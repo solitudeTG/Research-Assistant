@@ -110,11 +110,13 @@ A global Library retrieval path was rejected because unrelated research projects
 | 2026-06-28 | planned | User approved four-Feature breakdown | This Feature | Created to own session-to-Project context binding. |
 | 2026-06-28 | completed | F010 implementation and verification | Full backend tests, frontend type-check, frontend build | MVP Project-scoped chat binding landed. |
 | 2026-06-29 | patched | Combined F009-F012 E2E found Chat project popover showed stale zero counts | Repository/route/frontend tests plus browser UI E2E | F010.1 makes session Project binding return the same aggregate paper/chunk/evidence counts as the Library list. |
+| 2026-06-29 | patched | User clarified that main Chat New Task should support selecting the owning Project | Browser UI E2E, frontend contract tests, type-check | F010.2 adds Project selection before Chat start and loads the binding before pending first-message chat begins. |
 
 ## Patch History
 
 | Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
 | --- | --- | --- | --- | --- | --- | --- |
+| F010.2 | 2026-06-29 | pending | Main Chat New Task created an unscoped chat start and did not let the user choose the owning Project up front. | Project binding was only available after entering an existing ChatPage, and the pending first-message route did not load the binding before starting chat. | Frontend contract requires the New Task picker, HomePage Project selector, and pending-chat binding load before `chat(...)`; browser E2E created session `B56gnSR83TuthofRDCVvwc` bound to `E2E UI链路验证 06290349` and Chat UI displayed that Project. | verified |
 | F010.1 | 2026-06-29 | `515bd25` | A session bound to a Project showed `0 papers · 0 citation records` in Chat even when the Research Library showed indexed assets. | `upsert_session_research_project` and `get_session_research_project` returned only the raw `research_projects` row and did not aggregate `research_papers`, `research_chunks`, or `research_evidence_records`. | Repository regression tests require session binding reads to include aggregate counts; browser E2E verified the popover shows `2 篇论文 · 39 条引用证据`. | verified |
 
 ## Evidence
@@ -124,6 +126,8 @@ A global Library retrieval path was rejected because unrelated research projects
 - `npm.cmd run build` from `ScienceClaw/frontend`: passed with existing Browserslist/CSS/chunk-size warnings.
 - Focused F010 tests: 8 passed for schema, repository, retrieval, answering, routes, and frontend binding contracts.
 - 2026-06-29 patch verification: `pytest ScienceClaw/backend/tests/test_research_repository.py -k "session_research_project" -q` -> `2 passed`; browser UI on bound session `JWh8ENzsVjR5KdhsxEYYAi` showed `2 篇论文 · 39 条引用证据`.
+- 2026-06-29 New Task Project selection verification: browser E2E selected Project `research-project-LuDEUgC2rBAofjdcg9KmpK`, submitted `谢谢`, created session `B56gnSR83TuthofRDCVvwc`, `GET /api/v1/sessions/B56gnSR83TuthofRDCVvwc/research/project` returned `E2E UI链路验证 06290349` with `2` papers and `39` evidence records, and the Chat top control displayed that Project.
+- `npm.cmd run type-check` from `ScienceClaw/frontend` -> passed after the New Task Project selection patch.
 
 ## Recovery Snapshot
 

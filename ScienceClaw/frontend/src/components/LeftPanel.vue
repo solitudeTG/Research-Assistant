@@ -1,6 +1,6 @@
 <template>
   <div class="flex h-full transition-[width] duration-300 ease-in-out"
-    :style="{ width: isLeftPanelShow ? '320px' : '60px' }">
+    :style="{ width: leftPanelWidth }">
 
     <!-- Navigation Rail -->
     <div class="nav-rail w-[60px] h-full flex flex-col items-center py-4 gap-3 border-r border-gray-200/60 dark:border-gray-700/40 z-20 flex-shrink-0 relative">
@@ -89,6 +89,7 @@
 
     <!-- Collapsible Drawer (Session List) -->
     <div
+      v-if="shouldShowSessionDrawer"
       class="drawer flex-1 flex flex-col h-full overflow-hidden transition-all duration-300 ease-in-out border-r border-gray-200/60 dark:border-gray-700/40 relative"
       :class="isLeftPanelShow ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-full w-0 pointer-events-none absolute left-[60px]'"
     >
@@ -237,6 +238,44 @@
         </div>
       </template>
     </div>
+
+    <div
+      v-if="showNewSessionProjectPicker"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/20 px-4"
+      @click.self="showNewSessionProjectPicker = false"
+    >
+      <div class="w-full max-w-sm rounded-xl border border-[var(--border-light)] bg-[var(--background-white-main)] p-4 shadow-xl">
+        <div class="mb-3">
+          <h3 class="text-sm font-semibold text-[var(--text-primary)]">新建会话</h3>
+          <p class="mt-1 text-xs text-[var(--text-tertiary)]">选择本次会话所属课题，课题资产会作为可检索上下文边界。</p>
+        </div>
+        <label class="mb-1 block text-xs font-medium text-[var(--text-secondary)]">所属课题</label>
+        <select
+          v-model="newSessionProjectId"
+          class="h-9 w-full rounded-lg border border-[var(--border-light)] bg-[var(--background-white-main)] px-2 text-sm text-[var(--text-primary)] outline-none focus:border-blue-400"
+          :disabled="loadingNewSessionProjects"
+        >
+          <option value="">不关联课题</option>
+          <option v-for="project in newSessionProjects" :key="project.project_id" :value="project.project_id">
+            {{ project.name }}
+          </option>
+        </select>
+        <div class="mt-4 flex justify-end gap-2">
+          <button
+            class="h-8 rounded-lg px-3 text-xs font-medium text-[var(--text-secondary)] hover:bg-[var(--fill-tsp-gray-main)]"
+            @click="showNewSessionProjectPicker = false"
+          >
+            取消
+          </button>
+          <button
+            class="h-8 rounded-lg bg-blue-500 px-3 text-xs font-medium text-white hover:bg-blue-600"
+            @click="handleStartNewSession"
+          >
+            开始会话
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -256,14 +295,14 @@ import { useSettingsDialog } from '../composables/useSettingsDialog';
 import { useAuth } from '../composables/useAuth';
 import { ref, onMounted, watch, onUnmounted, computed, markRaw } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { listSessions } from '../api/agent';
+import * as agentApi from '../api/agent';
 import { listTasks } from '../api/tasks';
 import { ListSessionItem } from '../types/response';
 import type { Task } from '../api/tasks';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n()
-const { isLeftPanelShow, toggleLeftPanel, showLeftPanel } = useLeftPanel()
+const { isLeftPanelShow, toggleLeftPanel } = useLeftPanel()
 const { setOnSessionTitleUpdate } = useSessionListUpdate()
 const { onSessionCreated, onSessionUpdated } = useSessionNotifications()
 const { openSettingsDialog } = useSettingsDialog()
@@ -288,6 +327,10 @@ const router = useRouter()
 
 const sessions = ref<ListSessionItem[]>([])
 const scheduledTasks = ref<Task[]>([])
+const showNewSessionProjectPicker = ref(false)
+const loadingNewSessionProjects = ref(false)
+const newSessionProjects = ref<agentApi.ResearchProject[]>([])
+const newSessionProjectId = ref('')
 
 // 使用会话分组 composable
 const {
@@ -327,16 +370,8 @@ const isChatActive = computed(() => route.path === '/' || route.path.startsWith(
 const isSkillsActive = computed(() => route.path.includes('/chat/skills'))
 const isToolsActive = computed(() => route.path.includes('/chat/tools') && !route.path.startsWith('/chat/tasks'))
 const isTasksActive = computed(() => route.path.startsWith('/chat/tasks'))
-
-watch(
-  () => route.path,
-  () => {
-    if (isResearchLibraryActive.value && !isLeftPanelShow.value) {
-      showLeftPanel()
-    }
-  },
-  { immediate: true },
-)
+const shouldShowSessionDrawer = computed(() => !isResearchLibraryActive.value)
+const leftPanelWidth = computed(() => isResearchLibraryActive.value ? '60px' : (isLeftPanelShow.value ? '320px' : '60px'))
 
 const handleChatTabClick = () => {
   if (isChatActive.value && isLeftPanelShow.value) {
@@ -361,7 +396,6 @@ const handleSkillsTabClick = () => {
 }
 
 const handleResearchLibraryTabClick = () => {
-  showLeftPanel()
   router.push('/chat/research-library')
 }
 
@@ -396,15 +430,36 @@ const fetchScheduledTasks = async () => {
 // Function to fetch sessions data
 const updateSessions = async () => {
   try {
-    const response = await listSessions()
+    const response = await agentApi.listSessions()
     sessions.value = response
   } catch (error) {
     console.error('Failed to fetch sessions:', error)
   }
 }
 
-const handleNewTaskClick = () => {
-  router.push('/chat')
+const loadNewSessionProjects = async () => {
+  loadingNewSessionProjects.value = true
+  try {
+    newSessionProjects.value = await agentApi.listResearchProjects()
+  } catch (error) {
+    console.error('Failed to load research projects for new session:', error)
+    newSessionProjects.value = []
+  } finally {
+    loadingNewSessionProjects.value = false
+  }
+}
+
+const handleNewTaskClick = async () => {
+  showNewSessionProjectPicker.value = true
+  await loadNewSessionProjects()
+}
+
+const handleStartNewSession = () => {
+  showNewSessionProjectPicker.value = false
+  router.push({
+    path: '/chat',
+    query: newSessionProjectId.value ? { project_id: newSessionProjectId.value } : {},
+  })
 }
 
 const handleSessionDeleted = (sessionId: string) => {

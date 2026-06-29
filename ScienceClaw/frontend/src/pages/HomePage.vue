@@ -91,6 +91,22 @@
 
         <!-- ChatBox -->
         <div class="flex flex-col gap-1 w-full">
+          <div class="mb-2 flex items-center justify-between gap-3 rounded-xl border border-[var(--border-light)] bg-white/70 px-3 py-2 dark:bg-[#1e1e1e]/70">
+            <div class="min-w-0">
+              <div class="text-xs font-medium text-[var(--text-secondary)]">所属课题</div>
+              <div class="truncate text-[11px] text-[var(--text-tertiary)]">课题资产会作为本次会话的可检索上下文边界</div>
+            </div>
+            <select
+              v-model="selectedResearchProjectId"
+              class="h-8 max-w-[240px] rounded-lg border border-[var(--border-light)] bg-[var(--background-white-main)] px-2 text-xs text-[var(--text-primary)] outline-none focus:border-blue-400"
+              :disabled="researchProjectLoading"
+            >
+              <option value="">不关联课题</option>
+              <option v-for="project in researchProjects" :key="project.project_id" :value="project.project_id">
+                {{ project.name }}
+              </option>
+            </select>
+          </div>
           <div class="flex flex-col bg-[var(--background-gray-main)] w-full">
             <div class="[&amp;:not(:empty)]:pb-2 bg-[var(--background-gray-main)] rounded-[22px_22px_0px_0px]"></div>
             <ChatBox 
@@ -115,10 +131,10 @@
 <script setup lang="ts">
 import SimpleBar from '../components/SimpleBar.vue';
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import ChatBox from '../components/ChatBox.vue';
-import { createSession } from '../api/agent';
+import * as agentApi from '../api/agent';
 import { listModels, type ModelConfig } from '../api/models';
 import { showErrorToast } from '../utils/toast';
 import ScienceClawLogoTextIcon from '../components/icons/ScienceClawLogoTextIcon.vue';
@@ -132,6 +148,7 @@ import UserMenu from '../components/UserMenu.vue';
 
 const { t } = useI18n();
 const router = useRouter();
+const route = useRoute();
 const { currentUser } = useAuth();
 const message = ref('');
 
@@ -245,6 +262,9 @@ const { isSettingsDialogOpen, openSettingsDialog } = useSettingsDialog();
 
 const models = ref<ModelConfig[]>([]);
 const selectedModelId = ref<string | null>(null);
+const researchProjects = ref<agentApi.ResearchProject[]>([]);
+const selectedResearchProjectId = ref('');
+const researchProjectLoading = ref(false);
 
 const avatarLetter = computed(() => {
   return currentUser.value?.fullname?.charAt(0)?.toUpperCase() || 'M';
@@ -270,6 +290,7 @@ const handleUserMenuLeave = () => {
 onMounted(async () => {
   hideFilePanel();
   startTyping(); // 启动打字机效果
+  await loadResearchProjects();
   const modelsData = await listModels().catch(err => {
     console.error("Failed to load models", err);
     return [];
@@ -284,6 +305,33 @@ onMounted(async () => {
     else if (models.value.length > 0) selectedModelId.value = models.value[0].id;
   }
 })
+
+const loadResearchProjects = async () => {
+  researchProjectLoading.value = true;
+  try {
+    researchProjects.value = await agentApi.listResearchProjects();
+    const projectId = typeof route.query.project_id === 'string' ? route.query.project_id : '';
+    selectedResearchProjectId.value = researchProjects.value.some(project => project.project_id === projectId)
+      ? projectId
+      : '';
+  } catch (error) {
+    console.error('Failed to load research projects:', error);
+    researchProjects.value = [];
+    selectedResearchProjectId.value = '';
+  } finally {
+    researchProjectLoading.value = false;
+  }
+};
+
+watch(
+  () => route.query.project_id,
+  (projectId) => {
+    const nextProjectId = typeof projectId === 'string' ? projectId : '';
+    selectedResearchProjectId.value = researchProjects.value.some(project => project.project_id === nextProjectId)
+      ? nextProjectId
+      : '';
+  },
+);
 
 onUnmounted(() => {
   clearTimer(); // 组件卸载时清理定时器
@@ -310,11 +358,15 @@ const handleSubmit = async () => {
 
   try {
     // Step 1: Create session
-    const session = await createSession({
+    const session = await agentApi.createSession({
       mode: 'deep',
       model_config_id: selectedModelId.value || undefined
     });
     const sessionId = session.session_id;
+
+    if (selectedResearchProjectId.value) {
+      await agentApi.setSessionResearchProject(sessionId, selectedResearchProjectId.value);
+    }
 
     // Step 2: Upload any local files (kept in browser memory until now)
     let uploadedFiles: FileInfo[] = [];

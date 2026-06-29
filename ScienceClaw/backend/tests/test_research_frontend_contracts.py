@@ -378,15 +378,57 @@ def test_left_panel_new_task_uses_canonical_chat_route_from_research_library():
     library_handler_start = left_panel.index("const handleResearchLibraryTabClick = () =>")
     library_handler_end = left_panel.index("const handleToolsTabClick", library_handler_start)
     library_handler_source = left_panel[library_handler_start:library_handler_end]
-    handler_start = left_panel.index("const handleNewTaskClick = () =>")
+    handler_start = left_panel.index("const handleNewTaskClick = async () =>")
     handler_end = left_panel.index("const handleSessionDeleted", handler_start)
     handler_source = left_panel[handler_start:handler_end]
 
-    assert "showLeftPanel()" in library_handler_source
     assert "toggleLeftPanel()" not in library_handler_source
-    assert "isResearchLibraryActive.value && !isLeftPanelShow.value" in left_panel
-    assert "router.push('/chat')" in handler_source
+    assert "router.push('/chat/research-library')" in library_handler_source
+    assert "showNewSessionProjectPicker.value = true" in handler_source
     assert "router.push('/')" not in handler_source
+
+
+def test_research_library_route_hides_chat_session_drawer():
+    left_panel = (
+        Path(__file__).resolve().parents[2]
+        / "frontend"
+        / "src"
+        / "components"
+        / "LeftPanel.vue"
+    ).read_text(encoding="utf-8")
+
+    assert "shouldShowSessionDrawer" in left_panel
+    assert "v-if=\"shouldShowSessionDrawer\"" in left_panel
+    assert "leftPanelWidth" in left_panel
+    assert "isResearchLibraryActive.value ? '60px'" in left_panel
+    assert "isResearchLibraryActive.value && !isLeftPanelShow.value" not in left_panel
+
+
+def test_new_task_flow_can_choose_research_project_before_chat_start():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    left_panel = (frontend_root / "components" / "LeftPanel.vue").read_text(encoding="utf-8")
+    home_page = (frontend_root / "pages" / "HomePage.vue").read_text(encoding="utf-8")
+    chat_page = (frontend_root / "pages" / "ChatPage.vue").read_text(encoding="utf-8")
+
+    assert "showNewSessionProjectPicker" in left_panel
+    assert "newSessionProjectId" in left_panel
+    assert "loadNewSessionProjects" in left_panel
+    assert "handleStartNewSession" in left_panel
+    assert "agentApi.listResearchProjects" in left_panel
+    assert "query: newSessionProjectId.value ? { project_id: newSessionProjectId.value } : {}" in left_panel
+
+    assert "selectedResearchProjectId" in home_page
+    assert "route.query.project_id" in home_page
+    assert "agentApi.listResearchProjects" in home_page
+    assert "agentApi.setSessionResearchProject(sessionId, selectedResearchProjectId.value)" in home_page
+    assert "不关联课题" in home_page
+    assert "所属课题" in home_page
+
+    pending_start = chat_page.index("if (pending?.message)")
+    pending_end = chat_page.index("} else {", pending_start)
+    pending_source = chat_page[pending_start:pending_end]
+    assert "await loadSessionResearchProject(sessionId.value)" in pending_source
+    assert pending_source.index("await loadSessionResearchProject(sessionId.value)") < pending_source.index("chat(pending.message")
 
 
 def test_research_chat_controls_use_chinese_user_facing_copy():

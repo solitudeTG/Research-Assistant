@@ -115,6 +115,7 @@ In Progress. The first vertical slice now creates/lists Research Projects, lists
 | 2026-06-29 | patched | User E2E found Research Library create action appeared unresponsive | Browser E2E, backend schema check, focused tests, type-check, build | F009.1 restored static Library routing and startup schema initialization. |
 | 2026-06-29 | patched | Real Research Library PDF upload E2E exposed indexing failures | API E2E, browser UI verification, focused repository/session tests | F009.2 verified Library upload with a real `paper_data` PDF after storage text protections. |
 | 2026-06-29 | patched | Combined F009-F012 E2E found Library route left the global New Task control effectively unclickable | Browser UI E2E, frontend contract tests, type-check, build | F009.3 keeps the left panel expanded on Research Library so global session controls remain reachable. |
+| 2026-06-29 | patched | User clarified that Research Library should not show the Chat session-list column | Browser UI E2E, frontend contract tests, type-check | F009.4 makes the Library route a research asset workspace with only the global 60px navigation rail. |
 
 ## Patch History
 
@@ -123,6 +124,7 @@ In Progress. The first vertical slice now creates/lists Research Projects, lists
 | F009.1 | 2026-06-29 | `5bf49d8` | Real E2E validation showed the Research Library create action did not complete. | Fixed chat child routes were declared after `:sessionId`, and the running backend did not initialize `research_assistant/storage/schema.sql` on startup. | Static route-order contract test, research schema initialization unit test, PostgreSQL table check, and browser E2E project creation. | verified |
 | F009.2 | 2026-06-29 | `353307c` | Real PDF upload from Research Library returned 500 before a paper asset became visible. | Ingestion storage accepted parser output that could contain NUL bytes and used full chunk text as citation quote, exceeding PostgreSQL text/index constraints. | Repository regression tests plus real `paper_data` PDF E2E showing one indexed paper with 19 chunks and 19 citation evidence records in the Library UI. | verified |
 | F009.3 | 2026-06-29 | `515bd25` | In Research Library, the left-panel New Task control appeared visible in DOM but did not navigate when clicked. | The Research Library navigation path could leave the left panel collapsed to 60px while the session-list content remained in the accessibility tree; the main Library content covered the tiny New Task hit area. | Frontend contract test requires Research Library to keep the left panel expanded and New Task to route to `/chat`; browser E2E showed the button width restored to 235px and URL changed to `/chat`. | verified |
+| F009.4 | 2026-06-29 | pending | Research Library still displayed the Chat session-list column, mixing asset management with conversation management. | The global LeftPanel treated Research Library as a Chat-adjacent route and kept the collapsible Chat drawer visible. | Frontend contract requires `shouldShowSessionDrawer` to hide the drawer on Research Library; browser E2E verified the LeftPanel width is 60px, drawer is absent, and Library assets remain visible. | verified |
 
 ## Patch Churn Review
 
@@ -131,6 +133,8 @@ F009 reached three patch rows on 2026-06-29, so this Feature now requires explic
 Assessment: the churn does not indicate that the Research Library boundary is wrong. The three fixes cover separate layers of the same Library capability: route/schema startup, ingestion storage constraints, and global shell interaction on the Library route. The common failure mode was that early validation proved focused units but did not repeatedly exercise the full visible Library workflow with a running service and real PDF data.
 
 Decision: keep F009 as the owner for Research Library and Project asset management. No ADR or new Feature split is needed for this patch set. Future F009 changes must include focused regression tests plus a browser or API E2E check for the touched Library route, Project selection, and paper upload/promoted asset visibility before claiming the Library workflow is ready.
+
+Follow-up on F009.4: the added patch confirms the churn review conclusion rather than changing it. The correct invariant is that Research Library is an asset-management workspace under the shared navigation rail, not a Chat session-list workspace.
 
 ## Evidence
 
@@ -163,6 +167,11 @@ Verification evidence from 2026-06-29:
 - `$env:PYTHONPATH='E:\Self-Project\Research-Assistant\ScienceClaw'; pytest ScienceClaw/backend/tests/test_research_database.py ScienceClaw/backend/tests/test_research_frontend_contracts.py -q` -> `42 passed`.
 - `npm.cmd run type-check` from `ScienceClaw/frontend` -> passed.
 - `npm.cmd run build` from `ScienceClaw/frontend` -> passed with existing Browserslist/CSS/chunk-size warnings.
+
+Verification evidence from 2026-06-29 Library workspace boundary patch:
+
+- Browser UI on `http://127.0.0.1:5173/chat/research-library` showed `leftPanelWidth=60`, `drawerExists=false`, no `新任务` text in the Library route, and the selected project's `2` papers / `39` evidence records still visible.
+- `$env:PYTHONPATH='E:\Self-Project\Research-Assistant\ScienceClaw'; pytest ScienceClaw/backend/tests/test_research_frontend_contracts.py -q` -> `33 passed`.
 
 ## Recovery Snapshot
 
