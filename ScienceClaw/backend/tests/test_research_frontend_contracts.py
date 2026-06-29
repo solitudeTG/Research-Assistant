@@ -54,6 +54,24 @@ def test_activity_panel_surfaces_research_evidence_sidecar():
     assert "audit.approved_claim_count" in activity_panel
 
 
+def test_activity_panel_keeps_unsupported_audit_claims_collapsed_by_default():
+    activity_panel = (
+        Path(__file__).resolve().parents[2]
+        / "frontend"
+        / "src"
+        / "components"
+        / "ActivityPanel.vue"
+    ).read_text(encoding="utf-8")
+
+    assert "approvedResearchAuditClaims" in activity_panel
+    assert "unsupportedResearchAuditClaims" in activity_panel
+    assert "unsupportedAuditClaimsExpanded = ref(false)" in activity_panel
+    assert "v-for=\"(claim, claimIndex) in approvedResearchAuditClaims\"" in activity_panel
+    assert "v-for=\"(claim, claimIndex) in unsupportedResearchAuditClaims\"" in activity_panel
+    assert "unsupportedAuditClaimsExpanded && unsupportedResearchAuditClaims.length" in activity_panel
+    assert "v-for=\"(claim, claimIndex) in researchSidecar.audit.claims\"" not in activity_panel
+
+
 def test_agent_api_exposes_web_and_database_evidence_ingestion():
     agent_api = (
         Path(__file__).resolve().parents[2]

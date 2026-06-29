@@ -106,18 +106,21 @@ In Progress. Evidence Audit has multiple verified slices recorded in `F001`; ans
 | --- | --- | --- | --- | --- |
 | 2026-06-28 | active | Feature split from F001 | This Feature and `INDEX.md` | Created to own audit behavior and recovery. |
 | 2026-06-29 | patched | User identified Evidence Audit as process-state data that belongs in the right reasoning panel | Frontend contract tests, type-check, build, browser E2E | F006.1 moved answer audit summary and claim checks out of ChatMessage and into ActivityPanel. |
+| 2026-06-29 | patched | User clarified that audit detail should not flood the ActivityPanel by default | Frontend contract tests, type-check, build | F006.2 keeps approved claims visible and collapses unsupported/invalid audit claims behind an explicit disclosure. |
 
 ## Patch History
 
 | Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
 | --- | --- | --- | --- | --- | --- | --- |
 | F006.1 | 2026-06-29 | `f18d0cf` | Evidence Audit appeared as a large block below each answer, making the Chat stream carry process/audit data. | Audit display was coupled to the answer component instead of the ScienceClaw ActivityPanel semantics. | Frontend contract requires `证据审计` to be rendered through ActivityPanel research sidecar and absent from ChatMessage answer cards. | verified |
+| F006.2 | 2026-06-29 | `5390d12` | ActivityPanel rendered every audit claim by default, so long answers could display dozens of unsupported claim rows. | Claim-level audit data was technically correct but lacked a progressive disclosure boundary. | Frontend contract requires approved claims to render by default while unsupported/invalid claims are collapsed behind `unsupportedAuditClaimsExpanded`. | verified |
 
 ## Evidence
 
 - 2026-06-29 audit UI verification: `pytest ScienceClaw/backend/tests/test_research_frontend_contracts.py -q` -> `35 passed`.
 - 2026-06-29 frontend verification: `npm.cmd run type-check` -> passed; `npm.cmd run build` -> passed with existing warnings.
 - Browser E2E on project `E2E UI链路验证 06290349`: right ActivityPanel showed `证据审计 partial` and claim status rows; the Chat answer card did not render the audit block.
+- 2026-06-29 audit density verification: `pytest ScienceClaw/backend/tests/test_research_frontend_contracts.py -q` -> `36 passed`; `npm.cmd run type-check` -> passed; `npm.cmd run build` -> passed with existing Browserslist/CSS/chunk-size warnings. Browser automation reached the authenticated chat shell, but historical-session panel inspection timed out before a stable ActivityPanel DOM assertion.
 
 ## Recovery Snapshot
 

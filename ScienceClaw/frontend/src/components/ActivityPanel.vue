@@ -222,20 +222,51 @@
                   <span>unsupported={{ researchSidecar.audit.unsupported_claim_count }}</span>
                   <span>invalid={{ researchSidecar.audit.invalid_source_count }}</span>
                 </div>
-                <div v-if="researchSidecar.audit.claims.length" class="mt-2 flex flex-col gap-1">
+                <div v-if="approvedResearchAuditClaims.length" class="mt-2 flex flex-col gap-1">
+                  <div class="text-[10px] font-semibold text-[var(--text-tertiary)]">已支持 claims</div>
                   <div
-                    v-for="(claim, claimIndex) in researchSidecar.audit.claims"
-                    :key="`${claim.status}-${claimIndex}`"
+                    v-for="(claim, claimIndex) in approvedResearchAuditClaims"
+                    :key="`approved-${claimIndex}`"
                     class="rounded-md border border-[var(--border-light)] bg-[var(--background-menu-white)] px-2 py-1.5"
                   >
                     <div class="flex items-start gap-2">
                       <span class="min-w-0 flex-1 text-[var(--text-secondary)]">{{ claim.claim_text }}</span>
-                      <span class="shrink-0 font-mono text-[10px]" :class="claim.status === 'approved' ? 'text-emerald-600 dark:text-emerald-300' : 'text-amber-600 dark:text-amber-300'">
+                      <span class="shrink-0 font-mono text-[10px] text-emerald-600 dark:text-emerald-300">
                         {{ claim.status }}
                       </span>
                     </div>
                     <div v-if="claim.notes.length" class="mt-1 text-[10px] text-[var(--text-tertiary)]">
                       {{ claim.notes.join(' ') }}
+                    </div>
+                  </div>
+                </div>
+                <div v-if="unsupportedResearchAuditClaims.length" class="mt-2">
+                  <button
+                    type="button"
+                    class="flex w-full items-center gap-2 rounded-md border border-[var(--border-light)] bg-[var(--background-menu-white)] px-2 py-1.5 text-left transition-colors hover:border-amber-200 hover:text-amber-700 dark:hover:border-amber-800/50 dark:hover:text-amber-300"
+                    @click.stop="unsupportedAuditClaimsExpanded = !unsupportedAuditClaimsExpanded"
+                  >
+                    <ChevronRightIcon :size="11"
+                      class="shrink-0 text-[var(--text-tertiary)] transition-transform duration-150"
+                      :class="{ 'rotate-90': unsupportedAuditClaimsExpanded }" />
+                    <span class="min-w-0 flex-1 text-[11px] font-semibold text-[var(--text-secondary)]">未支持 claims</span>
+                    <span class="shrink-0 font-mono text-[10px] text-[var(--text-tertiary)]">{{ unsupportedResearchAuditClaims.length }}</span>
+                  </button>
+                  <div v-if="unsupportedAuditClaimsExpanded && unsupportedResearchAuditClaims.length" class="mt-1 flex flex-col gap-1">
+                    <div
+                      v-for="(claim, claimIndex) in unsupportedResearchAuditClaims"
+                      :key="`unsupported-${claimIndex}`"
+                      class="rounded-md border border-[var(--border-light)] bg-[var(--background-menu-white)] px-2 py-1.5"
+                    >
+                      <div class="flex items-start gap-2">
+                        <span class="min-w-0 flex-1 text-[var(--text-secondary)]">{{ claim.claim_text }}</span>
+                        <span class="shrink-0 font-mono text-[10px] text-amber-600 dark:text-amber-300">
+                          {{ claim.status }}
+                        </span>
+                      </div>
+                      <div v-if="claim.notes.length" class="mt-1 text-[10px] text-[var(--text-tertiary)]">
+                        {{ claim.notes.join(' ') }}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -594,6 +625,7 @@ const runtimeAuditExpanded = ref(false);
 const sourceQualityExpanded = ref(false);
 const evidenceAdmissionExpanded = ref(false);
 const researchEvidenceExpanded = ref(true);
+const unsupportedAuditClaimsExpanded = ref(false);
 const selectedRuntimeAuditPack = ref('all');
 
 // Step filter: when a To-do step is selected, only show its associated tools
@@ -673,6 +705,14 @@ const evidenceAdmissionSteps = computed(() =>
   (props.plan?.steps ?? [])
     .map(step => ({ step, admission: step.metadata?.evidence_admission }))
     .filter((item): item is { step: ActivityPlanStep; admission: EvidenceAdmission } => !!item.admission)
+);
+
+const approvedResearchAuditClaims = computed(() =>
+  props.researchSidecar?.audit?.claims.filter(claim => claim.status === 'approved') ?? []
+);
+
+const unsupportedResearchAuditClaims = computed(() =>
+  props.researchSidecar?.audit?.claims.filter(claim => claim.status !== 'approved') ?? []
 );
 
 const formatBoundaryValues = (values?: string[]) => {
