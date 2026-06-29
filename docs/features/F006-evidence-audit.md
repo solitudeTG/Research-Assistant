@@ -113,7 +113,7 @@ In Progress. Evidence Audit has multiple verified slices recorded in `F001`; ans
 | Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
 | --- | --- | --- | --- | --- | --- | --- |
 | F006.1 | 2026-06-29 | `f18d0cf` | Evidence Audit appeared as a large block below each answer, making the Chat stream carry process/audit data. | Audit display was coupled to the answer component instead of the ScienceClaw ActivityPanel semantics. | Frontend contract requires `证据审计` to be rendered through ActivityPanel research sidecar and absent from ChatMessage answer cards. | verified |
-| F006.2 | 2026-06-29 | `5390d12` | ActivityPanel rendered every audit claim by default, so long answers could display dozens of unsupported claim rows. | Claim-level audit data was technically correct but lacked a progressive disclosure boundary. | Frontend contract requires approved claims to render by default while unsupported/invalid claims are collapsed behind `unsupportedAuditClaimsExpanded`. | verified |
+| F006.2 | 2026-06-29 | `d2d986a` | ActivityPanel rendered every audit claim by default, so long answers could display dozens of unsupported claim rows. | Claim-level audit data was technically correct but lacked a progressive disclosure boundary. | Frontend contract requires approved claims to render by default while unsupported/invalid claims are collapsed behind `unsupportedAuditClaimsExpanded`. | verified |
 
 ## Evidence
 
