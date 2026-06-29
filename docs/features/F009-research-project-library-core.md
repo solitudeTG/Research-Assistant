@@ -122,7 +122,7 @@ In Progress. The first vertical slice now creates/lists Research Projects, lists
 | --- | --- | --- | --- | --- | --- | --- |
 | F009.1 | 2026-06-29 | `5bf49d8` | Real E2E validation showed the Research Library create action did not complete. | Fixed chat child routes were declared after `:sessionId`, and the running backend did not initialize `research_assistant/storage/schema.sql` on startup. | Static route-order contract test, research schema initialization unit test, PostgreSQL table check, and browser E2E project creation. | verified |
 | F009.2 | 2026-06-29 | `353307c` | Real PDF upload from Research Library returned 500 before a paper asset became visible. | Ingestion storage accepted parser output that could contain NUL bytes and used full chunk text as citation quote, exceeding PostgreSQL text/index constraints. | Repository regression tests plus real `paper_data` PDF E2E showing one indexed paper with 19 chunks and 19 citation evidence records in the Library UI. | verified |
-| F009.3 | 2026-06-29 | pending | In Research Library, the left-panel New Task control appeared visible in DOM but did not navigate when clicked. | The Research Library navigation path could leave the left panel collapsed to 60px while the session-list content remained in the accessibility tree; the main Library content covered the tiny New Task hit area. | Frontend contract test requires Research Library to keep the left panel expanded and New Task to route to `/chat`; browser E2E showed the button width restored to 235px and URL changed to `/chat`. | verified |
+| F009.3 | 2026-06-29 | `515bd25` | In Research Library, the left-panel New Task control appeared visible in DOM but did not navigate when clicked. | The Research Library navigation path could leave the left panel collapsed to 60px while the session-list content remained in the accessibility tree; the main Library content covered the tiny New Task hit area. | Frontend contract test requires Research Library to keep the left panel expanded and New Task to route to `/chat`; browser E2E showed the button width restored to 235px and URL changed to `/chat`. | verified |
 
 ## Patch Churn Review
 
@@ -148,7 +148,7 @@ Verification evidence from 2026-06-29 Library upload E2E:
 - Browser UI showed the project with `1 篇论文` and `19 条证据`; selecting it showed the paper title, parser `grobid-tei`, `19` chunks, `19` citation evidence records, and status `已索引`.
 - Backend logs after passing upload contained no `upload_research_project_paper_for_user`, `ProgramLimitExceeded`, `CharacterNotInRepertoire`, `Internal Server Error`, or `ERROR` entries for the final run.
 - `$env:PYTHONPATH='E:\Self-Project\Research-Assistant\ScienceClaw'; pytest ScienceClaw/backend/tests/test_research_repository.py ScienceClaw/backend/tests/test_research_database.py ScienceClaw/backend/tests/test_research_session_routes.py -q --basetemp=.pytest_tmp\e2e-upload-related` -> `83 passed`.
-- `knowledge_check.py --feature-index docs/features/F009-research-project-library-core.md` -> pending for closeout after this update.
+- `knowledge_check.py --root E:\Self-Project\Research-Assistant --docs-path docs` -> errors 0, warnings 1 (`docs/features/INDEX.md` keeps the canonical index filename while using `F000` as its artifact id).
 
 Verification evidence from 2026-06-29 combined F009-F012 E2E patch:
 

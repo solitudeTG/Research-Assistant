@@ -117,7 +117,7 @@ Mandatory AI routing before every retrieval was rejected for the MVP because it 
 
 | Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| F011.1 | 2026-06-29 | pending | A trivial turn such as `谢谢` correctly skipped evidence admission, but ActivityPanel still displayed `Citation evidence retrieval completed`. | The route emitted the same completed step description for accepted and skipped admission decisions. | Route regression test requires skipped admission to emit `Citation evidence retrieval skipped`; backend event E2E verified `decision=skipped`, `reason=deterministic_non_evidence_turn`, and `citation_count=0`. | verified |
+| F011.1 | 2026-06-29 | `515bd25` | A trivial turn such as `谢谢` correctly skipped evidence admission, but ActivityPanel still displayed `Citation evidence retrieval completed`. | The route emitted the same completed step description for accepted and skipped admission decisions. | Route regression test requires skipped admission to emit `Citation evidence retrieval skipped`; backend event E2E verified `decision=skipped`, `reason=deterministic_non_evidence_turn`, and `citation_count=0`. | verified |
 
 ## Evidence
 

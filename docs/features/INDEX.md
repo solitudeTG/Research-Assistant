@@ -74,7 +74,7 @@ Active. This index is the retrieval entry point for active Research Assistant Fe
 
 | Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| F000.1 | 2026-06-29 | pending | Feature Index needed to remain compatible with the current AgentMentor strict validator. | The validator only accepts the canonical artifact kinds and section set. | Strict knowledge validation. | verified |
+| F000.1 | 2026-06-29 | `515bd25` | Feature Index needed to remain compatible with the current AgentMentor strict validator. | The validator only accepts the canonical artifact kinds and section set. | Strict knowledge validation. | verified |
 
 ## Evidence
 

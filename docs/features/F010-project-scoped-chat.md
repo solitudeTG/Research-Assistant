@@ -115,7 +115,7 @@ A global Library retrieval path was rejected because unrelated research projects
 
 | Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| F010.1 | 2026-06-29 | pending | A session bound to a Project showed `0 papers · 0 citation records` in Chat even when the Research Library showed indexed assets. | `upsert_session_research_project` and `get_session_research_project` returned only the raw `research_projects` row and did not aggregate `research_papers`, `research_chunks`, or `research_evidence_records`. | Repository regression tests require session binding reads to include aggregate counts; browser E2E verified the popover shows `2 篇论文 · 39 条引用证据`. | verified |
+| F010.1 | 2026-06-29 | `515bd25` | A session bound to a Project showed `0 papers · 0 citation records` in Chat even when the Research Library showed indexed assets. | `upsert_session_research_project` and `get_session_research_project` returned only the raw `research_projects` row and did not aggregate `research_papers`, `research_chunks`, or `research_evidence_records`. | Repository regression tests require session binding reads to include aggregate counts; browser E2E verified the popover shows `2 篇论文 · 39 条引用证据`. | verified |
 
 ## Evidence
 

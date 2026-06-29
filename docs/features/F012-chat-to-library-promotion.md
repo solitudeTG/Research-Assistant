@@ -117,7 +117,7 @@ Automatic promotion was rejected because arbitrary Chat uploads would pollute tr
 
 | Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| F012.1 | 2026-06-29 | pending | The explicit Chat promotion action still displayed `Add to Research Library`, inconsistent with the requested Chinese ScienceClaw-style UI. | The first MVP left the promotion button copy hard-coded in English. | Frontend contract test rejects English promotion copy and requires `加入研究库`; live API promotion of a real `paper_data` PDF updated the target Project to `2` papers and `39` evidence records. | verified |
+| F012.1 | 2026-06-29 | `515bd25` | The explicit Chat promotion action still displayed `Add to Research Library`, inconsistent with the requested Chinese ScienceClaw-style UI. | The first MVP left the promotion button copy hard-coded in English. | Frontend contract test rejects English promotion copy and requires `加入研究库`; live API promotion of a real `paper_data` PDF updated the target Project to `2` papers and `39` evidence records. | verified |
 
 ## Evidence
 
