@@ -186,6 +186,17 @@ def test_frontend_exposes_chat_to_library_promotion_contract():
     assert "agentApi.promoteChatPaperToLibrary" in chat_page
 
 
+def test_chat_to_library_promotion_requires_bound_research_project():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    chat_message = (frontend_root / "components" / "ChatMessage.vue").read_text(encoding="utf-8")
+    chat_page = (frontend_root / "pages" / "ChatPage.vue").read_text(encoding="utf-8")
+
+    assert "canPromoteToResearchLibrary?: boolean" in chat_message
+    assert "props.canPromoteToResearchLibrary" in chat_message
+    assert "v-if=\"researchLibraryPromotionCandidate && canPromoteToResearchLibrary\"" in chat_message
+    assert ":canPromoteToResearchLibrary=\"!!currentResearchProject\"" in chat_page
+
+
 def test_agent_api_exposes_source_quality_ingestion_result_contract():
     agent_api = (
         Path(__file__).resolve().parents[2]

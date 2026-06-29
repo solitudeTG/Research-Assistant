@@ -112,6 +112,7 @@ Automatic promotion was rejected because arbitrary Chat uploads would pollute tr
 | 2026-06-28 | planned | User approved four-Feature breakdown | This Feature | Created to own temporary-to-trusted asset promotion. |
 | 2026-06-28 | completed | F012 implementation and verification | EV-004 | MVP Chat-to-Library promotion landed. |
 | 2026-06-29 | patched | Combined E2E review found Chat promotion controls still used English copy and needed live Library result verification | Frontend contract/type checks, API promotion E2E, Library UI/API verification | F012.1 localizes the one promotion action and verifies promoted papers update the target Library Project. |
+| 2026-06-29 | patched | User clarified that unbound Chat sessions must not expose the trusted-library promotion action | Frontend contract test, type-check, build | F012.2 gates the `加入研究库` action on an explicitly linked Research Project, so temporary uploads in unbound sessions stay temporary without a misleading Library action. |
 
 ## Patch History
 
@@ -119,12 +120,15 @@ Automatic promotion was rejected because arbitrary Chat uploads would pollute tr
 | --- | --- | --- | --- | --- | --- | --- |
 | F012.1 | 2026-06-29 | `515bd25` | The explicit Chat promotion action still displayed `Add to Research Library`, inconsistent with the requested Chinese ScienceClaw-style UI. | The first MVP left the promotion button copy hard-coded in English. | Frontend contract test rejects English promotion copy and requires `加入研究库`; live API promotion of a real `paper_data` PDF updated the target Project to `2` papers and `39` evidence records. | verified |
 
+| F012.2 | 2026-06-29 | pending | Unbound Chat sessions could infer a promotion candidate from uploaded-paper metadata and show `加入研究库`, even though there was no selected Research Project boundary. | `ChatMessage` reconstructed promotion candidates from message metadata without knowing whether the parent Chat session had a linked Project. | Added a frontend contract requiring `canPromoteToResearchLibrary`, passed from `ChatPage` as `!!currentResearchProject`; focused contract, full frontend contract suite, type-check, and build passed. | verified |
+
 ## Evidence
 
 - `pytest ScienceClaw/backend/tests/test_research_session_routes.py -k "promote_chat_paper_to_library"`: 2 passed.
 - `pytest ScienceClaw/backend/tests/test_research_frontend_contracts.py -k "chat_to_library_promotion"`: 1 passed.
 - `npm.cmd run type-check` from `ScienceClaw/frontend`: passed.
 - 2026-06-29 patch verification: `pytest ScienceClaw/backend/tests/test_research_frontend_contracts.py -k "chinese_user_facing_copy" -q` -> passed; real promotion API returned `promotion_status=indexed`, `parser=grobid-tei`, `chunk_count=24`, `evidence_record_count=24`; Library project summary became `2` papers and `39` evidence records.
+- 2026-06-29 project-boundary patch verification: `pytest ScienceClaw/backend/tests/test_research_frontend_contracts.py -k "promotion_requires_bound" -q` -> `1 passed, 37 deselected`; `pytest ScienceClaw/backend/tests/test_research_frontend_contracts.py -q` -> `38 passed`; `npm.cmd run type-check` from `ScienceClaw/frontend` -> passed; `npm.cmd run build` from `ScienceClaw/frontend` -> passed.
 
 ## Recovery Snapshot
 

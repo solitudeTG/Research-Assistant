@@ -120,7 +120,7 @@
           <FileText class="w-4 h-4" />
         </button>
         <button
-          v-if="researchLibraryPromotionCandidate"
+          v-if="researchLibraryPromotionCandidate && canPromoteToResearchLibrary"
           class="msg-action-btn msg-action-btn--library"
           @click="handlePromoteToResearchLibrary"
           title="加入研究库"
@@ -532,6 +532,7 @@ const props = defineProps<{
   isLast?: boolean;
   isLoading?: boolean;
   researchLibraryPromotionCandidate?: ResearchLibraryPromotionCandidate | null;
+  canPromoteToResearchLibrary?: boolean;
 }>();
 
 const botName = computed(() => {
@@ -593,6 +594,10 @@ const canGenerateResearchReport = computed(() => {
 });
 
 const researchLibraryPromotionCandidate = computed<ResearchLibraryPromotionCandidate | null>(() => {
+  if (!props.canPromoteToResearchLibrary) {
+    return null;
+  }
+
   if (props.researchLibraryPromotionCandidate?.sandboxPath) {
     return props.researchLibraryPromotionCandidate;
   }

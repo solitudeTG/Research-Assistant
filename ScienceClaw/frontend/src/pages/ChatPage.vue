@@ -310,6 +310,7 @@
             <ChatMessage v-else-if="group.type === 'single' && group.message" :message="group.message"
               @toolClick="handleToolClick" @suggestionClick="handleSuggestionClick" @convertToPdf="handleConvertToPdf" @generateResearchReport="handleGenerateResearchReport" @promoteToResearchLibrary="handlePromoteToResearchLibrary" :mode="mode"
               :researchLibraryPromotionCandidate="group.message.type === 'assistant' && index === groupedMessages.length - 1 ? latestResearchLibraryPromotionCandidate : null"
+              :canPromoteToResearchLibrary="!!currentResearchProject"
               :sessionId="sessionId" :isLast="index === lastProcessGroupIndex" :isLoading="isLoading" />
           </template>
 
