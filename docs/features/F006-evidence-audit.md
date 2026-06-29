@@ -4,7 +4,7 @@ doc_kind: feature
 status: active
 owner: solitudeTG
 created: 2026-06-28
-updated: 2026-06-28
+updated: 2026-06-29
 ---
 
 # F006: Evidence Audit
@@ -56,7 +56,7 @@ Hiding unsupported claims was rejected because research users need to see eviden
 
 ## Current Status
 
-In Progress. Evidence Audit has multiple verified slices recorded in `F001`.
+In Progress. Evidence Audit has multiple verified slices recorded in `F001`; answer-level audit visibility now lives in ActivityPanel rather than below the Chat answer card.
 
 ## Links
 
@@ -98,26 +98,31 @@ In Progress. Evidence Audit has multiple verified slices recorded in `F001`.
 | Claim | Acceptance | Evidence | Status |
 | --- | --- | --- | --- |
 | Evidence Audit checks claim support. | Claims receive approved/unsupported/invalid-source status. | Historical audit evidence in `F001`. | Partial |
-| Audit state is visible in outputs. | Chat and Markdown reports expose audit summary and claim checks. | Historical frontend/report evidence in `F001`. | Partial |
+| Audit state is visible in outputs. | Chat answer audit now appears in ActivityPanel; Markdown reports still carry report audit sections. | Frontend contract and browser E2E from 2026-06-29. | Partial |
 
 ## State Timeline
 
 | Date | State | Trigger | Evidence | Note |
 | --- | --- | --- | --- | --- |
 | 2026-06-28 | active | Feature split from F001 | This Feature and `INDEX.md` | Created to own audit behavior and recovery. |
+| 2026-06-29 | patched | User identified Evidence Audit as process-state data that belongs in the right reasoning panel | Frontend contract tests, type-check, build, browser E2E | F006.1 moved answer audit summary and claim checks out of ChatMessage and into ActivityPanel. |
 
 ## Patch History
 
-None yet.
+| Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| F006.1 | 2026-06-29 | `f18d0cf` | Evidence Audit appeared as a large block below each answer, making the Chat stream carry process/audit data. | Audit display was coupled to the answer component instead of the ScienceClaw ActivityPanel semantics. | Frontend contract requires `证据审计` to be rendered through ActivityPanel research sidecar and absent from ChatMessage answer cards. | verified |
 
 ## Evidence
 
-Move focused audit verification here when the next audit change lands.
+- 2026-06-29 audit UI verification: `pytest ScienceClaw/backend/tests/test_research_frontend_contracts.py -q` -> `35 passed`.
+- 2026-06-29 frontend verification: `npm.cmd run type-check` -> passed; `npm.cmd run build` -> passed with existing warnings.
+- Browser E2E on project `E2E UI链路验证 06290349`: right ActivityPanel showed `证据审计 partial` and claim status rows; the Chat answer card did not render the audit block.
 
 ## Recovery Snapshot
 
 - Read first: this Feature, F004, F007 if report output is involved.
-- Current capability state: Evidence Audit exists with historical verification in `F001`.
+- Current capability state: Evidence Audit exists with historical verification in `F001`; answer audit sidecar is visible in ActivityPanel.
 - Known risks: Lexical support scoring may not cover all semantic entailment cases.
 - Next safe action: Attribute audit changes here and verify focused audit plus affected output tests.
 - Unblock condition: None.

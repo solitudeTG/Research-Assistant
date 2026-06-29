@@ -4,7 +4,7 @@ doc_kind: feature
 status: active
 owner: solitudeTG
 created: 2026-06-28
-updated: 2026-06-28
+updated: 2026-06-29
 ---
 
 # F004: Citation Evidence Boundary
@@ -106,19 +106,24 @@ In Progress. Paper/web/database citation boundary has initial implementation evi
 | Date | State | Trigger | Evidence | Note |
 | --- | --- | --- | --- | --- |
 | 2026-06-28 | active | Feature split from F001 | This Feature and `INDEX.md` | Created to own evidence eligibility boundaries. |
+| 2026-06-29 | patched | User clarified that full RAG evidence is process/audit UI, not answer-body UI | Frontend contract tests, type-check, build, browser E2E | F004.1 keeps Chat answer cards focused on final answer while ActivityPanel displays citation evidence. |
 
 ## Patch History
 
-None yet.
+| Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| F004.1 | 2026-06-29 | `f18d0cf` | Chat answers rendered full citation evidence cards below the final answer. | Early acceptance compressed "inspectable citation evidence" into the Chat answer card instead of preserving ScienceClaw's answer/process panel split. | Frontend contract requires ChatMessage answer cards to exclude citation/evidence panels and ActivityPanel to render source-type-aware citation evidence. | verified |
 
 ## Evidence
 
-Focused evidence-boundary verification should be moved here from `F001` during the next boundary change.
+- 2026-06-29 UI boundary verification: `pytest ScienceClaw/backend/tests/test_research_frontend_contracts.py -q` -> `35 passed`.
+- 2026-06-29 frontend verification: `npm.cmd run type-check` -> passed; `npm.cmd run build` -> passed with existing Browserslist/CSS/chunk-size warnings.
+- Browser E2E on session `2ifbtVAgF5jS26d9pUq93Z`: the assistant answer card did not contain `Citation evidence`, `引用证据`, `Evidence audit`, or `证据审计`; the right ActivityPanel contained `研究证据`, `引用证据`, and source-type labels.
 
 ## Recovery Snapshot
 
 - Read first: `AGENTS.md`, this Feature, `ADR-001`.
-- Current capability state: Paper/web/database and context-only memory boundaries exist, but historical evidence is still concentrated in `F001`.
+- Current capability state: Paper/web/database and context-only memory boundaries exist; Chat answer cards no longer host the full citation evidence panel, and ActivityPanel exposes the inspectable evidence sidecar.
 - Known risks: Wording drift can reintroduce paper-only assumptions or overstate evidence quality.
 - Next safe action: Attribute source-type, citation, memory, or boundary wording changes here.
 - Unblock condition: None.

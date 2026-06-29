@@ -4,7 +4,7 @@ doc_kind: feature
 status: active
 owner: solitudeTG
 created: 2026-06-28
-updated: 2026-06-28
+updated: 2026-06-29
 ---
 
 # F008: Trace Honesty and Activity Panel
@@ -56,7 +56,7 @@ Decorative or simulated trace was rejected because it undermines evidence audita
 
 ## Current Status
 
-In Progress. Upload/report/tool trace slices have historical evidence recorded in `F001`.
+In Progress. Upload/report/tool trace slices have historical evidence recorded in `F001`; ActivityPanel now also hosts the research answer sidecar from real assistant message metadata.
 
 ## Links
 
@@ -106,19 +106,24 @@ In Progress. Upload/report/tool trace slices have historical evidence recorded i
 | Date | State | Trigger | Evidence | Note |
 | --- | --- | --- | --- | --- |
 | 2026-06-28 | active | Feature split from F001 | This Feature and `INDEX.md` | Created to own trace honesty and ActivityPanel recovery. |
+| 2026-06-29 | patched | User clarified that RAG evidence/audit belongs in the right reasoning panel | Frontend contract tests, type-check, build, browser E2E | F008.1 adds an ActivityPanel research sidecar fed by real answer metadata, without inventing backend trace events. |
 
 ## Patch History
 
-None yet.
+| Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| F008.1 | 2026-06-29 | `f18d0cf` | The right ActivityPanel showed evidence admission telemetry but not the actual answer citations/audit sidecar. | Research answer metadata was only rendered by ChatMessage, leaving ActivityPanel underused for process/audit inspection. | Frontend contract requires `displayResearchSidecar` and ActivityPanel sections for `研究证据`, `引用证据`, `证据审计`, and `上下文边界`; browser E2E verified the sidecar appears in the right panel. | verified |
 
 ## Evidence
 
-Move trace-specific verification from `F001` here during the next trace or ActivityPanel change.
+- 2026-06-29 ActivityPanel verification: `pytest ScienceClaw/backend/tests/test_research_frontend_contracts.py -q` -> `35 passed`.
+- 2026-06-29 frontend verification: `npm.cmd run type-check` -> passed; `npm.cmd run build` -> passed with existing warnings.
+- Browser E2E on session `2ifbtVAgF5jS26d9pUq93Z`: the right panel at x≈984, width≈600 contained `推理完成`, `任务进度`, `研究证据 5`, `证据审计`, `引用证据`, and `上下文边界`.
 
 ## Recovery Snapshot
 
 - Read first: this Feature, F002, `AGENTS.md`.
-- Current capability state: Real event traces exist for several P0 workflows; evidence remains aggregated in `F001`.
+- Current capability state: Real event traces exist for several P0 workflows; ActivityPanel can also display answer-attached research metadata as a sidecar while preserving trace honesty.
 - Known risks: Future multi-agent UI could drift into simulated workflow state if not tied to backend events.
 - Next safe action: Attribute trace/UI event changes here and verify route plus UI checks.
 - Unblock condition: None.
