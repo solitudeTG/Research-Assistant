@@ -118,7 +118,7 @@ In Progress. The first vertical slice now creates/lists Research Projects, lists
 
 | Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| F009.1 | 2026-06-29 | pending | Real E2E validation showed the Research Library create action did not complete. | Fixed chat child routes were declared after `:sessionId`, and the running backend did not initialize `research_assistant/storage/schema.sql` on startup. | Static route-order contract test, research schema initialization unit test, PostgreSQL table check, and browser E2E project creation. | verified |
+| F009.1 | 2026-06-29 | `5bf49d8` | Real E2E validation showed the Research Library create action did not complete. | Fixed chat child routes were declared after `:sessionId`, and the running backend did not initialize `research_assistant/storage/schema.sql` on startup. | Static route-order contract test, research schema initialization unit test, PostgreSQL table check, and browser E2E project creation. | verified |
 
 ## Evidence
 
