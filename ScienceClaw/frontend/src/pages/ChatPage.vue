@@ -1203,6 +1203,20 @@ const hasIndexedResearchEvent = (event: any) => {
   return status === 'indexed';
 };
 
+const isObviousNonResearchTurn = (message: string) => {
+  const normalized = message.trim().replace(/[!！.。~～\s]+$/g, '').toLowerCase();
+  return /^(谢谢|谢了|感谢|好的|好|收到|明白|了解|嗯|嗯嗯|ok|okay|thanks|thank you)$/.test(normalized);
+};
+
+const shouldUseResearchAnswerRoute = (message: string, files: FileInfo[], reconnect: boolean, hasIndexedAttachment: boolean) => {
+  const trimmed = message.trim();
+  if (reconnect || !trimmed) return false;
+  if (hasIndexedAttachment) return true;
+  if (files.length > 0) return false;
+  if (researchModeAvailable.value && researchModeEnabled.value) return true;
+  return !!currentResearchProject.value && !isObviousNonResearchTurn(trimmed);
+};
+
 const refreshResearchStatus = async (targetSessionId: string) => {
   try {
     const status = await agentApi.getResearchStatus(targetSessionId);
@@ -1471,7 +1485,7 @@ const chat = async (message: string = '', files: FileInfo[] = [], reconnect: boo
     activateResearchMode();
     latestResearchLibraryPromotionCandidate.value = getResearchLibraryPromotionCandidate(files);
   }
-  if (!reconnect && message.trim() && (hasIndexedAttachment || (researchModeAvailable.value && researchModeEnabled.value && files.length === 0))) {
+  if (shouldUseResearchAnswerRoute(message, files, reconnect, hasIndexedAttachment)) {
     await researchChat(message);
     return;
   }

@@ -4,7 +4,7 @@ doc_kind: feature
 status: completed
 owner: solitudeTG
 created: 2026-06-29
-updated: 2026-06-29
+updated: 2026-06-30
 ---
 
 # F016: Hierarchical Whole Paper Summary
@@ -65,6 +65,7 @@ Completed for the first deterministic hierarchy slice. Whole-paper summary now u
 ### Evidence
 
 - [EV-006 F016 Hierarchical Whole Paper Summary Verification](../evidence/EV-006-hierarchical-whole-paper-summary-verification.md)
+- [EV-007 Live UI Research Workflow Verification](../evidence/EV-007-live-ui-research-workflow-verification.md)
 
 ### Decisions / ADRs
 
@@ -110,11 +111,13 @@ Completed for the first deterministic hierarchy slice. Whole-paper summary now u
 | --- | --- | --- | --- | --- |
 | 2026-06-29 | active | User approved F016 | This Feature | Created to own the hierarchical whole-paper summary slice. |
 | 2026-06-29 | completed | F016 implementation verified | EV-006 | Section-balanced sweep and hierarchical composition landed. |
+| 2026-06-30 | patched | Live UI verification found output quality issues | EV-007 | Chinese labels and bounded extractive summaries landed. |
 
 ## Patch History
 
 | Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
 | --- | --- | --- | --- | --- | --- | --- |
+| F016.2 | 2026-06-30 | pending | Live UI showed English whole-paper summary labels for a Chinese prompt and long raw chunk text in summaries. | Whole-paper composition did not receive the question for language selection and used full citation quotes in section/global lines. | Added Chinese label selection, bounded summary excerpts, focused regression tests, live UI verification, frontend build/type-check, and full backend suite. | verified |
 | F016.1 | 2026-06-29 | 3f5c425 | Whole-paper summary could still behave like an extractive section list and early-page sweep. | F013 created the route but did not yet implement section-level compression or section-balanced evidence collection. | Focused answering/database tests, route tests, py_compile, and full backend suite. | verified |
 
 ## Evidence
@@ -122,6 +125,7 @@ Completed for the first deterministic hierarchy slice. Whole-paper summary now u
 - Focused answering/database tests: `29 passed`.
 - Route/session focused tests: `8 passed`.
 - Full backend suite: `189 passed`.
+- 2026-06-30 live UI patch verification: latest Project-bound whole-paper summary response used Chinese labels, `citation_count=15`, `evidence_scope=project`, and bounded excerpts; `pytest ScienceClaw/backend/tests -q` -> `192 passed`.
 - Python compile check for touched backend modules: passed.
 - AgentMentor F016 feature-index and strict structural checks: passed.
 

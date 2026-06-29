@@ -170,6 +170,21 @@ def test_frontend_exposes_session_project_binding_contracts():
     assert "课题上下文" in chat_page
 
 
+def test_project_bound_chat_routes_research_questions_without_mode_toggle():
+    chat_page = (
+        Path(__file__).resolve().parents[2]
+        / "frontend"
+        / "src"
+        / "pages"
+        / "ChatPage.vue"
+    ).read_text(encoding="utf-8")
+
+    assert "const shouldUseResearchAnswerRoute" in chat_page
+    assert "!!currentResearchProject.value && !isObviousNonResearchTurn(trimmed)" in chat_page
+    assert "const isObviousNonResearchTurn" in chat_page
+    assert "if (shouldUseResearchAnswerRoute(message, files, reconnect, hasIndexedAttachment))" in chat_page
+
+
 def test_frontend_exposes_chat_to_library_promotion_contract():
     frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
     agent_api = (frontend_root / "api" / "agent.ts").read_text(encoding="utf-8")

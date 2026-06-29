@@ -223,12 +223,12 @@ async def test_answer_research_question_routes_whole_paper_summary_to_full_paper
     assert answer.to_dict()["task_route"]["route"] == "whole_paper_summary"
     assert answer.to_dict()["task_route"]["decision_source"] == "rule"
     assert answer.citation_count == 3
-    assert "Whole-paper hierarchical summary based on citation evidence:" in answer.content
-    assert "Section summaries:" in answer.content
+    assert "基于引用证据的整篇论文层级总结：" in answer.content
+    assert "分节摘要：" in answer.content
     assert "- Introduction:" in answer.content
     assert "- Method:" in answer.content
     assert "- Results:" in answer.content
-    assert "Global synthesis:" in answer.content
+    assert "全局综合：" in answer.content
 
 
 @pytest.mark.asyncio
@@ -332,6 +332,112 @@ async def test_whole_paper_summary_balances_dense_sections_before_global_synthes
     assert "[paper-1:Introduction:1]" in answer.content
     assert answer.citation_count == 5
     assert all(citation.source_type == "paper" for citation in answer.citations)
+
+
+@pytest.mark.asyncio
+async def test_whole_paper_summary_uses_chinese_structure_for_chinese_questions(monkeypatch):
+    async def fake_summary_evidence(*args, **kwargs):
+        return [
+            EvidenceHit(
+                evidence_id=201,
+                chunk_id="chunk-intro",
+                paper_id="paper-zh",
+                title="中文结构测试",
+                source_type="paper",
+                section="Introduction",
+                page_start=1,
+                page_end=1,
+                quote="The paper studies integrated communication and navigation in LEO satellite systems.",
+                rank_score=1.0,
+            ),
+            EvidenceHit(
+                evidence_id=202,
+                chunk_id="chunk-results",
+                paper_id="paper-zh",
+                title="中文结构测试",
+                source_type="paper",
+                section="Conclusion",
+                page_start=9,
+                page_end=9,
+                quote="The conclusion reports improved communication and navigation trade-offs.",
+                rank_score=0.5,
+            ),
+        ]
+
+    async def fake_list_memory(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_whole_paper_evidence_in_database",
+        fake_summary_evidence,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_memory_entries_from_database",
+        fake_list_memory,
+    )
+
+    answer = await answer_research_question(
+        database_url="postgresql://test",
+        session_id="session-1",
+        question="请总结这篇论文的核心内容与主要观点，中文回答",
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=2,
+    )
+
+    assert "基于引用证据的整篇论文层级总结：" in answer.content
+    assert "覆盖范围：" in answer.content
+    assert "分节摘要：" in answer.content
+    assert "全局综合：" in answer.content
+    assert "Section summaries:" not in answer.content
+    assert "Global synthesis:" not in answer.content
+
+
+@pytest.mark.asyncio
+async def test_whole_paper_summary_bounds_long_section_quotes(monkeypatch):
+    long_quote = " ".join(["Long evidence sentence with enough terms for citation support."] * 80)
+
+    async def fake_summary_evidence(*args, **kwargs):
+        return [
+            EvidenceHit(
+                evidence_id=301,
+                chunk_id="chunk-long",
+                paper_id="paper-long",
+                title="Long Paper",
+                source_type="paper",
+                section="Introduction",
+                page_start=1,
+                page_end=1,
+                quote=long_quote,
+                rank_score=1.0,
+            )
+        ]
+
+    async def fake_list_memory(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_whole_paper_evidence_in_database",
+        fake_summary_evidence,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_memory_entries_from_database",
+        fake_list_memory,
+    )
+
+    answer = await answer_research_question(
+        database_url="postgresql://test",
+        session_id="session-1",
+        question="Summarize this paper",
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=2,
+    )
+
+    assert len(answer.content) < 1600
+    assert "..." in answer.content
+    assert "[paper-long:Introduction:1]" in answer.content
+    assert answer.citations[0].quote == long_quote
 
 
 @pytest.mark.asyncio

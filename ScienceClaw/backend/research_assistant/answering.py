@@ -63,6 +63,8 @@ CONTEXT_BOUNDARIES = {
 }
 _WHOLE_PAPER_SECTION_EVIDENCE_LIMIT = 2
 _WHOLE_PAPER_SYNTHESIS_SECTION_LIMIT = 4
+_WHOLE_PAPER_SECTION_QUOTE_LIMIT = 420
+_WHOLE_PAPER_SYNTHESIS_QUOTE_LIMIT = 260
 
 
 @dataclass(frozen=True)
@@ -180,7 +182,7 @@ async def answer_research_question(
         )
         admission = admit_evidence_hits(hits)
         citations = _citations_from_hits(admission.accepted_hits)
-        content = _compose_whole_paper_summary(citations, admission=admission)
+        content = _compose_whole_paper_summary(citations, question=question, admission=admission)
         return ResearchAnswer(
             content=content,
             citations=citations,
@@ -265,22 +267,44 @@ def _compose_skipped_answer() -> str:
 def _compose_whole_paper_summary(
     citations: list[ResearchCitation],
     *,
+    question: str = "",
     admission: EvidenceAdmissionResult | None = None,
 ) -> str:
     if not citations:
         return _compose_extractive_answer(citations, admission=admission)
     section_summaries = _section_summaries_from_citations(citations)
+    labels = _whole_paper_summary_labels(question)
     lines = [
-        "Whole-paper hierarchical summary based on citation evidence:",
-        f"Coverage: {len(citations)} citation evidence records across {len(section_summaries)} sections.",
+        labels["title"],
+        labels["coverage"].format(citation_count=len(citations), section_count=len(section_summaries)),
         "",
-        "Section summaries:",
+        labels["sections"],
     ]
     for summary in section_summaries:
         lines.append(f"- {summary['section']}: {summary['summary']}")
-    lines.extend(["", "Global synthesis:"])
+    lines.extend(["", labels["synthesis"]])
     lines.extend(_global_synthesis_lines(section_summaries))
     return "\n".join(lines)
+
+
+def _whole_paper_summary_labels(question: str) -> dict[str, str]:
+    if _looks_chinese(question):
+        return {
+            "title": "基于引用证据的整篇论文层级总结：",
+            "coverage": "覆盖范围：{citation_count} 条引用证据，覆盖 {section_count} 个章节。",
+            "sections": "分节摘要：",
+            "synthesis": "全局综合：",
+        }
+    return {
+        "title": "Whole-paper hierarchical summary based on citation evidence:",
+        "coverage": "Coverage: {citation_count} citation evidence records across {section_count} sections.",
+        "sections": "Section summaries:",
+        "synthesis": "Global synthesis:",
+    }
+
+
+def _looks_chinese(text: str) -> bool:
+    return bool(re.search(r"[\u4e00-\u9fff]", text))
 
 
 def _section_summaries_from_citations(citations: list[ResearchCitation]) -> list[dict[str, Any]]:
@@ -300,7 +324,7 @@ def _section_summaries_from_citations(citations: list[ResearchCitation]) -> list
     for summary in summaries:
         selected = summary["citations"][:_WHOLE_PAPER_SECTION_EVIDENCE_LIMIT]
         summary["summary"] = " ".join(
-            f"{citation.quote} {citation.citation_label}"
+            f"{_bounded_summary_quote(citation.quote, _WHOLE_PAPER_SECTION_QUOTE_LIMIT)} {citation.citation_label}"
             for citation in selected
         )
     return summaries
@@ -312,7 +336,7 @@ def _global_synthesis_lines(section_summaries: list[dict[str, Any]]) -> list[str
         return ["- No admitted section evidence was available for synthesis."]
 
     contribution_parts = [
-        f"{summary['citations'][0].quote} {summary['citations'][0].citation_label}"
+        f"{_bounded_summary_quote(summary['citations'][0].quote, _WHOLE_PAPER_SYNTHESIS_QUOTE_LIMIT)} {summary['citations'][0].citation_label}"
         for summary in selected
         if summary["citations"]
     ]
@@ -320,6 +344,17 @@ def _global_synthesis_lines(section_summaries: list[dict[str, Any]]) -> list[str
         return ["- No admitted section evidence was available for synthesis."]
 
     return ["- " + " ".join(contribution_parts)]
+
+
+def _bounded_summary_quote(quote: str, limit: int) -> str:
+    text = re.sub(r"\s+", " ", quote).strip()
+    if len(text) <= limit:
+        return text
+    clipped = text[:limit].rstrip()
+    last_space = clipped.rfind(" ")
+    if last_space >= int(limit * 0.75):
+        clipped = clipped[:last_space].rstrip()
+    return f"{clipped}..."
 
 
 def _citation_to_admission_hit(citation: ResearchCitation, index: int) -> Any:
