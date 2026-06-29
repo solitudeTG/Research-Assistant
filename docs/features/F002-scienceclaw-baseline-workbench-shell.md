@@ -111,7 +111,7 @@ In Progress. ScienceClaw baseline is present and being adapted incrementally.
 
 | Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| F002.1 | 2026-06-29 | pending | Long research prompts containing paper titles or filenames were visually clipped inside the user message bubble. | User message HTML did not have long-token wrapping rules, while the gradient bubble used `overflow-hidden`. | Frontend contract requires `.user-message-content` with `overflow-wrap: anywhere` and `word-break: break-word`. | verified |
+| F002.1 | 2026-06-29 | `146727e` | Long research prompts containing paper titles or filenames were visually clipped inside the user message bubble. | User message HTML did not have long-token wrapping rules, while the gradient bubble used `overflow-hidden`. | Frontend contract requires `.user-message-content` with `overflow-wrap: anywhere` and `word-break: break-word`. | verified |
 
 ## Evidence
 
