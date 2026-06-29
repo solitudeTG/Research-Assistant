@@ -17,7 +17,13 @@ from backend.research_assistant.admission import (
 from backend.research_assistant.embeddings import HashingEmbeddingProvider
 from backend.research_assistant.storage.database import (
     hybrid_search_evidence_in_database,
+    list_whole_paper_evidence_in_database,
     list_memory_entries_from_database,
+)
+from backend.research_assistant.task_router import (
+    ResearchTaskRoute,
+    classify_research_task,
+    default_evidence_qa_route,
 )
 
 _RECALL_STOP_WORDS = {
@@ -82,6 +88,7 @@ class ResearchAnswer:
     context_memory: list[dict] = field(default_factory=list)
     audit: EvidenceAudit | None = None
     admission: EvidenceAdmissionResult | None = None
+    task_route: ResearchTaskRoute = field(default_factory=default_evidence_qa_route)
     answer_id: str = field(default_factory=lambda: f"research-answer-{shortuuid.uuid()}")
 
     def __post_init__(self) -> None:
@@ -126,6 +133,7 @@ class ResearchAnswer:
             "context_memory_conflict_count": self.context_memory_conflict_count,
             "context_boundaries": CONTEXT_BOUNDARIES,
             "evidence_admission": self.admission.to_dict() if self.admission else {},
+            "task_route": self.task_route.to_dict(),
             "audit": self.audit.to_dict() if self.audit else {},
         }
 
@@ -141,13 +149,14 @@ async def answer_research_question(
     embedding_model: str,
     limit: int = 5,
 ) -> ResearchAnswer:
+    task_route = classify_research_task(question)
     context_memory = await _load_context_memory(
         database_url=database_url,
         session_id=session_id,
         user_id=user_id,
         question=question,
     )
-    if should_skip_research_retrieval(question):
+    if task_route.route == "general_chat":
         admission = skipped_admission_result()
         content = _compose_skipped_answer()
         return ResearchAnswer(
@@ -155,7 +164,27 @@ async def answer_research_question(
             citations=[],
             context_memory=context_memory,
             admission=admission,
+            task_route=task_route,
             audit=audit_evidence_claims(answer_content=content, citations=[]),
+        )
+
+    if task_route.route == "whole_paper_summary":
+        hits = await list_whole_paper_evidence_in_database(
+            database_url,
+            session_id=session_id,
+            project_id=project_id,
+            limit=max(limit, 24),
+        )
+        admission = admit_evidence_hits(hits)
+        citations = _citations_from_hits(admission.accepted_hits)
+        content = _compose_whole_paper_summary(citations, admission=admission)
+        return ResearchAnswer(
+            content=content,
+            citations=citations,
+            context_memory=context_memory,
+            admission=admission,
+            task_route=task_route,
+            audit=audit_evidence_claims(answer_content=content, citations=citations),
         )
 
     provider = HashingEmbeddingProvider(
@@ -173,7 +202,20 @@ async def answer_research_question(
         search_kwargs["project_id"] = project_id
     hits = await hybrid_search_evidence_in_database(database_url, **search_kwargs)
     admission = admit_evidence_hits(hits)
-    citations = [
+    citations = _citations_from_hits(admission.accepted_hits)
+    content = _compose_extractive_answer(citations, admission=admission)
+    return ResearchAnswer(
+        content=content,
+        citations=citations,
+        context_memory=context_memory,
+        admission=admission,
+        task_route=task_route,
+        audit=audit_evidence_claims(answer_content=content, citations=citations),
+    )
+
+
+def _citations_from_hits(hits: list[Any]) -> list[ResearchCitation]:
+    return [
         ResearchCitation(
             evidence_id=hit.evidence_id,
             chunk_id=hit.chunk_id,
@@ -187,16 +229,8 @@ async def answer_research_question(
             source_type=hit.source_type,
             source_identity=hit.source_identity,
         )
-        for hit in admission.accepted_hits
+        for hit in hits
     ]
-    content = _compose_extractive_answer(citations, admission=admission)
-    return ResearchAnswer(
-        content=content,
-        citations=citations,
-        context_memory=context_memory,
-        admission=admission,
-        audit=audit_evidence_claims(answer_content=content, citations=citations),
-    )
 
 
 def _compose_extractive_answer(
@@ -222,6 +256,24 @@ def _compose_extractive_answer(
 
 def _compose_skipped_answer() -> str:
     return "This turn does not require citation evidence retrieval."
+
+
+def _compose_whole_paper_summary(
+    citations: list[ResearchCitation],
+    *,
+    admission: EvidenceAdmissionResult | None = None,
+) -> str:
+    if not citations:
+        return _compose_extractive_answer(citations, admission=admission)
+    lines = ["Whole-paper summary based on citation evidence:"]
+    section_seen: set[str] = set()
+    for citation in citations:
+        section = citation.section or "Paper"
+        if section in section_seen:
+            continue
+        section_seen.add(section)
+        lines.append(f"- {section}: {citation.quote} {citation.citation_label}")
+    return "\n".join(lines)
 
 
 def _citation_to_admission_hit(citation: ResearchCitation, index: int) -> Any:

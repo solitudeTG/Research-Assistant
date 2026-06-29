@@ -1,5 +1,5 @@
 import type { FileInfo } from '../api/file';
-import type { EvidenceAdmissionMetadata, ToolMetaData, StatisticsData, RoundFileInfo, ResearchToolPackMetadata, ToolResultContract, ToolRuntimeResultSummary } from './event';
+import type { EvidenceAdmissionMetadata, ResearchTaskRouteMetadata, ToolMetaData, StatisticsData, RoundFileInfo, ResearchToolPackMetadata, ToolResultContract, ToolRuntimeResultSummary } from './event';
 
 export type MessageType = "user" | "assistant" | "tool" | "step" | "attachments" | "thinking";
 
@@ -101,6 +101,7 @@ export interface ResearchAnswerMetadata {
   context_memory_conflict_count?: number;
   context_boundaries?: ResearchContextBoundaries;
   evidence_admission?: EvidenceAdmissionMetadata;
+  task_route?: ResearchTaskRouteMetadata;
   audit?: ResearchAuditMetadata;
   report?: {
     report_id: string;

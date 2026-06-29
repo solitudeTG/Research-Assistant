@@ -9,6 +9,7 @@ from backend.research_assistant.storage.database import (
     ensure_research_schema_in_database,
     get_research_session_status_from_database,
     hybrid_search_evidence_in_database,
+    list_whole_paper_evidence_in_database,
     persist_chunk_embeddings_to_database,
     persist_database_evidence_source_to_database,
     persist_web_evidence_source_to_database,
@@ -104,6 +105,43 @@ async def test_hybrid_search_evidence_in_database_closes_asyncpg_connection(monk
     )
 
     assert hits[0].citation_label == "[paper-3:Results]"
+    assert fake_connection.closed is True
+
+
+@pytest.mark.asyncio
+async def test_list_whole_paper_evidence_in_database_handles_json_source_identity(monkeypatch):
+    fake_connection = FakeConnection()
+    fake_connection.fetch_result = [
+        {
+            "evidence_id": 7,
+            "chunk_id": "chunk-7",
+            "paper_id": "paper-7",
+            "title": "Whole Paper",
+            "evidence_type": "paper",
+            "section": "Introduction",
+            "page_start": 1,
+            "page_end": 1,
+            "quote": "The paper introduces the research problem.",
+            "source_identity": '{"doi":"10.1000/test"}',
+            "paper_order": 1.0,
+        }
+    ]
+
+    async def connect(database_url):
+        assert database_url == "postgresql://test"
+        return fake_connection
+
+    monkeypatch.setitem(sys.modules, "asyncpg", types.SimpleNamespace(connect=connect))
+
+    hits = await list_whole_paper_evidence_in_database(
+        "postgresql://test",
+        session_id="session-1",
+        project_id="project-1",
+        limit=24,
+    )
+
+    assert hits[0].source_identity == {"doi": "10.1000/test"}
+    assert hits[0].rank_score == 1.0
     assert fake_connection.closed is True
 
 

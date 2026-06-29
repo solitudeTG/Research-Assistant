@@ -9,6 +9,7 @@ import pytest
 
 from backend.research_assistant.admission import skipped_admission_result
 from backend.research_assistant.answering import ResearchAnswer, ResearchCitation
+from backend.research_assistant.task_router import ResearchTaskRoute
 
 
 class FakeSession:
@@ -1073,11 +1074,14 @@ async def test_research_answer_trace_and_message_keep_memory_context_separate(mo
     }
     assert completed_steps[-1]["metadata"]["evidence_admission"]["decision"] == "accepted"
     assert completed_steps[-1]["metadata"]["evidence_admission"]["accepted_count"] == 1
+    assert completed_steps[-1]["metadata"]["task_route"]["route"] == "evidence_qa"
+    assert completed_steps[-1]["metadata"]["task_route"]["scope"] == "project_or_session"
     assistant_research = session.events[-1]["data"]["metadata"]["research_assistant"]
     assert assistant_research["citations"][0]["source_type"] == "paper"
     assert assistant_research["context_memory"][0]["source_type"] == "memory"
     assert assistant_research["context_memory_conflict_count"] == 1
     assert assistant_research["evidence_admission"]["decision"] == "accepted"
+    assert assistant_research["task_route"]["route"] == "evidence_qa"
 
 
 @pytest.mark.asyncio
@@ -1115,6 +1119,48 @@ async def test_research_answer_trace_names_skipped_admission_without_claiming_re
     assert step_events[-1]["description"] == "Citation evidence retrieval skipped"
     assert step_events[-1]["metadata"]["evidence_admission"]["decision"] == "skipped"
     assert step_events[-1]["metadata"]["citation_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_research_answer_trace_names_whole_paper_summary_workflow(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession()
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    async def fake_answer(*args, **kwargs):
+        return ResearchAnswer(
+            content="Whole-paper summary based on citation evidence.",
+            citations=[],
+            task_route=ResearchTaskRoute(
+                route="whole_paper_summary",
+                decision_source="rule",
+                needs_retrieval=True,
+                scope="current_paper",
+                confidence=0.95,
+                reason="whole_paper_summary_intent",
+            ),
+        )
+
+    async def fake_persist_audit(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "answer_research_question", fake_answer)
+    monkeypatch.setattr(sessions, "persist_audit_result_to_database", fake_persist_audit)
+    monkeypatch.setattr(sessions, "_publish_session_event", lambda *args, **kwargs: None)
+
+    await sessions.answer_research_question_for_session(
+        "session-1",
+        sessions.ResearchAnswerRequest(question="请总结这篇论文"),
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    step_events = [event["data"] for event in session.events if event.get("event") == "step"]
+    assert step_events[-1]["description"] == "Whole-paper summary evidence prepared"
+    assert step_events[-1]["metadata"]["task_route"]["route"] == "whole_paper_summary"
 
 
 @pytest.mark.asyncio

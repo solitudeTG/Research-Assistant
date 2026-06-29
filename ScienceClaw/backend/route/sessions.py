@@ -2630,11 +2630,13 @@ async def answer_research_question_for_session(
             raise
 
         admission_metadata = answer.admission.to_dict() if answer.admission else {}
-        retrieval_description = (
-            "Citation evidence retrieval skipped"
-            if admission_metadata.get("decision") == "skipped"
-            else "Citation evidence retrieval completed"
-        )
+        task_route_metadata = answer.task_route.to_dict()
+        if admission_metadata.get("decision") == "skipped":
+            retrieval_description = "Citation evidence retrieval skipped"
+        elif task_route_metadata.get("route") == "whole_paper_summary":
+            retrieval_description = "Whole-paper summary evidence prepared"
+        else:
+            retrieval_description = "Citation evidence retrieval completed"
         retrieval_completed = _research_upload_step_event(
             step_id=step_id,
             status="completed",
@@ -2645,6 +2647,7 @@ async def answer_research_question_for_session(
                 "context_memory_conflict_count": answer.context_memory_conflict_count,
                 "context_boundaries": CONTEXT_BOUNDARIES,
                 "evidence_admission": admission_metadata,
+                "task_route": task_route_metadata,
                 "embedding_model": settings.research_embedding_model,
                 **retrieval_metadata,
             },

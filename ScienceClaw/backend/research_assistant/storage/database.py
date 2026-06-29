@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 from pathlib import Path
 
 from backend.research_assistant.audit import EvidenceAudit
@@ -199,6 +200,87 @@ async def hybrid_search_evidence_in_database(
         )
     finally:
         await connection.close()
+
+
+async def list_whole_paper_evidence_in_database(
+    database_url: str,
+    *,
+    session_id: str,
+    project_id: str | None = None,
+    limit: int = 24,
+) -> list[EvidenceHit]:
+    import asyncpg
+
+    connection = await asyncpg.connect(database_url)
+    try:
+        rows = await connection.fetch(
+            """
+            WITH target_paper AS (
+                SELECT p.paper_id
+                FROM research_papers p
+                WHERE (($2::text IS NULL AND p.session_id = $1) OR p.project_id = $2)
+                ORDER BY p.updated_at DESC, p.created_at DESC, p.paper_id DESC
+                LIMIT 1
+            )
+            SELECT
+                er.evidence_id,
+                er.chunk_id,
+                er.evidence_type,
+                c.paper_id,
+                p.title,
+                er.section,
+                er.page_start,
+                er.page_end,
+                er.quote,
+                er.source_identity,
+                row_number() OVER (
+                    ORDER BY
+                        COALESCE(er.page_start, c.page_start, 2147483647),
+                        er.evidence_id
+                )::float AS paper_order
+            FROM target_paper tp
+            JOIN research_papers p ON p.paper_id = tp.paper_id
+            JOIN research_chunks c ON c.paper_id = p.paper_id
+            JOIN research_evidence_records er ON er.chunk_id = c.chunk_id
+            WHERE er.evidence_type = 'paper'
+            ORDER BY
+                COALESCE(er.page_start, c.page_start, 2147483647),
+                er.evidence_id
+            LIMIT $3
+            """,
+            session_id,
+            project_id,
+            limit,
+        )
+        hits = []
+        for row in rows:
+            hit = EvidenceHit(
+                evidence_id=int(row["evidence_id"]),
+                chunk_id=str(row["chunk_id"]),
+                paper_id=str(row["paper_id"]),
+                title=str(row["title"]),
+                source_type=str(row["evidence_type"]),
+                section=str(row["section"]),
+                page_start=row["page_start"],
+                page_end=row["page_end"],
+                quote=str(row["quote"]),
+                rank_score=1.0 / float(row["paper_order"]),
+                source_identity=_source_identity_dict(row["source_identity"]),
+            )
+            hits.append(hit)
+        return hits
+    finally:
+        await connection.close()
+
+
+def _source_identity_dict(value: object) -> dict:
+    if value is None:
+        return {}
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        return json.loads(value)
+    return dict(value)  # type: ignore[arg-type]
 
 
 async def persist_chunk_embeddings_to_database(

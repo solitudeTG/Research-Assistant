@@ -61,6 +61,15 @@ export interface EvidenceAdmissionMetadata {
   reason?: string;
 }
 
+export interface ResearchTaskRouteMetadata {
+  route: 'general_chat' | 'evidence_qa' | 'whole_paper_summary' | string;
+  decision_source: 'rule' | 'rule_fallback' | 'llm' | string;
+  needs_retrieval: boolean;
+  scope: string;
+  confidence: number;
+  reason: string;
+}
+
 export interface ToolEventData extends BaseEventData {
   tool_call_id: string;
   name: string;
@@ -85,6 +94,7 @@ export interface StepEventData extends BaseEventData {
   metadata?: {
     source_quality?: SourceQualityMetadata;
     evidence_admission?: EvidenceAdmissionMetadata;
+    task_route?: ResearchTaskRouteMetadata;
     [key: string]: any;
   }
 }

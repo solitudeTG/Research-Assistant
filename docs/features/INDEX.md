@@ -43,6 +43,8 @@ updated: 2026-06-29
 | [F011 Evidence Admission Gate](F011-evidence-admission-gate.md) | RAG routing, retrieval threshold, citation admission | evidence gate, top-k threshold, low confidence, abstain, skip RAG, accepted evidence | `ScienceClaw/backend/research_assistant/`; `ScienceClaw/backend/route/sessions.py`; `ScienceClaw/frontend/src/` | 修改 RAG 跳过规则、低相关 evidence 拒绝注入、阈值、检索决策 trace 或 citation admission 前。 |
 | [F012 Chat To Library Promotion](F012-chat-to-library-promotion.md) | temporary upload promotion, trusted library ingestion | 加入研究库, promote to library, temporary PDF, chat upload, library action | `ScienceClaw/backend/route/sessions.py`; `ScienceClaw/backend/research_assistant/`; `ScienceClaw/frontend/src/pages/ChatPage.vue` | 修改普通 Chat 上传论文入库边界、回答底部“加入研究库”动作或 promotion trace 前。 |
 
+| [F013 Research Task Router and Whole Paper Summary](F013-research-task-router-whole-paper-summary.md) | task-aware research routing, whole-paper summary | research task router, whole paper summary, summarize this paper, evidence QA, route metadata | `ScienceClaw/backend/research_assistant/`; `ScienceClaw/backend/route/sessions.py`; `ScienceClaw/frontend/src/` | 修改研究问题路由、整篇论文总结、RAG 与 summary workflow 分流、route trace 或回答 metadata 前。 |
+
 ## Planned Feature Candidates
 
 这些候选项来自 `F001` 和 linked spec，但尚不应在没有具体实现入口时全部扩写成 active Feature。

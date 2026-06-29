@@ -132,7 +132,98 @@ async def test_answer_research_question_skips_retrieval_for_non_evidence_turn(mo
     assert answer.citation_count == 0
     assert answer.admission.decision == "skipped"
     assert answer.to_dict()["evidence_admission"]["decision"] == "skipped"
+    assert answer.to_dict()["task_route"]["route"] == "general_chat"
     assert "does not require citation evidence retrieval" in answer.content
+
+
+@pytest.mark.asyncio
+async def test_answer_research_question_routes_whole_paper_summary_to_full_paper_evidence(monkeypatch):
+    async def fail_hybrid_search(*args, **kwargs):
+        raise AssertionError("whole-paper summary should not use ordinary top-k hybrid search")
+
+    captured = {}
+
+    async def fake_summary_evidence(database_url, **kwargs):
+        captured["database_url"] = database_url
+        captured.update(kwargs)
+        return [
+            EvidenceHit(
+                evidence_id=101,
+                chunk_id="chunk-intro",
+                paper_id="paper-1",
+                title="Space-Time Beamforming",
+                source_type="paper",
+                section="Introduction",
+                page_start=1,
+                page_end=1,
+                quote="The paper targets extremely narrow beams for LEO satellite communications.",
+                rank_score=1.0,
+            ),
+            EvidenceHit(
+                evidence_id=102,
+                chunk_id="chunk-method",
+                paper_id="paper-1",
+                title="Space-Time Beamforming",
+                source_type="paper",
+                section="Method",
+                page_start=4,
+                page_end=4,
+                quote="The method combines space-domain and time-domain beamforming.",
+                rank_score=0.5,
+            ),
+            EvidenceHit(
+                evidence_id=103,
+                chunk_id="chunk-results",
+                paper_id="paper-1",
+                title="Space-Time Beamforming",
+                source_type="paper",
+                section="Results",
+                page_start=8,
+                page_end=8,
+                quote="Simulation results show stronger interference mitigation.",
+                rank_score=0.333,
+            ),
+        ]
+
+    async def fake_list_memory(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.hybrid_search_evidence_in_database",
+        fail_hybrid_search,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_whole_paper_evidence_in_database",
+        fake_summary_evidence,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_memory_entries_from_database",
+        fake_list_memory,
+    )
+
+    answer = await answer_research_question(
+        database_url="postgresql://test",
+        session_id="session-1",
+        project_id="project-1",
+        question="请总结这篇论文的核心内容与主要观点",
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=2,
+    )
+
+    assert captured == {
+        "database_url": "postgresql://test",
+        "session_id": "session-1",
+        "project_id": "project-1",
+        "limit": 24,
+    }
+    assert answer.to_dict()["task_route"]["route"] == "whole_paper_summary"
+    assert answer.to_dict()["task_route"]["decision_source"] == "rule"
+    assert answer.citation_count == 3
+    assert "Whole-paper summary based on citation evidence:" in answer.content
+    assert "Introduction" in answer.content
+    assert "Method" in answer.content
+    assert "Results" in answer.content
 
 
 @pytest.mark.asyncio

@@ -453,6 +453,24 @@ def test_activity_panel_surfaces_evidence_admission_trace_metadata():
     assert "rejected={{ admission.rejected_count }}" in activity_panel
 
 
+def test_activity_panel_surfaces_research_task_route_metadata():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    event_types = (frontend_root / "types" / "event.ts").read_text(encoding="utf-8")
+    message_types = (frontend_root / "types" / "message.ts").read_text(encoding="utf-8")
+    agent_api = (frontend_root / "api" / "agent.ts").read_text(encoding="utf-8")
+    activity_panel = (frontend_root / "components" / "ActivityPanel.vue").read_text(encoding="utf-8")
+
+    assert "export interface ResearchTaskRouteMetadata" in event_types
+    assert "task_route?: ResearchTaskRouteMetadata" in event_types
+    assert "task_route?: ResearchTaskRouteMetadata" in message_types
+    assert "task_route?: ResearchTaskRouteMetadata" in agent_api
+    assert "researchTaskRouteSteps" in activity_panel
+    assert "研究任务路由" in activity_panel
+    assert "route.route" in activity_panel
+    assert "decision_source={{ route.decision_source }}" in activity_panel
+    assert "scope={{ route.scope }}" in activity_panel
+
+
 def test_left_panel_new_task_uses_canonical_chat_route_from_research_library():
     frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
     left_panel = (frontend_root / "components" / "LeftPanel.vue").read_text(encoding="utf-8")
