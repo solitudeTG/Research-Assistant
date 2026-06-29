@@ -386,6 +386,7 @@
         :isLoading="isLoading && selectedActivityTurn === -1"
         :lastTurnHadError="lastTurnHadError"
         :runtimeAudit="runtimeResultAudit"
+        :researchSidecar="displayResearchSidecar"
         @toolClick="handleToolClick"
         @exportRuntimeAudit="handleRuntimeAuditExport"
         @close="() => {}"
@@ -407,7 +408,7 @@ import ChatBox from '../components/ChatBox.vue';
 import ChatMessage from '../components/ChatMessage.vue';
 import * as agentApi from '../api/agent';
 import type { RuntimeResultAudit } from '../api/agent';
-import { Message, MessageContent, ToolContent, StepContent, AttachmentsContent } from '../types/message';
+import { Message, MessageContent, ToolContent, StepContent, AttachmentsContent, type ResearchAnswerMetadata } from '../types/message';
 import {
   StepEventData,
   ToolEventData,
@@ -561,6 +562,30 @@ const displayActivityPlan = computed(() => {
     return activitySnapshots.value[selectedActivityTurn.value].plan;
   }
   return plan.value;
+});
+
+const researchSidecarsByTurn = computed(() => {
+  const byTurn = new Map<number, ResearchAnswerMetadata>();
+  let turnIndex = -1;
+  for (const message of messages.value) {
+    if (message.type === 'user') {
+      turnIndex += 1;
+      continue;
+    }
+    if (message.type !== 'assistant') continue;
+    const research = (message.content as MessageContent).metadata?.research_assistant;
+    if (!research) continue;
+    byTurn.set(Math.max(turnIndex, 0), research);
+  }
+  return byTurn;
+});
+
+const displayResearchSidecar = computed<ResearchAnswerMetadata | null>(() => {
+  if (selectedActivityTurn.value >= 0) {
+    return researchSidecarsByTurn.value.get(selectedActivityTurn.value) || null;
+  }
+  const sidecars = Array.from(researchSidecarsByTurn.value.values());
+  return sidecars[sidecars.length - 1] || null;
 });
 
 // Skill save prompt state (persists across state resets)

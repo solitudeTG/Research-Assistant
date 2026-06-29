@@ -2,6 +2,19 @@ from pathlib import Path
 
 
 def test_chat_citation_card_renders_citation_source_type():
+    activity_panel = (
+        Path(__file__).resolve().parents[2]
+        / "frontend"
+        / "src"
+        / "components"
+        / "ActivityPanel.vue"
+    ).read_text(encoding="utf-8")
+
+    assert "{{ citation.source_type }}" in activity_panel
+    assert "                    paper\n" not in activity_panel
+
+
+def test_chat_message_keeps_research_evidence_out_of_answer_card():
     chat_message = (
         Path(__file__).resolve().parents[2]
         / "frontend"
@@ -10,8 +23,35 @@ def test_chat_citation_card_renders_citation_source_type():
         / "ChatMessage.vue"
     ).read_text(encoding="utf-8")
 
-    assert "{{ citation.source_type }}" in chat_message
-    assert "                    paper\n" not in chat_message
+    answer_card_start = chat_message.index("<!-- Answer card -->")
+    footer_start = chat_message.index("<!-- Footer Bar", answer_card_start)
+    answer_card_source = chat_message[answer_card_start:footer_start]
+
+    for stale_panel in [
+        "Evidence audit",
+        "Evidence boundary and claim checks",
+        "Context boundary manifest",
+        "Context-only memory",
+        "Citation evidence",
+        "handleCitationToggle",
+    ]:
+        assert stale_panel not in answer_card_source
+
+
+def test_activity_panel_surfaces_research_evidence_sidecar():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    chat_page = (frontend_root / "pages" / "ChatPage.vue").read_text(encoding="utf-8")
+    activity_panel = (frontend_root / "components" / "ActivityPanel.vue").read_text(encoding="utf-8")
+
+    assert "displayResearchSidecar" in chat_page
+    assert ":researchSidecar=\"displayResearchSidecar\"" in chat_page
+    assert "researchSidecar" in activity_panel
+    assert "researchEvidenceExpanded" in activity_panel
+    assert "引用证据" in activity_panel
+    assert "证据审计" in activity_panel
+    assert "上下文边界" in activity_panel
+    assert "citation.source_type" in activity_panel
+    assert "audit.approved_claim_count" in activity_panel
 
 
 def test_agent_api_exposes_web_and_database_evidence_ingestion():
@@ -145,15 +185,13 @@ def test_chat_page_surfaces_source_evidence_ingestion_controls():
 
 def test_chat_message_surfaces_context_memory_conflicts():
     frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
-    chat_message = (frontend_root / "components" / "ChatMessage.vue").read_text(encoding="utf-8")
+    activity_panel = (frontend_root / "components" / "ActivityPanel.vue").read_text(encoding="utf-8")
     message_types = (frontend_root / "types" / "message.ts").read_text(encoding="utf-8")
     agent_api = (frontend_root / "api" / "agent.ts").read_text(encoding="utf-8")
 
-    assert "memory.memory_status === 'conflict'" in chat_message
-    assert "Conflicts with" in chat_message
-    assert "memory.conflicts_with" in chat_message
-    assert "Resolve conflict" in chat_message
-    assert "memory.memory_status === 'conflict' ? 'Resolve conflict' : 'Forget'" in chat_message
+    assert "memory.memory_status === 'conflict'" in activity_panel
+    assert "conflicts_with" in activity_panel
+    assert "冲突" in activity_panel
     assert "memory_status?: 'active' | 'conflict'" in message_types
     assert "conflicts_with?: string[]" in message_types
     assert "context_memory_conflict_count?: number" in message_types
@@ -174,19 +212,19 @@ def test_frontend_types_expose_research_context_boundaries():
 
 
 def test_chat_message_surfaces_research_context_boundary_manifest():
-    chat_message = (
+    activity_panel = (
         Path(__file__).resolve().parents[2]
         / "frontend"
         / "src"
         / "components"
-        / "ChatMessage.vue"
+        / "ActivityPanel.vue"
     ).read_text(encoding="utf-8")
 
-    assert "researchContextBoundaries" in chat_message
-    assert "Context boundary manifest" in chat_message
-    assert "context_boundaries" in chat_message
-    assert "Model reasoning" in chat_message
-    assert "Process trace" in chat_message
+    assert "researchSidecar.context_boundaries" in activity_panel
+    assert "上下文边界" in activity_panel
+    assert "context_boundaries" in activity_panel
+    assert "model_reasoning" in activity_panel
+    assert "process_trace" in activity_panel
 
 
 def test_chat_message_surfaces_report_reader_summary_metadata():

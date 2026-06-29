@@ -188,6 +188,128 @@
         </template>
 
         <!-- ═══ Tools Section ═══ -->
+        <template v-if="researchSidecar">
+          <div
+            @click="researchEvidenceExpanded = !researchEvidenceExpanded"
+            class="flex-shrink-0 flex items-center gap-2 cursor-pointer select-none group/sec px-4 py-2.5 border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors"
+          >
+            <ChevronRightIcon :size="12"
+              class="text-gray-400 dark:text-gray-500 transition-transform duration-150 flex-shrink-0"
+              :class="{ 'rotate-90': researchEvidenceExpanded }" />
+            <ShieldCheck :size="13" class="text-emerald-500 flex-shrink-0" />
+            <span class="text-[12px] font-semibold transition-colors"
+              :class="researchEvidenceExpanded ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500 group-hover/sec:text-gray-600 dark:group-hover/sec:text-gray-300'">
+              研究证据
+            </span>
+            <span class="text-[10px] text-gray-400 dark:text-gray-500 font-bold tabular-nums ml-auto bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded-md">
+              {{ researchSidecar.citations?.length || 0 }}
+            </span>
+          </div>
+          <div v-if="researchEvidenceExpanded" class="border-b border-gray-100 dark:border-gray-800 px-4 py-2 overflow-y-auto min-h-0 section-content-enter" style="flex: 1 1 0%; min-height: 80px;">
+            <div class="flex flex-col gap-2 text-[11px] leading-[1.5] text-[var(--text-secondary)]">
+              <div v-if="researchSidecar.audit" class="rounded-lg border border-[var(--border-light)] bg-[var(--fill-tsp-gray-main)] px-3 py-2">
+                <div class="mb-1.5 flex items-center gap-2">
+                  <span class="font-semibold text-[var(--text-secondary)]">证据审计</span>
+                  <span class="rounded-md px-1.5 py-0.5 font-mono text-[10px]" :class="researchAuditStatusClass(researchSidecar.audit.status)">
+                    {{ researchSidecar.audit.status }}
+                  </span>
+                  <span class="ml-auto font-mono text-[10px] text-[var(--text-tertiary)]">
+                    {{ researchSidecar.audit.approved_claim_count }}/{{ researchSidecar.audit.claim_count }}
+                  </span>
+                </div>
+                <div class="flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] text-[var(--text-tertiary)]">
+                  <span>approved={{ researchSidecar.audit.approved_claim_count }}</span>
+                  <span>unsupported={{ researchSidecar.audit.unsupported_claim_count }}</span>
+                  <span>invalid={{ researchSidecar.audit.invalid_source_count }}</span>
+                </div>
+                <div v-if="researchSidecar.audit.claims.length" class="mt-2 flex flex-col gap-1">
+                  <div
+                    v-for="(claim, claimIndex) in researchSidecar.audit.claims"
+                    :key="`${claim.status}-${claimIndex}`"
+                    class="rounded-md border border-[var(--border-light)] bg-[var(--background-menu-white)] px-2 py-1.5"
+                  >
+                    <div class="flex items-start gap-2">
+                      <span class="min-w-0 flex-1 text-[var(--text-secondary)]">{{ claim.claim_text }}</span>
+                      <span class="shrink-0 font-mono text-[10px]" :class="claim.status === 'approved' ? 'text-emerald-600 dark:text-emerald-300' : 'text-amber-600 dark:text-amber-300'">
+                        {{ claim.status }}
+                      </span>
+                    </div>
+                    <div v-if="claim.notes.length" class="mt-1 text-[10px] text-[var(--text-tertiary)]">
+                      {{ claim.notes.join(' ') }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="researchSidecar.citations?.length" class="rounded-lg border border-[var(--border-light)] bg-[var(--fill-tsp-gray-main)] px-3 py-2">
+                <div class="mb-1.5 flex items-center justify-between gap-2">
+                  <span class="font-semibold text-[var(--text-secondary)]">引用证据</span>
+                  <span class="font-mono text-[10px] text-[var(--text-tertiary)]">{{ researchSidecar.citations.length }}</span>
+                </div>
+                <div class="flex flex-col gap-1.5">
+                  <div
+                    v-for="citation in researchSidecar.citations"
+                    :key="citation.evidence_id"
+                    class="rounded-md border border-[var(--border-light)] bg-[var(--background-menu-white)] px-2 py-1.5"
+                  >
+                    <div class="flex items-center gap-2">
+                      <span class="min-w-0 flex-1 truncate font-semibold text-[var(--text-secondary)]">{{ citation.citation_label }}</span>
+                      <span class="shrink-0 font-mono text-[10px] uppercase text-[var(--text-tertiary)]">{{ citation.source_type }}</span>
+                    </div>
+                    <div class="mt-0.5 truncate text-[10px] text-[var(--text-tertiary)]">
+                      {{ citation.title }} · {{ citation.section }}<span v-if="citation.page_start"> · p. {{ citation.page_start }}<template v-if="citation.page_end && citation.page_end !== citation.page_start">-{{ citation.page_end }}</template></span>
+                    </div>
+                    <div class="mt-1 line-clamp-3 whitespace-pre-wrap text-[11px] text-[var(--text-secondary)]">
+                      {{ citation.quote }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div v-if="researchSidecar.context_boundaries" class="rounded-lg border border-[var(--border-light)] bg-[var(--fill-tsp-gray-main)] px-3 py-2">
+                <div class="mb-1.5 font-semibold text-[var(--text-secondary)]">上下文边界</div>
+                <div class="grid gap-1 font-mono text-[10px] text-[var(--text-tertiary)]">
+                  <span>citation={{ formatBoundaryValues(researchSidecar.context_boundaries.citation_evidence) }}</span>
+                  <span>memory={{ formatBoundaryValues(researchSidecar.context_boundaries.context_only_memory) }}</span>
+                  <span>trace={{ formatBoundaryValues(researchSidecar.context_boundaries.process_trace) }}</span>
+                  <span>reasoning={{ formatBoundaryValues(researchSidecar.context_boundaries.model_reasoning) }}</span>
+                </div>
+              </div>
+
+              <div v-if="researchSidecar.context_memory?.length" class="rounded-lg border border-[var(--border-light)] bg-[var(--fill-tsp-gray-main)] px-3 py-2">
+                <div class="mb-1.5 flex items-center justify-between gap-2">
+                  <span class="font-semibold text-[var(--text-secondary)]">上下文记忆</span>
+                  <span class="font-mono text-[10px] text-[var(--text-tertiary)]">{{ researchSidecar.context_memory.length }}</span>
+                </div>
+                <div class="flex flex-col gap-1.5">
+                  <div
+                    v-for="memory in researchSidecar.context_memory"
+                    :key="memory.memory_id"
+                    class="rounded-md border border-[var(--border-light)] bg-[var(--background-menu-white)] px-2 py-1.5"
+                  >
+                    <div class="flex items-center gap-2">
+                      <span class="min-w-0 flex-1 truncate font-semibold text-[var(--text-secondary)]">{{ memory.title || memory.memory_id }}</span>
+                      <span
+                        v-if="memory.memory_status === 'conflict'"
+                        class="shrink-0 rounded-md bg-amber-50 px-1.5 py-0.5 font-mono text-[10px] text-amber-700 dark:bg-amber-950/30 dark:text-amber-300"
+                      >
+                        冲突
+                      </span>
+                      <span class="shrink-0 font-mono text-[10px] text-[var(--text-tertiary)]">{{ memory.layer }}</span>
+                    </div>
+                    <div class="mt-1 line-clamp-2 whitespace-pre-wrap text-[11px] text-[var(--text-secondary)]">
+                      {{ memory.content }}
+                    </div>
+                    <div v-if="memory.conflicts_with?.length" class="mt-1 text-[10px] text-[var(--text-tertiary)]">
+                      conflicts_with={{ memory.conflicts_with.join(',') }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+
         <template v-if="toolItems.length > 0 || isLoading">
           <!-- Tools header -->
           <div
@@ -411,7 +533,7 @@ import { useI18n } from 'vue-i18n';
 const { t } = useI18n();
 import LoadingSpinnerIcon from './icons/LoadingSpinnerIcon.vue';
 import SandboxPreview from './SandboxPreview.vue';
-import type { ToolContent } from '../types/message';
+import type { ResearchAnswerMetadata, ToolContent } from '../types/message';
 import type { PlanEventData } from '../types/event';
 import type { RuntimeResultAudit, RuntimeResultAuditFilters } from '../api/agent';
 import type { SandboxPreviewMode } from '../utils/sandbox';
@@ -435,6 +557,7 @@ const props = withDefaults(defineProps<{
   isLoading: boolean;
   lastTurnHadError?: boolean;
   runtimeAudit?: RuntimeResultAudit | null;
+  researchSidecar?: ResearchAnswerMetadata | null;
 }>(), { lastTurnHadError: false });
 
 const emit = defineEmits<{
@@ -470,6 +593,7 @@ const toolsExpanded = ref(true);
 const runtimeAuditExpanded = ref(false);
 const sourceQualityExpanded = ref(false);
 const evidenceAdmissionExpanded = ref(false);
+const researchEvidenceExpanded = ref(true);
 const selectedRuntimeAuditPack = ref('all');
 
 // Step filter: when a To-do step is selected, only show its associated tools
@@ -550,6 +674,24 @@ const evidenceAdmissionSteps = computed(() =>
     .map(step => ({ step, admission: step.metadata?.evidence_admission }))
     .filter((item): item is { step: ActivityPlanStep; admission: EvidenceAdmission } => !!item.admission)
 );
+
+const formatBoundaryValues = (values?: string[]) => {
+  return values?.length ? values.join(',') : 'none';
+};
+
+const researchAuditStatusClass = (status: string) => {
+  switch (status) {
+    case 'approved':
+      return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300';
+    case 'partial':
+    case 'unsupported':
+      return 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300';
+    case 'invalid_source':
+      return 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300';
+    default:
+      return 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300';
+  }
+};
 
 const runtimeAuditPackOptions = computed(() => {
   const packCounts = new Map<string, { id: string; label: string; count: number }>();
