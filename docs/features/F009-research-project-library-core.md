@@ -120,7 +120,7 @@ In Progress. The first vertical slice now creates/lists Research Projects, lists
 | Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
 | --- | --- | --- | --- | --- | --- | --- |
 | F009.1 | 2026-06-29 | `5bf49d8` | Real E2E validation showed the Research Library create action did not complete. | Fixed chat child routes were declared after `:sessionId`, and the running backend did not initialize `research_assistant/storage/schema.sql` on startup. | Static route-order contract test, research schema initialization unit test, PostgreSQL table check, and browser E2E project creation. | verified |
-| F009.2 | 2026-06-29 | pending | Real PDF upload from Research Library returned 500 before a paper asset became visible. | Ingestion storage accepted parser output that could contain NUL bytes and used full chunk text as citation quote, exceeding PostgreSQL text/index constraints. | Repository regression tests plus real `paper_data` PDF E2E showing one indexed paper with 19 chunks and 19 citation evidence records in the Library UI. | verified |
+| F009.2 | 2026-06-29 | `353307c` | Real PDF upload from Research Library returned 500 before a paper asset became visible. | Ingestion storage accepted parser output that could contain NUL bytes and used full chunk text as citation quote, exceeding PostgreSQL text/index constraints. | Repository regression tests plus real `paper_data` PDF E2E showing one indexed paper with 19 chunks and 19 citation evidence records in the Library UI. | verified |
 
 ## Evidence
 

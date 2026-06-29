@@ -111,7 +111,7 @@ In Progress. Initial ingestion/parser/indexing slices have verification evidence
 
 | Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| F003.1 | 2026-06-29 | pending | Uploading a real PDF from `paper_data` into Research Library returned 500 during indexing. | Parsed PDF text contained NUL bytes rejected by PostgreSQL text, and full chunk text used as citation quote exceeded the B-tree unique-index row limit. | Storage-boundary tests for NUL removal and bounded evidence quotes; full chunk text remains in `research_chunks.content`; real PDF E2E verified 19 chunks, 19 evidence records, and 19 embeddings. | verified |
+| F003.1 | 2026-06-29 | `353307c` | Uploading a real PDF from `paper_data` into Research Library returned 500 during indexing. | Parsed PDF text contained NUL bytes rejected by PostgreSQL text, and full chunk text used as citation quote exceeded the B-tree unique-index row limit. | Storage-boundary tests for NUL removal and bounded evidence quotes; full chunk text remains in `research_chunks.content`; real PDF E2E verified 19 chunks, 19 evidence records, and 19 embeddings. | verified |
 
 ## Evidence
 
