@@ -115,7 +115,7 @@ Pure LLM routing was deferred because deterministic product boundaries such as "
 
 | Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
 | --- | --- | --- | --- | --- | --- | --- |
-| F013.1 | 2026-06-29 | pending | Whole-paper summary requests used the same ordinary top-k RAG path as local evidence questions, risking missed sections. | The answer flow had only skip vs retrieval admission; it did not classify research task type before selecting workflow. | Route tests, whole-paper summary answer test, database source identity test, route trace/frontend contracts, full backend suite, type-check, and build. | verified |
+| F013.1 | 2026-06-29 | `61a303b` | Whole-paper summary requests used the same ordinary top-k RAG path as local evidence questions, risking missed sections. | The answer flow had only skip vs retrieval admission; it did not classify research task type before selecting workflow. | Route tests, whole-paper summary answer test, database source identity test, route trace/frontend contracts, full backend suite, type-check, and build. | verified |
 
 ## Evidence
 
