@@ -23,7 +23,7 @@
         :class="isResearchLibraryActive
           ? 'bg-gradient-to-br from-emerald-500 to-cyan-600 text-white shadow-md shadow-emerald-500/25'
           : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300'"
-        title="Research Library"
+        title="研究库"
       >
         <BookOpen :size="19" :stroke-width="isResearchLibraryActive ? 2.5 : 1.8" />
         <div v-if="isResearchLibraryActive" class="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-gradient-to-b from-emerald-400 to-cyan-500 rounded-r-full"></div>

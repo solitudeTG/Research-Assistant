@@ -52,6 +52,19 @@ def test_frontend_exposes_research_library_project_contracts():
     assert library_page.is_file()
 
 
+def test_research_library_page_uses_chinese_workbench_copy():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    library_page = (frontend_root / "pages" / "ResearchLibraryPage.vue").read_text(encoding="utf-8")
+    left_panel = (frontend_root / "components" / "LeftPanel.vue").read_text(encoding="utf-8")
+
+    for copy in ["研究库", "研究课题", "新建课题", "上传论文", "可引用证据", "暂无论文"]:
+        assert copy in library_page
+    assert 'title="研究库"' in left_panel
+
+    for stale_copy in ["Research Library", "New Project", "Create Project", "Upload Paper", "No papers in this project"]:
+        assert stale_copy not in library_page
+
+
 def test_frontend_exposes_session_project_binding_contracts():
     frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
     agent_api = (frontend_root / "api" / "agent.ts").read_text(encoding="utf-8")
