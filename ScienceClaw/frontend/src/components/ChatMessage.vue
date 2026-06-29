@@ -9,7 +9,7 @@
       <div
         class="relative flex flex-col items-center rounded-2xl overflow-hidden bg-gradient-to-br from-blue-500 to-indigo-600 text-white p-3.5 ltr:rounded-br-sm rtl:rounded-bl-sm shadow-lg shadow-blue-500/15">
         <template v-for="(part, index) in parseContent(messageContent.content)" :key="index">
-          <div v-if="part.type === 'html'" v-html="part.content" class="w-full text-white/95 [&_a]:text-white [&_a]:underline [&_code]:bg-white/20 [&_code]:rounded [&_code]:px-1"></div>
+          <div v-if="part.type === 'html'" v-html="part.content" class="user-message-content w-full text-white/95 [&_a]:text-white [&_a]:underline [&_code]:bg-white/20 [&_code]:rounded [&_code]:px-1"></div>
           <molecule-viewer v-else-if="part.type === 'molecule'" :src="part.src || ''" class="w-full my-2" />
           <image-viewer v-else-if="part.type === 'image'" :src="part.src || ''" :alt="part.alt" class="w-full my-2" />
           <html-viewer v-else-if="part.type === 'html-file'" :src="part.src || ''" class="w-full my-2" />
@@ -1116,6 +1116,11 @@ const parseContent = (markdown: string) => {
   word-wrap: break-word;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+}
+
+.user-message-content {
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* ===== 标题样式 ===== */

@@ -38,6 +38,20 @@ def test_chat_message_keeps_research_evidence_out_of_answer_card():
         assert stale_panel not in answer_card_source
 
 
+def test_chat_message_user_bubble_wraps_long_research_prompts():
+    chat_message = (
+        Path(__file__).resolve().parents[2]
+        / "frontend"
+        / "src"
+        / "components"
+        / "ChatMessage.vue"
+    ).read_text(encoding="utf-8")
+
+    assert "user-message-content" in chat_message
+    assert "overflow-wrap: anywhere" in chat_message
+    assert "word-break: break-word" in chat_message
+
+
 def test_activity_panel_surfaces_research_evidence_sidecar():
     frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
     chat_page = (frontend_root / "pages" / "ChatPage.vue").read_text(encoding="utf-8")

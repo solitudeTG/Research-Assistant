@@ -109,11 +109,14 @@ In Progress. ScienceClaw baseline is present and being adapted incrementally.
 
 ## Patch History
 
-None yet.
+| Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| F002.1 | 2026-06-29 | pending | Long research prompts containing paper titles or filenames were visually clipped inside the user message bubble. | User message HTML did not have long-token wrapping rules, while the gradient bubble used `overflow-hidden`. | Frontend contract requires `.user-message-content` with `overflow-wrap: anywhere` and `word-break: break-word`. | verified |
 
 ## Evidence
 
 Detailed historical evidence remains in `F001` until each workstream moves its verification records into the owning Feature.
+- 2026-06-29 user bubble layout verification: `pytest ScienceClaw/backend/tests/test_research_frontend_contracts.py -q` -> `37 passed`; `npm.cmd run type-check` -> passed; `npm.cmd run build` -> passed with existing Browserslist/CSS/chunk-size warnings. Browser automation reached the authenticated chat UI, but did not produce a stable target user-bubble DOM assertion.
 
 ## Recovery Snapshot
 
