@@ -90,3 +90,27 @@ def test_ingest_uploaded_pdf_uses_parser_document_with_page_identity(tmp_path: P
     assert result.chunks[0].source.section == "Introduction"
     assert result.chunks[0].source.page == 3
     assert result.chunks[0].text == "PDF evidence keeps page identity."
+
+
+def test_ingest_uploaded_paper_can_namespace_paper_identity(tmp_path: Path):
+    paper = tmp_path / "sample-paper.txt"
+    paper.write_text("Title: Same Paper\n\n1 Intro\nSame text.", encoding="utf-8")
+
+    session_result = ingest_uploaded_paper(
+        file_path=paper,
+        session_id="session-1",
+        user_id="user-1",
+        workspace_dir=tmp_path / "session",
+        paper_id_namespace="session:session-1",
+    )
+    project_result = ingest_uploaded_paper(
+        file_path=paper,
+        session_id="research-library-project-1",
+        user_id="user-1",
+        workspace_dir=tmp_path / "project",
+        paper_id_namespace="project:project-1",
+    )
+
+    assert session_result.paper.paper_id != project_result.paper.paper_id
+    assert session_result.chunks[0].source.paper_id == session_result.paper.paper_id
+    assert project_result.chunks[0].source.paper_id == project_result.paper.paper_id

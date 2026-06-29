@@ -532,6 +532,7 @@ const props = defineProps<{
   isLast?: boolean;
   isLoading?: boolean;
   researchLibraryPromotionCandidate?: ResearchLibraryPromotionCandidate | null;
+  promotedResearchLibraryPaths?: string[];
   canPromoteToResearchLibrary?: boolean;
 }>();
 
@@ -599,19 +600,34 @@ const researchLibraryPromotionCandidate = computed<ResearchLibraryPromotionCandi
   }
 
   if (props.researchLibraryPromotionCandidate?.sandboxPath) {
+    if (props.promotedResearchLibraryPaths?.includes(props.researchLibraryPromotionCandidate.sandboxPath)) {
+      return null;
+    }
     return props.researchLibraryPromotionCandidate;
   }
 
   const research = messageContent.value.metadata?.research_assistant;
+  if (research && research.temporary !== true && research.evidence_scope !== 'session') {
+    return null;
+  }
   const sandboxPath = research?.sandbox_path || research?.source_path;
   if (typeof sandboxPath === 'string' && sandboxPath.trim()) {
+    if (props.promotedResearchLibraryPaths?.includes(sandboxPath)) {
+      return null;
+    }
     return {
       sandboxPath,
       title: typeof research?.title === 'string' ? research.title : undefined,
     };
   }
 
-  const researchFile = roundFiles.value.find((file) => file.category === 'research_data' && file.file_id);
+  const researchFile = roundFiles.value.find((file) => {
+    const researchMetadata = (file as any).metadata?.research_assistant;
+    return file.category === 'research_data'
+      && file.file_id
+      && (researchMetadata?.temporary === true || researchMetadata?.evidence_scope === 'session')
+      && !props.promotedResearchLibraryPaths?.includes(file.file_id);
+  });
   if (researchFile) {
     return {
       sandboxPath: researchFile.file_id,

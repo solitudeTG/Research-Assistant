@@ -39,12 +39,12 @@
                         <div class="text-xs text-[var(--text-tertiary)]">
                             <div v-if="file.status === 'failed'"
                                 class="text-[var(--function-error)] text-xs flex items-center gap-1">
-                                {{ t('Upload failed') }}
+                                {{ file.errorMessage || t('Upload failed') }}
                                 <RefreshCcw @click.stop="retryUpload(file)" class="clickable hover:opacity-85 cursor-pointer"
                                     :size="14" />
                             </div>
                             <div v-else-if="file.status === 'uploading'">{{ t('Uploading...') }}</div>
-                            <div v-else>{{ getFileTypeText(file.filename) }} · {{ formatFileSize(file.size) }}</div>
+                            <div v-else>{{ fileSubtitle(file) }}</div>
                         </div>
                     </div>
                 </div>
@@ -93,6 +93,7 @@ const { showFilePanel } = useFilePanel();
 interface ExtendedFileInfo extends FileInfo {
     status?: 'uploading' | 'success' | 'failed' | 'local';
     file?: File | null;
+    errorMessage?: string;
 }
 
 const files = ref<ExtendedFileInfo[]>([...props.attachments]);
@@ -168,6 +169,7 @@ const processFileUpload = async (file: File) => {
         const index = files.value.findIndex(f => f.file_id === tempFileInfo.file_id);
         if (index !== -1) {
             files.value[index].status = 'failed';
+            files.value[index].errorMessage = uploadErrorMessage(error);
         }
     }
 };
@@ -199,7 +201,25 @@ const retryUpload = async (fileInfo: ExtendedFileInfo) => {
     } catch (error) {
         console.error('Retry upload failed:', error);
         fileInfo.status = 'failed';
+        fileInfo.errorMessage = uploadErrorMessage(error);
     }
+};
+
+const uploadErrorMessage = (error: unknown): string => {
+    const detail = (error as any)?.response?.data?.detail;
+    if (typeof detail === 'string' && detail.trim()) {
+        return detail;
+    }
+    return t('Upload failed');
+};
+
+const fileSubtitle = (file: ExtendedFileInfo): string => {
+    const research = file.metadata?.research_assistant;
+    const prefix = research?.temporary === true || research?.evidence_scope === 'session'
+        ? '临时材料'
+        : '';
+    const base = `${getFileTypeText(file.filename)} · ${formatFileSize(file.size)}`;
+    return prefix ? `${prefix} · ${base}` : base;
 };
 
 // Check scroll position and update button visibility
@@ -286,6 +306,7 @@ const uploadPendingFiles = async (sessionId: string): Promise<FileInfo[]> => {
             } catch (error) {
                 console.error('Upload failed:', error);
                 f.status = 'failed';
+                f.errorMessage = uploadErrorMessage(error);
             }
         } else if (f.status === 'success') {
             uploaded.push(f);

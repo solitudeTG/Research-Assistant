@@ -35,6 +35,7 @@ export interface ResearchCitationMetadata {
   quote: string;
   citation_label: string;
   source_type: 'paper' | 'web' | 'database';
+  evidence_scope?: 'session' | 'project' | string;
 }
 
 export interface ResearchContextMemoryMetadata {
@@ -94,6 +95,8 @@ export interface ResearchAnswerMetadata {
   title?: string;
   sandbox_path?: string;
   source_path?: string;
+  evidence_scope?: 'session' | 'project' | string;
+  temporary?: boolean;
   citations?: ResearchCitationMetadata[];
   citation_count?: number;
   context_memory?: ResearchContextMemoryMetadata[];

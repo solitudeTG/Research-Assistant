@@ -34,6 +34,7 @@ export interface ResearchCitation {
   quote: string;
   citation_label: string;
   source_type: 'paper' | 'web' | 'database';
+  evidence_scope?: 'session' | 'project' | string;
 }
 
 export interface ResearchContextMemory {

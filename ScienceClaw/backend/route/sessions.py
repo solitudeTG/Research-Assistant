@@ -1777,6 +1777,11 @@ async def upload_session_file(
 
         target_path = workspace_dir / safe_filename
         if target_path.exists():
+            if is_research_document(target_path):
+                raise HTTPException(
+                    status_code=409,
+                    detail="当前会话中已存在同名临时材料",
+                )
             stem = target_path.stem
             suffix = target_path.suffix
             i = 1
@@ -1825,9 +1830,13 @@ async def upload_session_file(
                     session_id=session_id,
                     user_id=current_user.id,
                     workspace_dir=workspace_dir,
+                    paper_id_namespace=f"session:{session_id}",
                 )
                 metadata["research_assistant"] = {
                     "status": "ingested",
+                    "evidence_scope": "session",
+                    "temporary": True,
+                    "project_id": None,
                     "paper_id": ingestion.paper.paper_id,
                     "title": ingestion.paper.title,
                     "authors": ingestion.paper.authors,
@@ -1873,6 +1882,8 @@ async def upload_session_file(
                         {
                             "status": "indexed",
                             "stored_in": "postgresql",
+                            "evidence_scope": "session",
+                            "temporary": True,
                             "evidence_record_count": indexing_summary.evidence_record_count,
                             "embedding_count": indexing_summary.embedding_count,
                             "embedding_model": indexing_summary.embedding_model,
@@ -2038,6 +2049,11 @@ async def upload_research_project_paper_for_user(
 
         target_path = workspace_dir / safe_filename
         if target_path.exists():
+            if is_research_document(target_path):
+                raise HTTPException(
+                    status_code=409,
+                    detail="研究库中已存在同名论文",
+                )
             stem = target_path.stem
             suffix = target_path.suffix
             i = 1
@@ -2054,6 +2070,7 @@ async def upload_research_project_paper_for_user(
             session_id=library_session_id,
             user_id=current_user.id,
             workspace_dir=workspace_dir,
+            paper_id_namespace=f"project:{project_id}",
         )
         indexing_summary = await index_ingestion_result(
             database_url=settings.research_database_url,
@@ -2065,6 +2082,8 @@ async def upload_research_project_paper_for_user(
         return ApiResponse(
             data={
                 "project_id": project_id,
+                "evidence_scope": "project",
+                "temporary": False,
                 "paper_id": ingestion.paper.paper_id,
                 "title": ingestion.paper.title,
                 "authors": ingestion.paper.authors,
@@ -2121,12 +2140,10 @@ async def promote_session_paper_to_research_library(
 
         target_path = workspace_dir / source_path.name
         if target_path.exists():
-            stem = target_path.stem
-            suffix = target_path.suffix
-            i = 1
-            while target_path.exists():
-                target_path = workspace_dir / f"{stem}_{i}{suffix}"
-                i += 1
+            raise HTTPException(
+                status_code=409,
+                detail="研究库中已存在同名论文",
+            )
 
         promote_step_id = f"research-promote-{_new_event_id()}"
         await _append_save_publish_session_event(
@@ -2153,6 +2170,7 @@ async def promote_session_paper_to_research_library(
                 session_id=library_session_id,
                 user_id=current_user.id,
                 workspace_dir=workspace_dir,
+                paper_id_namespace=f"project:{project_id}",
             )
             indexing_summary = await index_ingestion_result(
                 database_url=settings.research_database_url,
@@ -2184,6 +2202,8 @@ async def promote_session_paper_to_research_library(
 
         result = {
             "project_id": project_id,
+            "evidence_scope": "project",
+            "temporary": False,
             "source_session_id": session_id,
             "source_path": str(source_path),
             "library_path": str(target_path),

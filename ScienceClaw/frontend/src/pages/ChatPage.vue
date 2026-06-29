@@ -310,6 +310,7 @@
             <ChatMessage v-else-if="group.type === 'single' && group.message" :message="group.message"
               @toolClick="handleToolClick" @suggestionClick="handleSuggestionClick" @convertToPdf="handleConvertToPdf" @generateResearchReport="handleGenerateResearchReport" @promoteToResearchLibrary="handlePromoteToResearchLibrary" :mode="mode"
               :researchLibraryPromotionCandidate="group.message.type === 'assistant' && index === groupedMessages.length - 1 ? latestResearchLibraryPromotionCandidate : null"
+              :promotedResearchLibraryPaths="Array.from(promotedResearchLibraryPaths)"
               :canPromoteToResearchLibrary="!!currentResearchProject"
               :sessionId="sessionId" :isLast="index === lastProcessGroupIndex" :isLoading="isLoading" />
           </template>
@@ -603,6 +604,7 @@ const selectedResearchProjectId = ref('');
 const currentResearchProject = ref<agentApi.ResearchProject | null>(null);
 const researchProjectLoading = ref(false);
 const latestResearchLibraryPromotionCandidate = ref<{ sandboxPath: string; title?: string } | null>(null);
+const promotedResearchLibraryPaths = ref<Set<string>>(new Set());
 const researchLibraryPromoting = ref(false);
 const sourceEvidenceOpen = ref(false);
 const sourceEvidenceKind = ref<'web' | 'database'>('web');
@@ -1182,7 +1184,10 @@ const hasIndexedResearchAttachment = (files: FileInfo[]) => {
 };
 
 const getResearchLibraryPromotionCandidate = (files: FileInfo[]) => {
-  const file = files.find((candidate) => candidate.metadata?.research_assistant?.status === 'indexed');
+  const file = files.find((candidate) => {
+    const research = candidate.metadata?.research_assistant;
+    return research?.status === 'indexed' && (research?.temporary === true || research?.evidence_scope === 'session');
+  });
   if (!file) return null;
   const sandboxPath = file.metadata?.sandbox_path || file.file_id;
   if (typeof sandboxPath !== 'string' || !sandboxPath.trim()) return null;
@@ -1442,6 +1447,7 @@ const handlePromoteToResearchLibrary = async (payload: { sandboxPath: string; ti
       project_id: currentResearchProject.value.project_id,
       sandbox_path: payload.sandboxPath,
     });
+    promotedResearchLibraryPaths.value = new Set([...promotedResearchLibraryPaths.value, payload.sandboxPath]);
     latestResearchLibraryPromotionCandidate.value = null;
     await loadSessionResearchProject(sessionId.value);
     activateResearchMode();
@@ -1449,7 +1455,8 @@ const handlePromoteToResearchLibrary = async (payload: { sandboxPath: string; ti
   } catch (error) {
     console.error('Research Library promotion error:', error);
     lastTurnHadError.value = true;
-    showErrorToast(t('加入研究库失败'));
+    const detail = (error as any)?.response?.data?.detail;
+    showErrorToast(typeof detail === 'string' && detail.trim() ? detail : t('加入研究库失败'));
   } finally {
     researchLibraryPromoting.value = false;
   }

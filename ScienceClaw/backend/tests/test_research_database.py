@@ -123,6 +123,7 @@ async def test_list_whole_paper_evidence_in_database_handles_json_source_identit
             "page_end": 1,
             "quote": "The paper introduces the research problem.",
             "source_identity": '{"doi":"10.1000/test"}',
+            "evidence_scope": "session",
             "paper_order": 1.0,
         }
     ]
@@ -141,6 +142,7 @@ async def test_list_whole_paper_evidence_in_database_handles_json_source_identit
     )
 
     assert hits[0].source_identity == {"doi": "10.1000/test"}
+    assert hits[0].evidence_scope == "session"
     assert hits[0].rank_score == 1.0
     assert fake_connection.closed is True
 

@@ -27,6 +27,7 @@ async def test_answer_research_question_uses_only_citation_evidence(monkeypatch)
                 page_end=3,
                 quote="Hybrid retrieval combines lexical matching with vector search.",
                 rank_score=0.9,
+                evidence_scope="session",
             )
         ]
 
@@ -56,6 +57,8 @@ async def test_answer_research_question_uses_only_citation_evidence(monkeypatch)
     assert answer.citations[0].chunk_id == "chunk-1"
     assert answer.citations[0].quote.startswith("Hybrid retrieval")
     assert answer.citations[0].source_type == "paper"
+    assert answer.citations[0].evidence_scope == "session"
+    assert answer.to_dict()["citations"][0]["evidence_scope"] == "session"
     assert answer.citation_count == 1
     assert answer.answer_id.startswith("research-answer-")
     assert answer.to_dict()["answer_id"] == answer.answer_id

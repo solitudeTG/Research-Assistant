@@ -76,6 +76,7 @@ class ResearchCitation:
     citation_label: str
     source_type: str = "paper"
     source_identity: dict[str, Any] = field(default_factory=dict)
+    evidence_scope: str = "session"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -228,6 +229,7 @@ def _citations_from_hits(hits: list[Any]) -> list[ResearchCitation]:
             citation_label=hit.citation_label,
             source_type=hit.source_type,
             source_identity=hit.source_identity,
+            evidence_scope=hit.evidence_scope,
         )
         for hit in hits
     ]

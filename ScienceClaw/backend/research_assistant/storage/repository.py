@@ -401,6 +401,7 @@ async def persist_ingestion_result(
     *,
     project_id: str | None = None,
 ) -> PersistSummary:
+    evidence_scope = "project" if project_id else "session"
     async with connection.transaction():
         await connection.execute(
             """
@@ -444,6 +445,9 @@ async def persist_ingestion_result(
                     "file_path": result.paper.file_path,
                     "manifest_path": result.artifact.manifest_path,
                     "evidence_preview_path": result.artifact.evidence_preview_path,
+                    "evidence_scope": evidence_scope,
+                    "project_id": project_id,
+                    "session_id": result.paper.session_id,
                 }
             ),
         )
@@ -484,6 +488,9 @@ async def persist_ingestion_result(
                             "file_path": chunk.source.file_path,
                             "section": chunk.source.section,
                             "page": chunk.source.page,
+                            "evidence_scope": evidence_scope,
+                            "project_id": project_id,
+                            "session_id": result.paper.session_id,
                         }
                     ),
                 )
@@ -522,6 +529,9 @@ async def persist_ingestion_result(
                             "file_path": chunk.source.file_path,
                             "section": chunk.source.section,
                             "page": chunk.source.page,
+                            "evidence_scope": evidence_scope,
+                            "project_id": project_id,
+                            "session_id": result.paper.session_id,
                         }
                     ),
                 )

@@ -218,8 +218,12 @@ async def list_whole_paper_evidence_in_database(
             WITH target_paper AS (
                 SELECT p.paper_id
                 FROM research_papers p
-                WHERE (($2::text IS NULL AND p.session_id = $1) OR p.project_id = $2)
-                ORDER BY p.updated_at DESC, p.created_at DESC, p.paper_id DESC
+                WHERE (p.session_id = $1 OR ($2::text IS NOT NULL AND p.project_id = $2))
+                ORDER BY
+                    CASE WHEN p.session_id = $1 THEN 0 ELSE 1 END,
+                    p.updated_at DESC,
+                    p.created_at DESC,
+                    p.paper_id DESC
                 LIMIT 1
             )
             SELECT
@@ -233,6 +237,7 @@ async def list_whole_paper_evidence_in_database(
                 er.page_end,
                 er.quote,
                 er.source_identity,
+                CASE WHEN p.project_id IS NULL THEN 'session' ELSE 'project' END AS evidence_scope,
                 row_number() OVER (
                     ORDER BY
                         COALESCE(er.page_start, c.page_start, 2147483647),
@@ -266,6 +271,7 @@ async def list_whole_paper_evidence_in_database(
                 quote=str(row["quote"]),
                 rank_score=1.0 / float(row["paper_order"]),
                 source_identity=_source_identity_dict(row["source_identity"]),
+                evidence_scope=str(_row_value(row, "evidence_scope") or "session"),
             )
             hits.append(hit)
         return hits
@@ -281,6 +287,15 @@ def _source_identity_dict(value: object) -> dict:
     if isinstance(value, str):
         return json.loads(value)
     return dict(value)  # type: ignore[arg-type]
+
+
+def _row_value(row: object, key: str, default: object = None) -> object:
+    if isinstance(row, dict):
+        return row.get(key, default)
+    try:
+        return row[key]  # type: ignore[index]
+    except KeyError:
+        return default
 
 
 async def persist_chunk_embeddings_to_database(

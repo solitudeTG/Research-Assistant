@@ -29,12 +29,13 @@ def ingest_uploaded_paper(
     session_id: str,
     user_id: str,
     workspace_dir: Path | str,
+    paper_id_namespace: str | None = None,
 ) -> IngestionResult:
     path = Path(file_path)
     workspace = Path(workspace_dir)
     parsed = _extract_document(path)
     raw_text = parsed.raw_text
-    paper_id = _paper_id(path, raw_text)
+    paper_id = _paper_id(path, raw_text, namespace=paper_id_namespace)
 
     paper = CanonicalPaper(
         paper_id=paper_id,
@@ -105,8 +106,11 @@ def _extract_document(path: Path):
     )
 
 
-def _paper_id(path: Path, text: str) -> str:
+def _paper_id(path: Path, text: str, *, namespace: str | None = None) -> str:
     digest = hashlib.sha256()
+    if namespace:
+        digest.update(namespace.encode("utf-8"))
+        digest.update(b"\0")
     digest.update(path.name.encode("utf-8"))
     digest.update(b"\0")
     digest.update(text.encode("utf-8", errors="ignore"))

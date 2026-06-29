@@ -281,8 +281,11 @@ async def test_upload_research_project_paper_indexes_into_project(monkeypatch, t
     assert captured["ingest"]["session_id"] == "research-library-project-1"
     assert captured["ingest"]["user_id"] == "user-1"
     assert captured["ingest"]["workspace_dir"] == tmp_path / "research_library" / "project-1"
+    assert captured["ingest"]["paper_id_namespace"] == "project:project-1"
     assert captured["index"]["project_id"] == "project-1"
     assert response.data["project_id"] == "project-1"
+    assert response.data["evidence_scope"] == "project"
+    assert response.data["temporary"] is False
     assert response.data["paper_id"] == "paper-1"
     assert response.data["status"] == "indexed"
     assert response.data["citation_ready"] is True
@@ -2689,7 +2692,13 @@ async def test_research_upload_marks_session_completed_after_indexing(monkeypatc
     monkeypatch.setattr(sessions, "_WORKSPACE_DIR", str(tmp_path))
     monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
     monkeypatch.setattr(sessions, "is_research_document", lambda path: True)
-    monkeypatch.setattr(sessions, "ingest_uploaded_paper", lambda **kwargs: ingestion)
+    captured = {}
+
+    def fake_ingest_uploaded_paper(**kwargs):
+        captured["ingest"] = kwargs
+        return ingestion
+
+    monkeypatch.setattr(sessions, "ingest_uploaded_paper", fake_ingest_uploaded_paper)
     monkeypatch.setattr(sessions, "index_ingestion_result", fake_index_ingestion_result)
     monkeypatch.setattr(sessions, "_publish_session_event", lambda *args, **kwargs: None)
 
@@ -2700,6 +2709,10 @@ async def test_research_upload_marks_session_completed_after_indexing(monkeypatc
     )
 
     assert response.data["metadata"]["research_assistant"]["status"] == "indexed"
+    assert response.data["metadata"]["research_assistant"]["evidence_scope"] == "session"
+    assert response.data["metadata"]["research_assistant"]["temporary"] is True
+    assert response.data["metadata"]["research_assistant"]["project_id"] is None
+    assert captured["ingest"]["paper_id_namespace"] == "session:session-1"
     assert session.status == sessions.SessionStatus.COMPLETED
     assert session.events[-1]["data"]["description"] == "Paper evidence indexed: paper.pdf"
 
@@ -2764,8 +2777,11 @@ async def test_promote_chat_paper_to_library_reuses_library_indexing_path(monkey
     assert captured["ingest"]["file_path"] == library_workspace / "paper.pdf"
     assert captured["ingest"]["session_id"] == "research-library-project-1"
     assert captured["ingest"]["workspace_dir"] == library_workspace
+    assert captured["ingest"]["paper_id_namespace"] == "project:project-1"
     assert captured["index"]["project_id"] == "project-1"
     assert response.data["project_id"] == "project-1"
+    assert response.data["evidence_scope"] == "project"
+    assert response.data["temporary"] is False
     assert response.data["source_session_id"] == "session-1"
     assert response.data["promotion_status"] == "indexed"
     assert response.data["citation_ready"] is True

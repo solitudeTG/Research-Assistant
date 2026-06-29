@@ -20,6 +20,7 @@ class FetchingConnection:
                 "page_start": 3,
                 "page_end": 4,
                 "quote": "PostgreSQL full-text search and pgvector both contribute evidence.",
+                "evidence_scope": "project",
                 "rank_score": 0.91,
             }
         ]
@@ -44,6 +45,7 @@ async def test_hybrid_search_evidence_returns_citable_paper_chunks():
     assert hits[0].section == "Method"
     assert hits[0].quote.startswith("PostgreSQL full-text search")
     assert hits[0].source_type == "web"
+    assert hits[0].evidence_scope == "project"
     assert hits[0].citation_label == "[paper-1:Method:3-4]"
 
     sql, args = connection.calls[0]
@@ -78,6 +80,7 @@ async def test_hybrid_search_evidence_can_scope_to_project():
 
     sql, args = connection.calls[0]
     normalized_sql = sql.lower()
-    assert "p.project_id = $6" in normalized_sql
+    assert "p.session_id = $1" in normalized_sql
+    assert "$6::text is not null and p.project_id = $6" in normalized_sql
     assert args[0] == "session-1"
     assert args[5] == "project-1"

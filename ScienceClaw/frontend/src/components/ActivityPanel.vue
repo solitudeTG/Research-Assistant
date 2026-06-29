@@ -286,6 +286,7 @@
                     <div class="flex items-center gap-2">
                       <span class="min-w-0 flex-1 truncate font-semibold text-[var(--text-secondary)]">{{ citation.citation_label }}</span>
                       <span class="shrink-0 font-mono text-[10px] uppercase text-[var(--text-tertiary)]">{{ citation.source_type }}</span>
+                      <span class="shrink-0 rounded bg-[var(--fill-tsp-white-main)] px-1.5 py-0.5 text-[10px] text-[var(--text-tertiary)]">{{ evidenceScopeLabel(citation.evidence_scope) }}</span>
                     </div>
                     <div class="mt-0.5 truncate text-[10px] text-[var(--text-tertiary)]">
                       {{ citation.title }} · {{ citation.section }}<span v-if="citation.page_start"> · p. {{ citation.page_start }}<template v-if="citation.page_end && citation.page_end !== citation.page_start">-{{ citation.page_end }}</template></span>
@@ -764,6 +765,10 @@ const unsupportedResearchAuditClaims = computed(() =>
 
 const formatBoundaryValues = (values?: string[]) => {
   return values?.length ? values.join(',') : 'none';
+};
+
+const evidenceScopeLabel = (scope?: string) => {
+  return scope === 'project' ? '研究库' : '当前会话';
 };
 
 const researchAuditStatusClass = (status: string) => {

@@ -18,6 +18,7 @@ class EvidenceHit:
     rank_score: float
     source_type: str = "paper"
     source_identity: dict[str, Any] = field(default_factory=dict)
+    evidence_scope: str = "session"
 
     @property
     def citation_label(self) -> str:
@@ -48,7 +49,7 @@ async def hybrid_search_evidence(
                 ) AS lexical_rank
             FROM research_chunks c
             JOIN research_papers p ON p.paper_id = c.paper_id
-            WHERE (($6::text IS NULL AND p.session_id = $1) OR p.project_id = $6)
+            WHERE (p.session_id = $1 OR ($6::text IS NOT NULL AND p.project_id = $6))
               AND c.content_tsv @@ websearch_to_tsquery('english', $2)
             LIMIT $5
         ),
@@ -61,7 +62,7 @@ async def hybrid_search_evidence(
             FROM research_embeddings e
             JOIN research_chunks c ON c.chunk_id = e.chunk_id
             JOIN research_papers p ON p.paper_id = c.paper_id
-            WHERE (($6::text IS NULL AND p.session_id = $1) OR p.project_id = $6)
+            WHERE (p.session_id = $1 OR ($6::text IS NOT NULL AND p.project_id = $6))
               AND e.embedding_model = $4
             LIMIT $5
         ),
@@ -84,6 +85,7 @@ async def hybrid_search_evidence(
             er.page_end,
             er.quote,
             er.source_identity,
+            CASE WHEN p.project_id IS NULL THEN 'session' ELSE 'project' END AS evidence_scope,
             fc.rank_score
         FROM fused_candidates fc
         JOIN research_evidence_records er ON er.chunk_id = fc.chunk_id
@@ -128,6 +130,7 @@ def _row_to_hit(row: Any) -> EvidenceHit:
         quote=str(row["quote"]),
         rank_score=float(row["rank_score"]),
         source_identity=_json_value(_row_value(row, "source_identity")),
+        evidence_scope=str(_row_value(row, "evidence_scope") or "session"),
     )
 
 
