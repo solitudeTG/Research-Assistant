@@ -1,14 +1,23 @@
 ---
-doc_kind: feature_index
+id: F000
+doc_kind: feature
 status: active
 owner: solitudeTG
 created: 2026-06-28
-updated: 2026-06-28
+updated: 2026-06-29
 ---
 
 # Feature Index
 
+## Goal
+
 本索引是 AgentMentor Feature 的默认召回入口。新会话或新 Agent 不应先通读超大的 `F001`，而应先从这里判断当前任务属于哪个能力边界。
+
+## Vision Anchor
+
+- Source: AgentMentor retrieval needs a compact default entry point before opening large Feature files.
+- User value: Future agents can find the owning Feature for Research Library, Project chat, evidence admission, and promotion work without relying on chat history.
+- Non-goal: This index does not own implementation acceptance for the listed capabilities; each linked Feature remains the source of truth.
 
 ## Governance Rule
 
@@ -46,3 +55,31 @@ updated: 2026-06-28
 
 - 当前拆分是 `updates` 关系：子 Feature 更新并细化 `F001` 的能力边界，不使 `F001` 失效。
 - `docs/specs/F001-feature-map-and-rules-spec.md` 暂时作为 linked spec 保留；只有当 Feature Index 和子 Feature 完整替代它的主动召回作用时，才考虑标记 `superseded`。
+## Current Status
+
+Active. This index is the retrieval entry point for active Research Assistant Features.
+
+## Links
+
+- [F001 Project Vision and Scope](F001-project-vision-and-scope.md)
+- [EV-001 Feature Governance Split Validation](../evidence/EV-001-feature-governance-split-validation.md)
+
+## Acceptance Criteria
+
+- [x] Active Feature ownership is visible in one compact index.
+- [x] New work can be routed to an owning Feature before implementation.
+- [x] The index remains compatible with AgentMentor strict validation.
+
+## Patch History
+
+| Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| F000.1 | 2026-06-29 | pending | Feature Index needed to remain compatible with the current AgentMentor strict validator. | The validator only accepts the canonical artifact kinds and section set. | Strict knowledge validation. | verified |
+
+## Evidence
+
+- `knowledge_check.py --root E:\Self-Project\Research-Assistant --docs-path docs --strict` is the structural validation gate for this index.
+
+## Next Step
+
+Keep this index updated when adding or retiring active Feature ownership.

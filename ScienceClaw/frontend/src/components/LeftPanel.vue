@@ -263,7 +263,7 @@ import type { Task } from '../api/tasks';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n()
-const { isLeftPanelShow, toggleLeftPanel } = useLeftPanel()
+const { isLeftPanelShow, toggleLeftPanel, showLeftPanel } = useLeftPanel()
 const { setOnSessionTitleUpdate } = useSessionListUpdate()
 const { onSessionCreated, onSessionUpdated } = useSessionNotifications()
 const { openSettingsDialog } = useSettingsDialog()
@@ -328,6 +328,16 @@ const isSkillsActive = computed(() => route.path.includes('/chat/skills'))
 const isToolsActive = computed(() => route.path.includes('/chat/tools') && !route.path.startsWith('/chat/tasks'))
 const isTasksActive = computed(() => route.path.startsWith('/chat/tasks'))
 
+watch(
+  () => route.path,
+  () => {
+    if (isResearchLibraryActive.value && !isLeftPanelShow.value) {
+      showLeftPanel()
+    }
+  },
+  { immediate: true },
+)
+
 const handleChatTabClick = () => {
   if (isChatActive.value && isLeftPanelShow.value) {
      toggleLeftPanel()
@@ -351,9 +361,7 @@ const handleSkillsTabClick = () => {
 }
 
 const handleResearchLibraryTabClick = () => {
-  if (isLeftPanelShow.value) {
-    toggleLeftPanel()
-  }
+  showLeftPanel()
   router.push('/chat/research-library')
 }
 
@@ -396,7 +404,7 @@ const updateSessions = async () => {
 }
 
 const handleNewTaskClick = () => {
-  router.push('/')
+  router.push('/chat')
 }
 
 const handleSessionDeleted = (sessionId: string) => {

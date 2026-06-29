@@ -19,7 +19,7 @@ created: 2026-06-28
 
 未覆盖真实浏览器手动点击 Project selector、真实 PostgreSQL 多 Project 端到端数据隔离、证据 relevance threshold、Agentic RAG 判断、解除 Project 绑定、多 Project 会话或 Chat 上传论文入库。
 
-## Checks
+## Commands
 
 ```text
 pytest backend/tests/test_research_store_schema.py::test_research_store_schema_defines_pgvector_and_evidence_tables backend/tests/test_research_repository.py::test_upsert_session_research_project_persists_binding backend/tests/test_research_repository.py::test_get_session_research_project_reads_binding backend/tests/test_research_retrieval.py::test_hybrid_search_evidence_can_scope_to_project backend/tests/test_research_answering.py::test_answer_research_question_passes_project_id_to_retrieval backend/tests/test_research_session_routes.py::test_set_session_research_project_route_persists_binding backend/tests/test_research_session_routes.py::test_get_session_research_project_route_returns_binding backend/tests/test_research_frontend_contracts.py::test_frontend_exposes_session_project_binding_contracts -q
@@ -34,6 +34,8 @@ python C:\Users\HUAWEI\.codex\skills\using-agentmentor\scripts\knowledge_check.p
 
 python C:\Users\HUAWEI\.codex\skills\using-agentmentor\scripts\knowledge_check.py --root E:\Self-Project\Research-Assistant --docs-path docs --strict
 ```
+
+## Checks
 
 ## Results
 

@@ -32,7 +32,7 @@ created: 2026-06-28
 
 本次验证不覆盖业务代码行为、Research Assistant 运行时功能、浏览器 E2E、LLM provider、数据库迁移或报告生成正确性。
 
-## Checks
+## Commands
 
 ```text
 python C:\Users\HUAWEI\.codex\skills\using-agentmentor\scripts\knowledge_check.py --root E:\Self-Project\Research-Assistant --docs-path docs --strict
@@ -41,6 +41,8 @@ foreach ($file in 'docs/features/F002-scienceclaw-baseline-workbench-shell.md','
   python C:\Users\HUAWEI\.codex\skills\using-agentmentor\scripts\knowledge_check.py --root E:\Self-Project\Research-Assistant --docs-path docs --feature-index $file
 }
 ```
+
+## Checks
 
 ## Results
 

@@ -2590,7 +2590,7 @@ async def answer_research_question_for_session(
         retrieval_started = _research_upload_step_event(
             step_id=step_id,
             status="running",
-            description="Retrieving citation evidence",
+            description="Checking whether citation evidence is needed",
             metadata={"question": body.question, "limit": body.limit, **retrieval_metadata},
         )
         _append_session_event(session, retrieval_started)
@@ -2629,16 +2629,22 @@ async def answer_research_question_for_session(
             )
             raise
 
+        admission_metadata = answer.admission.to_dict() if answer.admission else {}
+        retrieval_description = (
+            "Citation evidence retrieval skipped"
+            if admission_metadata.get("decision") == "skipped"
+            else "Citation evidence retrieval completed"
+        )
         retrieval_completed = _research_upload_step_event(
             step_id=step_id,
             status="completed",
-            description="Citation evidence retrieval completed",
+            description=retrieval_description,
             metadata={
                 "citation_count": answer.citation_count,
                 "context_memory_count": answer.context_memory_count,
                 "context_memory_conflict_count": answer.context_memory_conflict_count,
                 "context_boundaries": CONTEXT_BOUNDARIES,
-                "evidence_admission": answer.admission.to_dict() if answer.admission else {},
+                "evidence_admission": admission_metadata,
                 "embedding_model": settings.research_embedding_model,
                 **retrieval_metadata,
             },

@@ -325,7 +325,7 @@
           v-if="canGenerateResearchReport"
           class="msg-action-btn msg-action-btn--report"
           @click="handleGenerateResearchReport"
-          title="Generate Markdown research report"
+          title="生成 Markdown 研究报告"
         >
           <FileText class="w-4 h-4" />
         </button>
@@ -333,10 +333,10 @@
           v-if="researchLibraryPromotionCandidate"
           class="msg-action-btn msg-action-btn--library"
           @click="handlePromoteToResearchLibrary"
-          title="Add to Research Library"
+          title="加入研究库"
         >
           <BookOpen class="w-4 h-4" />
-          <span class="hidden sm:inline text-[11px] font-medium ml-1 whitespace-nowrap">Add to Research Library</span>
+          <span class="hidden sm:inline text-[11px] font-medium ml-1 whitespace-nowrap">加入研究库</span>
         </button>
         <template v-if="roundFiles.length > 0">
           <div class="msg-action-divider"></div>

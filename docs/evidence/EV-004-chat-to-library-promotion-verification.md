@@ -29,7 +29,7 @@ Not covered:
 - Multi-paper candidate selection in one Chat turn.
 - A pre-promotion quality review workflow.
 
-## Checks
+## Commands
 
 ```text
 $env:PYTHONPATH='ScienceClaw'; $env:TMP=(Resolve-Path .pytest-tmp); $env:TEMP=$env:TMP; pytest ScienceClaw/backend/tests/test_research_session_routes.py -k "promote_chat_paper_to_library"
@@ -44,6 +44,8 @@ python C:\Users\HUAWEI\.codex\skills\using-agentmentor\scripts\knowledge_check.p
 
 python C:\Users\HUAWEI\.codex\skills\using-agentmentor\scripts\knowledge_check.py --root E:\Self-Project\Research-Assistant --docs-path docs --strict
 ```
+
+## Checks
 
 ## Results
 

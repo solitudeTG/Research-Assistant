@@ -4,7 +4,7 @@ doc_kind: feature
 status: completed
 owner: solitudeTG
 created: 2026-06-28
-updated: 2026-06-28
+updated: 2026-06-29
 ---
 
 # F011: Evidence Admission Gate
@@ -111,10 +111,13 @@ Mandatory AI routing before every retrieval was rejected for the MVP because it 
 | --- | --- | --- | --- | --- |
 | 2026-06-28 | planned | User approved four-Feature breakdown | This Feature | Created to own evidence thresholding and admission behavior. |
 | 2026-06-28 | completed | F011 implementation and verification | EV-003 | MVP deterministic admission gate landed. |
+| 2026-06-29 | patched | Real E2E showed skipped turns still appeared as completed retrieval in Activity trace | Route regression test and browser/backend event verification | F011.1 separates "checking need" from completed retrieval and labels deterministic skips honestly. |
 
 ## Patch History
 
-None yet.
+| Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| F011.1 | 2026-06-29 | pending | A trivial turn such as `谢谢` correctly skipped evidence admission, but ActivityPanel still displayed `Citation evidence retrieval completed`. | The route emitted the same completed step description for accepted and skipped admission decisions. | Route regression test requires skipped admission to emit `Citation evidence retrieval skipped`; backend event E2E verified `decision=skipped`, `reason=deterministic_non_evidence_turn`, and `citation_count=0`. | verified |
 
 ## Evidence
 
@@ -122,6 +125,7 @@ None yet.
 - `npm.cmd run type-check` from `ScienceClaw/frontend`: passed.
 - `npm.cmd run build` from `ScienceClaw/frontend`: passed with existing Browserslist/CSS/chunk-size warnings.
 - Focused F011 tests cover skip, accepted, insufficient, route trace, and frontend ActivityPanel contracts.
+- 2026-06-29 patch verification: `pytest ScienceClaw/backend/tests/test_research_session_routes.py -k "trace_names_skipped or citation_evidence_wording or trace_and_message_keep_memory" -q` -> `3 passed`; live session event tail showed `Checking whether citation evidence is needed` followed by `Citation evidence retrieval skipped`.
 
 ## Recovery Snapshot
 

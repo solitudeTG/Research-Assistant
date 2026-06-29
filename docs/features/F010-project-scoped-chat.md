@@ -4,7 +4,7 @@ doc_kind: feature
 status: completed
 owner: solitudeTG
 created: 2026-06-28
-updated: 2026-06-28
+updated: 2026-06-29
 ---
 
 # F010: Project Scoped Chat
@@ -109,10 +109,13 @@ A global Library retrieval path was rejected because unrelated research projects
 | --- | --- | --- | --- | --- |
 | 2026-06-28 | planned | User approved four-Feature breakdown | This Feature | Created to own session-to-Project context binding. |
 | 2026-06-28 | completed | F010 implementation and verification | Full backend tests, frontend type-check, frontend build | MVP Project-scoped chat binding landed. |
+| 2026-06-29 | patched | Combined F009-F012 E2E found Chat project popover showed stale zero counts | Repository/route/frontend tests plus browser UI E2E | F010.1 makes session Project binding return the same aggregate paper/chunk/evidence counts as the Library list. |
 
 ## Patch History
 
-None yet.
+| Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| F010.1 | 2026-06-29 | pending | A session bound to a Project showed `0 papers · 0 citation records` in Chat even when the Research Library showed indexed assets. | `upsert_session_research_project` and `get_session_research_project` returned only the raw `research_projects` row and did not aggregate `research_papers`, `research_chunks`, or `research_evidence_records`. | Repository regression tests require session binding reads to include aggregate counts; browser E2E verified the popover shows `2 篇论文 · 39 条引用证据`. | verified |
 
 ## Evidence
 
@@ -120,6 +123,7 @@ None yet.
 - `npm.cmd run type-check` from `ScienceClaw/frontend`: passed.
 - `npm.cmd run build` from `ScienceClaw/frontend`: passed with existing Browserslist/CSS/chunk-size warnings.
 - Focused F010 tests: 8 passed for schema, repository, retrieval, answering, routes, and frontend binding contracts.
+- 2026-06-29 patch verification: `pytest ScienceClaw/backend/tests/test_research_repository.py -k "session_research_project" -q` -> `2 passed`; browser UI on bound session `JWh8ENzsVjR5KdhsxEYYAi` showed `2 篇论文 · 39 条引用证据`.
 
 ## Recovery Snapshot
 

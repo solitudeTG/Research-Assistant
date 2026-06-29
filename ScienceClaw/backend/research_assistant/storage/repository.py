@@ -323,11 +323,25 @@ async def upsert_session_research_project(
             rp.user_id,
             rp.name,
             rp.description,
+            count(DISTINCT p.paper_id)::int AS paper_count,
+            count(DISTINCT c.chunk_id)::int AS chunk_count,
+            count(DISTINCT er.evidence_id)::int AS evidence_record_count,
             rp.created_at,
             rp.updated_at
         FROM binding
         JOIN research_projects rp ON rp.project_id = binding.project_id
+        LEFT JOIN research_papers p ON p.project_id = rp.project_id
+        LEFT JOIN research_chunks c ON c.paper_id = p.paper_id
+        LEFT JOIN research_evidence_records er ON er.chunk_id = c.chunk_id
         WHERE rp.user_id = $3
+        GROUP BY
+            binding.session_id,
+            rp.project_id,
+            rp.user_id,
+            rp.name,
+            rp.description,
+            rp.created_at,
+            rp.updated_at
         """,
         session_id,
         project_id,
@@ -352,12 +366,26 @@ async def get_session_research_project(
             rp.user_id,
             rp.name,
             rp.description,
+            count(DISTINCT p.paper_id)::int AS paper_count,
+            count(DISTINCT c.chunk_id)::int AS chunk_count,
+            count(DISTINCT er.evidence_id)::int AS evidence_record_count,
             rp.created_at,
             rp.updated_at
         FROM research_session_projects rsp
         JOIN research_projects rp ON rp.project_id = rsp.project_id
+        LEFT JOIN research_papers p ON p.project_id = rp.project_id
+        LEFT JOIN research_chunks c ON c.paper_id = p.paper_id
+        LEFT JOIN research_evidence_records er ON er.chunk_id = c.chunk_id
         WHERE rsp.session_id = $1
             AND rp.user_id = $2
+        GROUP BY
+            rsp.session_id,
+            rp.project_id,
+            rp.user_id,
+            rp.name,
+            rp.description,
+            rp.created_at,
+            rp.updated_at
         """,
         session_id,
         user_id,

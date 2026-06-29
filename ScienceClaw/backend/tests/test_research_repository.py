@@ -177,6 +177,9 @@ async def test_upsert_session_research_project_persists_binding():
         "user_id": "user-1",
         "name": "LEO Beamforming",
         "description": "Narrow beam papers",
+        "paper_count": 2,
+        "chunk_count": 8,
+        "evidence_record_count": 8,
         "created_at": None,
         "updated_at": None,
     }
@@ -192,13 +195,17 @@ async def test_upsert_session_research_project_persists_binding():
     assert "insert into research_session_projects" in sql.lower()
     assert "on conflict (session_id)" in sql.lower()
     assert "join research_projects" in sql.lower()
+    assert "left join research_papers" in sql.lower()
+    assert "count(distinct p.paper_id)" in sql.lower()
     assert args == ("session-1", "project-1", "user-1")
     assert project is not None
     assert project.project_id == "project-1"
+    assert project.paper_count == 2
+    assert project.evidence_record_count == 8
 
 
 @pytest.mark.asyncio
-async def test_get_session_research_project_reads_binding():
+async def test_get_session_research_project_reads_binding_with_project_summary_counts():
     connection = RecordingConnection()
     connection.fetchrow_result = {
         "session_id": "session-1",
@@ -206,6 +213,9 @@ async def test_get_session_research_project_reads_binding():
         "user_id": "user-1",
         "name": "LEO Beamforming",
         "description": "Narrow beam papers",
+        "paper_count": 2,
+        "chunk_count": 8,
+        "evidence_record_count": 8,
         "created_at": None,
         "updated_at": None,
     }
@@ -219,11 +229,16 @@ async def test_get_session_research_project_reads_binding():
     sql, args = connection.fetchrow_calls[0]
     assert "from research_session_projects" in sql.lower()
     assert "join research_projects" in sql.lower()
+    assert "left join research_papers" in sql.lower()
+    assert "count(distinct p.paper_id)" in sql.lower()
     assert "rsp.session_id = $1" in sql.lower()
     assert "rp.user_id = $2" in sql.lower()
     assert args == ("session-1", "user-1")
     assert project is not None
     assert project.project_id == "project-1"
+    assert project.paper_count == 2
+    assert project.chunk_count == 8
+    assert project.evidence_record_count == 8
 
 
 @pytest.mark.asyncio

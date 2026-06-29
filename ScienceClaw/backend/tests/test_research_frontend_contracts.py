@@ -95,7 +95,7 @@ def test_frontend_exposes_session_project_binding_contracts():
     assert "handleResearchProjectChange" in chat_page
     assert "agentApi.setSessionResearchProject" in chat_page
     assert "agentApi.getSessionResearchProject" in chat_page
-    assert "Project context" in chat_page
+    assert "课题上下文" in chat_page
 
 
 def test_frontend_exposes_chat_to_library_promotion_contract():
@@ -108,7 +108,7 @@ def test_frontend_exposes_chat_to_library_promotion_contract():
     assert "export async function promoteChatPaperToLibrary" in agent_api
     assert "`/sessions/${sessionId}/research/library/promote`" in agent_api
     assert "researchLibraryPromotionCandidate" in chat_message
-    assert "Add to Research Library" in chat_message
+    assert "加入研究库" in chat_message
     assert "emit('promoteToResearchLibrary'" in chat_message
     assert "@promoteToResearchLibrary=\"handlePromoteToResearchLibrary\"" in chat_page
     assert "agentApi.promoteChatPaperToLibrary" in chat_page
@@ -136,7 +136,7 @@ def test_chat_page_surfaces_source_evidence_ingestion_controls():
         / "ChatPage.vue"
     ).read_text(encoding="utf-8")
 
-    assert "Ingest citation evidence" in chat_page
+    assert "导入引用证据" in chat_page
     assert "sourceEvidenceKind === 'web'" in chat_page
     assert "sourceEvidenceKind === 'database'" in chat_page
     assert "agentApi.ingestWebEvidenceSource" in chat_page
@@ -372,6 +372,44 @@ def test_activity_panel_surfaces_evidence_admission_trace_metadata():
     assert "rejected={{ admission.rejected_count }}" in activity_panel
 
 
+def test_left_panel_new_task_uses_canonical_chat_route_from_research_library():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    left_panel = (frontend_root / "components" / "LeftPanel.vue").read_text(encoding="utf-8")
+    library_handler_start = left_panel.index("const handleResearchLibraryTabClick = () =>")
+    library_handler_end = left_panel.index("const handleToolsTabClick", library_handler_start)
+    library_handler_source = left_panel[library_handler_start:library_handler_end]
+    handler_start = left_panel.index("const handleNewTaskClick = () =>")
+    handler_end = left_panel.index("const handleSessionDeleted", handler_start)
+    handler_source = left_panel[handler_start:handler_end]
+
+    assert "showLeftPanel()" in library_handler_source
+    assert "toggleLeftPanel()" not in library_handler_source
+    assert "isResearchLibraryActive.value && !isLeftPanelShow.value" in left_panel
+    assert "router.push('/chat')" in handler_source
+    assert "router.push('/')" not in handler_source
+
+
+def test_research_chat_controls_use_chinese_user_facing_copy():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    chat_page = (frontend_root / "pages" / "ChatPage.vue").read_text(encoding="utf-8")
+    chat_message = (frontend_root / "components" / "ChatMessage.vue").read_text(encoding="utf-8")
+
+    assert "未关联课题" in chat_page
+    assert "课题上下文" in chat_page
+    assert "引用证据" in chat_page
+    assert "工具关闭" in chat_page
+    assert "加入研究库" in chat_message
+    assert "生成 Markdown 研究报告" in chat_message
+
+    assert "No Project" not in chat_page
+    assert "Project context" not in chat_page
+    assert "No linked Project" not in chat_page
+    assert "citation records" not in chat_page
+    assert "Tools off" not in chat_page
+    assert "Add to Research Library" not in chat_message
+    assert "Generate Markdown research report" not in chat_message
+
+
 def test_activity_panel_filters_recovered_runtime_audit_by_tool_pack():
     frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
     activity_panel = (frontend_root / "components" / "ActivityPanel.vue").read_text(encoding="utf-8")
@@ -431,5 +469,5 @@ def test_chat_research_mode_tooltip_uses_citation_evidence_wording():
         / "ChatPage.vue"
     ).read_text(encoding="utf-8")
 
-    assert "Citation evidence mode" in chat_page
+    assert "引用证据模式" in chat_page
     assert "Paper evidence mode" not in chat_page

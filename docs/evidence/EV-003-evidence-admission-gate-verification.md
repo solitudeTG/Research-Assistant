@@ -19,7 +19,7 @@ created: 2026-06-28
 
 未覆盖基于真实论文集合的阈值调优、LLM/Agentic RAG 路由、reranker、per-project 自适应阈值、真实浏览器截图验证或人工标注 eval set。
 
-## Checks
+## Commands
 
 ```text
 pytest backend/tests/test_research_admission.py backend/tests/test_research_answering.py::test_answer_research_question_skips_retrieval_for_non_evidence_turn backend/tests/test_research_answering.py::test_answer_research_question_rejects_weak_retrieval_hits backend/tests/test_research_answering.py::test_answer_research_question_refuses_when_no_paper_evidence backend/tests/test_research_session_routes.py::test_research_answer_trace_and_message_keep_memory_context_separate -q
@@ -36,6 +36,8 @@ python C:\Users\HUAWEI\.codex\skills\using-agentmentor\scripts\knowledge_check.p
 
 python C:\Users\HUAWEI\.codex\skills\using-agentmentor\scripts\knowledge_check.py --root E:\Self-Project\Research-Assistant --docs-path docs --strict
 ```
+
+## Checks
 
 ## Results
 

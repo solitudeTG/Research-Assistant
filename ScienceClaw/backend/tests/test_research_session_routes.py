@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from backend.research_assistant.admission import skipped_admission_result
 from backend.research_assistant.answering import ResearchAnswer, ResearchCitation
 
 
@@ -88,7 +89,8 @@ def test_research_answer_and_report_routes_use_citation_evidence_wording():
     assert "Research question grounded in citation evidence" in sessions_source
     assert "Research question or note topic grounded in citation evidence" in sessions_source
     assert "Answer a question using citation evidence from the research store." in sessions_source
-    assert 'description="Retrieving citation evidence"' in sessions_source
+    assert 'description="Checking whether citation evidence is needed"' in sessions_source
+    assert '"Citation evidence retrieval skipped"' in sessions_source
     assert "Generate a Markdown research artifact using citation evidence and context memory." in sessions_source
     assert 'description="Generating Markdown research artifact from citation evidence"' in sessions_source
     assert '"mode": "citation_evidence"' in sessions_source
@@ -1076,6 +1078,43 @@ async def test_research_answer_trace_and_message_keep_memory_context_separate(mo
     assert assistant_research["context_memory"][0]["source_type"] == "memory"
     assert assistant_research["context_memory_conflict_count"] == 1
     assert assistant_research["evidence_admission"]["decision"] == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_research_answer_trace_names_skipped_admission_without_claiming_retrieval(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession()
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    async def fake_answer(*args, **kwargs):
+        return ResearchAnswer(
+            content="This turn does not require citation evidence retrieval.",
+            citations=[],
+            admission=skipped_admission_result(),
+        )
+
+    async def fake_persist_audit(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "answer_research_question", fake_answer)
+    monkeypatch.setattr(sessions, "persist_audit_result_to_database", fake_persist_audit)
+    monkeypatch.setattr(sessions, "_publish_session_event", lambda *args, **kwargs: None)
+
+    await sessions.answer_research_question_for_session(
+        "session-1",
+        sessions.ResearchAnswerRequest(question="谢谢"),
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    step_events = [event["data"] for event in session.events if event.get("event") == "step"]
+    assert step_events[0]["description"] == "Checking whether citation evidence is needed"
+    assert step_events[-1]["description"] == "Citation evidence retrieval skipped"
+    assert step_events[-1]["metadata"]["evidence_admission"]["decision"] == "skipped"
+    assert step_events[-1]["metadata"]["citation_count"] == 0
 
 
 @pytest.mark.asyncio

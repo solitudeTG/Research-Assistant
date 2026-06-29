@@ -93,15 +93,15 @@
                     :class="currentResearchProject
                       ? 'border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/30 dark:text-indigo-300'
                       : 'border-gray-200 bg-white text-[var(--text-secondary)] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'"
-                    title="Project context">
+                    title="课题上下文">
                     <Package :size="14" />
-                    <span class="hidden sm:inline truncate">{{ currentResearchProject?.name || 'No Project' }}</span>
+                    <span class="hidden sm:inline truncate">{{ currentResearchProject?.name || '未关联课题' }}</span>
                   </button>
                 </PopoverTrigger>
                 <PopoverContent class="w-[360px] p-0 overflow-hidden bg-[var(--background-white-main)] border border-[var(--border-light)] shadow-xl rounded-xl" align="end" :side-offset="8">
                   <div class="px-4 py-3 border-b border-[var(--border-light)]">
-                    <div class="text-sm font-semibold text-[var(--text-primary)]">Project context</div>
-                    <div class="text-xs text-[var(--text-tertiary)] truncate">Linked project assets are searchable citation context.</div>
+                    <div class="text-sm font-semibold text-[var(--text-primary)]">课题上下文</div>
+                    <div class="text-xs text-[var(--text-tertiary)] truncate">已关联课题资产可作为可检索引用上下文。</div>
                   </div>
                   <div class="p-3 flex flex-col gap-2">
                     <select
@@ -109,7 +109,7 @@
                       @change="handleResearchProjectChange"
                       :disabled="researchProjectLoading || researchProjectOptions.length === 0"
                       class="source-evidence-input h-9">
-                      <option value="">No linked Project</option>
+                      <option value="">不关联课题</option>
                       <option
                         v-for="project in researchProjectOptions"
                         :key="project.project_id"
@@ -118,10 +118,10 @@
                       </option>
                     </select>
                     <div v-if="currentResearchProject" class="text-xs text-[var(--text-tertiary)] leading-5">
-                      {{ currentResearchProject.paper_count }} papers · {{ currentResearchProject.evidence_record_count }} citation records
+                      {{ currentResearchProject.paper_count }} 篇论文 · {{ currentResearchProject.evidence_record_count }} 条引用证据
                     </div>
                     <div v-else class="text-xs text-[var(--text-tertiary)] leading-5">
-                      General chats only use session-local uploaded evidence.
+                      普通会话只使用当前会话的临时上传证据。
                     </div>
                   </div>
                 </PopoverContent>
@@ -130,7 +130,7 @@
                 <PopoverTrigger>
                   <button
                     class="h-8 w-8 rounded-xl inline-flex items-center justify-center border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 hover:shadow-sm transition-all duration-200"
-                    title="Ingest citation evidence">
+                    title="导入引用证据">
                     <Database class="text-[var(--icon-secondary)]" :size="16" />
                   </button>
                 </PopoverTrigger>
@@ -139,21 +139,21 @@
                     <div class="px-4 py-3 border-b border-[var(--border-light)]">
                       <div class="flex items-center justify-between gap-3">
                         <div class="min-w-0">
-                          <div class="text-sm font-semibold text-[var(--text-primary)]">Ingest citation evidence</div>
-                          <div class="text-xs text-[var(--text-tertiary)] truncate">Paper, web, and database evidence stay separate from memory and trace.</div>
+                          <div class="text-sm font-semibold text-[var(--text-primary)]">导入引用证据</div>
+                          <div class="text-xs text-[var(--text-tertiary)] truncate">论文、网页和数据库证据与记忆、trace 保持边界分离。</div>
                         </div>
                         <div class="inline-flex rounded-lg border border-[var(--border-light)] overflow-hidden flex-shrink-0">
                           <button
                             @click="sourceEvidenceKind = 'web'"
                             class="px-2.5 py-1 text-xs font-semibold transition-colors"
                             :class="sourceEvidenceKind === 'web' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'text-[var(--text-tertiary)] hover:bg-[var(--fill-tsp-gray-main)]'">
-                            Web
+                            网页
                           </button>
                           <button
                             @click="sourceEvidenceKind = 'database'"
                             class="px-2.5 py-1 text-xs font-semibold transition-colors border-l border-[var(--border-light)]"
                             :class="sourceEvidenceKind === 'database' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'text-[var(--text-tertiary)] hover:bg-[var(--fill-tsp-gray-main)]'">
-                            Database
+                            数据库
                           </button>
                         </div>
                       </div>
@@ -161,24 +161,24 @@
 
                     <div class="p-4 flex flex-col gap-3">
                       <template v-if="sourceEvidenceKind === 'web'">
-                        <input v-model="webEvidenceForm.title" class="source-evidence-input" placeholder="Source title" />
+                        <input v-model="webEvidenceForm.title" class="source-evidence-input" placeholder="来源标题" />
                         <input v-model="webEvidenceForm.url" class="source-evidence-input" placeholder="https://example.org/source" />
-                        <input v-model="webEvidenceForm.section" class="source-evidence-input" placeholder="Section or heading" />
+                        <input v-model="webEvidenceForm.section" class="source-evidence-input" placeholder="章节或标题" />
                       </template>
                       <template v-else-if="sourceEvidenceKind === 'database'">
-                        <input v-model="databaseEvidenceForm.title" class="source-evidence-input" placeholder="Source title" />
-                        <input v-model="databaseEvidenceForm.databaseName" class="source-evidence-input" placeholder="Database name, e.g. OpenAlex" />
-                        <input v-model="databaseEvidenceForm.query" class="source-evidence-input" placeholder="Query or lookup" />
-                        <input v-model="databaseEvidenceForm.section" class="source-evidence-input" placeholder="Result section or row group" />
+                        <input v-model="databaseEvidenceForm.title" class="source-evidence-input" placeholder="来源标题" />
+                        <input v-model="databaseEvidenceForm.databaseName" class="source-evidence-input" placeholder="数据库名称，例如 OpenAlex" />
+                        <input v-model="databaseEvidenceForm.query" class="source-evidence-input" placeholder="查询语句或检索条件" />
+                        <input v-model="databaseEvidenceForm.section" class="source-evidence-input" placeholder="结果章节或行组" />
                       </template>
                       <textarea
                         v-model="activeSourceEvidenceContent"
                         class="source-evidence-input min-h-[92px] resize-none"
-                        placeholder="Paste the source-identified evidence text to cite"></textarea>
+                        placeholder="粘贴带有来源身份的可引用证据文本"></textarea>
                       <textarea
                         v-model="activeSourceEvidenceQuote"
                         class="source-evidence-input min-h-[58px] resize-none"
-                        placeholder="Optional exact quote; defaults to the evidence text"></textarea>
+                        placeholder="可选精确引文；默认使用证据文本"></textarea>
                     </div>
 
                     <div class="px-4 py-3 border-t border-[var(--border-light)] flex items-center justify-end gap-2">
@@ -186,7 +186,7 @@
                         @click="sourceEvidenceOpen = false"
                         :disabled="sourceEvidenceSubmitting"
                         class="px-3 py-1.5 text-xs font-medium rounded-lg text-[var(--text-secondary)] hover:bg-[var(--fill-tsp-gray-main)] transition-colors disabled:opacity-50">
-                        Cancel
+                        取消
                       </button>
                       <button
                         @click="handleIngestSourceEvidence"
@@ -194,7 +194,7 @@
                         class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-500 text-white hover:bg-emerald-600 transition-colors disabled:opacity-50 flex items-center gap-1.5">
                         <div v-if="sourceEvidenceSubmitting" class="size-3 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
                         <Plus v-else :size="13" />
-                        Ingest
+                        导入
                       </button>
                     </div>
                   </div>
@@ -207,15 +207,15 @@
                     :class="activeResearchToolPacks.length > 0
                       ? 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-300'
                       : 'border-gray-200 bg-white text-[var(--text-secondary)] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'"
-                    title="Research tool packs">
+                    title="研究工具包">
                     <Wrench :size="14" />
                     <span class="hidden sm:inline">{{ researchToolPackSummary }}</span>
                   </button>
                 </PopoverTrigger>
                 <PopoverContent class="w-[340px] p-0 overflow-hidden bg-[var(--background-white-main)] border border-[var(--border-light)] shadow-xl rounded-xl" align="end" :side-offset="8">
                   <div class="px-4 py-3 border-b border-[var(--border-light)]">
-                    <div class="text-sm font-semibold text-[var(--text-primary)]">Research tool packs</div>
-                    <div class="text-xs text-[var(--text-tertiary)]">Literature, evidence, reporting, memory</div>
+                    <div class="text-sm font-semibold text-[var(--text-primary)]">研究工具包</div>
+                    <div class="text-xs text-[var(--text-tertiary)]">文献、证据、报告、记忆</div>
                   </div>
                   <div class="p-2">
                     <button
@@ -243,9 +243,9 @@
                 :class="researchModeEnabled
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300'
                   : 'border-gray-200 bg-white text-[var(--text-secondary)] dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300'"
-                :title="researchModeEnabled ? 'Citation evidence mode' : 'General agent mode'">
+                :title="researchModeEnabled ? '引用证据模式' : '通用 Agent 模式'">
                 <FileText :size="14" />
-                <span class="hidden sm:inline">{{ researchModeEnabled ? 'Research' : 'General' }}</span>
+                <span class="hidden sm:inline">{{ researchModeEnabled ? '研究' : '通用' }}</span>
               </button>
 
             </div>
@@ -520,17 +520,17 @@ const {
 const { groupedMessages } = useMessageGrouper(messages);
 
 const researchToolPackOptions = [
-  { id: 'literature', label: 'Literature', researchWorkflow: 'Literature management' },
-  { id: 'evidence', label: 'Evidence audit', researchWorkflow: 'Evidence inspection and audit' },
-  { id: 'reporting', label: 'Reporting', researchWorkflow: 'Research artifact generation' },
-  { id: 'memory', label: 'Memory', researchWorkflow: 'Context-only research memory' },
+  { id: 'literature', label: '文献', researchWorkflow: '文献管理' },
+  { id: 'evidence', label: '证据审计', researchWorkflow: '证据检查与审计' },
+  { id: 'reporting', label: '报告', researchWorkflow: '研究产物生成' },
+  { id: 'memory', label: '记忆', researchWorkflow: '仅作上下文的研究记忆' },
 ] as const;
 
 const selectedResearchToolPacks = ref<string[]>([]);
 const activeResearchToolPacks = computed<string[]>(() => [...selectedResearchToolPacks.value]);
 const researchToolPackSummary = computed(() => {
   const count = activeResearchToolPacks.value.length;
-  return count > 0 ? `${count} packs` : 'Tools off';
+  return count > 0 ? `${count} 个工具包` : '工具关闭';
 });
 
 const toggleResearchToolPack = (packId: string) => {
@@ -1223,11 +1223,11 @@ const handleResearchProjectChange = async () => {
     if (binding.project) {
       activateResearchMode();
     }
-    showSuccessToast(t('Project context linked'));
+    showSuccessToast(t('课题上下文已关联'));
   } catch (error) {
     console.warn('Failed to link research project context:', error);
     selectedResearchProjectId.value = currentResearchProject.value?.project_id || '';
-    showErrorToast(t('Failed to link Project context'));
+    showErrorToast(t('关联课题上下文失败'));
   } finally {
     researchProjectLoading.value = false;
   }
@@ -1293,14 +1293,14 @@ const handleIngestSourceEvidence = async () => {
       const title = webEvidenceForm.title.trim();
       const url = webEvidenceForm.url.trim();
       if (!title || !url) {
-        showErrorToast(t('Source title and URL are required'));
+        showErrorToast(t('需要填写来源标题和 URL'));
         return;
       }
       await agentApi.ingestWebEvidenceSource(sessionId.value, {
         title,
         url,
         chunks: [{
-          section: webEvidenceForm.section.trim() || 'Web',
+          section: webEvidenceForm.section.trim() || '网页',
           content,
           ...(quote ? { quote } : {}),
         }],
@@ -1310,7 +1310,7 @@ const handleIngestSourceEvidence = async () => {
       const databaseName = databaseEvidenceForm.databaseName.trim();
       const query = databaseEvidenceForm.query.trim();
       if (!title || !databaseName || !query) {
-        showErrorToast(t('Source title, database name, and query are required'));
+        showErrorToast(t('需要填写来源标题、数据库名称和查询条件'));
         return;
       }
       await agentApi.ingestDatabaseEvidenceSource(sessionId.value, {
@@ -1318,7 +1318,7 @@ const handleIngestSourceEvidence = async () => {
         database_name: databaseName,
         query,
         chunks: [{
-          section: databaseEvidenceForm.section.trim() || 'Database',
+          section: databaseEvidenceForm.section.trim() || '数据库',
           content,
           ...(quote ? { quote } : {}),
         }],
@@ -1331,7 +1331,7 @@ const handleIngestSourceEvidence = async () => {
     showSuccessToast(t('Citation evidence indexed'));
   } catch (error) {
     console.error('Source evidence ingestion error:', error);
-    showErrorToast(t('Failed to ingest citation evidence'));
+    showErrorToast(t('导入引用证据失败'));
     lastTurnHadError.value = true;
   } finally {
     sourceEvidenceSubmitting.value = false;
@@ -1400,7 +1400,7 @@ const handleGenerateResearchReport = async (question: string) => {
 const handlePromoteToResearchLibrary = async (payload: { sandboxPath: string; title?: string }) => {
   if (!sessionId.value || _unmounted || researchLibraryPromoting.value) return;
   if (!currentResearchProject.value) {
-    showErrorToast(t('Link a Project context before adding papers to Research Library'));
+    showErrorToast(t('加入研究库前请先关联课题上下文'));
     return;
   }
 
@@ -1419,11 +1419,11 @@ const handlePromoteToResearchLibrary = async (payload: { sandboxPath: string; ti
     latestResearchLibraryPromotionCandidate.value = null;
     await loadSessionResearchProject(sessionId.value);
     activateResearchMode();
-    showSuccessToast(t('Added to Research Library'));
+    showSuccessToast(t('已加入研究库'));
   } catch (error) {
     console.error('Research Library promotion error:', error);
     lastTurnHadError.value = true;
-    showErrorToast(t('Failed to add to Research Library'));
+    showErrorToast(t('加入研究库失败'));
   } finally {
     researchLibraryPromoting.value = false;
   }
