@@ -30,10 +30,12 @@ class FakeConnection:
         self.closed = False
         self.executed = []
         self.executemany_calls = []
+        self.fetch_calls = []
         self.fetchrow_result = {"paper_count": 2, "chunk_count": 7}
         self.fetch_result = []
 
     async def fetch(self, sql, *args):
+        self.fetch_calls.append((sql, args))
         if self.fetch_result:
             return self.fetch_result
         return [
@@ -144,6 +146,9 @@ async def test_list_whole_paper_evidence_in_database_handles_json_source_identit
     assert hits[0].source_identity == {"doi": "10.1000/test"}
     assert hits[0].evidence_scope == "session"
     assert hits[0].rank_score == 1.0
+    assert "partition by coalesce(nullif(er.section" in fake_connection.fetch_calls[0][0].lower()
+    assert "where section_evidence_order <= $4" in fake_connection.fetch_calls[0][0].lower()
+    assert fake_connection.fetch_calls[0][1] == ("session-1", "project-1", 24, 3)
     assert fake_connection.closed is True
 
 

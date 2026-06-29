@@ -208,6 +208,7 @@ async def list_whole_paper_evidence_in_database(
     session_id: str,
     project_id: str | None = None,
     limit: int = 24,
+    per_section_limit: int = 3,
 ) -> list[EvidenceHit]:
     import asyncpg
 
@@ -226,36 +227,61 @@ async def list_whole_paper_evidence_in_database(
                     p.paper_id DESC
                 LIMIT 1
             )
+            , paper_evidence AS (
+                SELECT
+                    er.evidence_id,
+                    er.chunk_id,
+                    er.evidence_type,
+                    c.paper_id,
+                    p.title,
+                    er.section,
+                    er.page_start,
+                    er.page_end,
+                    er.quote,
+                    er.source_identity,
+                    CASE WHEN p.project_id IS NULL THEN 'session' ELSE 'project' END AS evidence_scope,
+                    row_number() OVER (
+                        PARTITION BY COALESCE(NULLIF(er.section, ''), 'Paper')
+                        ORDER BY
+                            COALESCE(er.page_start, c.page_start, 2147483647),
+                            er.evidence_id
+                    ) AS section_evidence_order,
+                    min(COALESCE(er.page_start, c.page_start, 2147483647)) OVER (
+                        PARTITION BY COALESCE(NULLIF(er.section, ''), 'Paper')
+                    ) AS section_first_page
+                FROM target_paper tp
+                JOIN research_papers p ON p.paper_id = tp.paper_id
+                JOIN research_chunks c ON c.paper_id = p.paper_id
+                JOIN research_evidence_records er ON er.chunk_id = c.chunk_id
+                WHERE er.evidence_type = 'paper'
+            )
             SELECT
-                er.evidence_id,
-                er.chunk_id,
-                er.evidence_type,
-                c.paper_id,
-                p.title,
-                er.section,
-                er.page_start,
-                er.page_end,
-                er.quote,
-                er.source_identity,
-                CASE WHEN p.project_id IS NULL THEN 'session' ELSE 'project' END AS evidence_scope,
+                evidence_id,
+                chunk_id,
+                evidence_type,
+                paper_id,
+                title,
+                section,
+                page_start,
+                page_end,
+                quote,
+                source_identity,
+                evidence_scope,
                 row_number() OVER (
-                    ORDER BY
-                        COALESCE(er.page_start, c.page_start, 2147483647),
-                        er.evidence_id
+                    ORDER BY section_first_page, section_evidence_order, evidence_id
                 )::float AS paper_order
-            FROM target_paper tp
-            JOIN research_papers p ON p.paper_id = tp.paper_id
-            JOIN research_chunks c ON c.paper_id = p.paper_id
-            JOIN research_evidence_records er ON er.chunk_id = c.chunk_id
-            WHERE er.evidence_type = 'paper'
+            FROM paper_evidence
+            WHERE section_evidence_order <= $4
             ORDER BY
-                COALESCE(er.page_start, c.page_start, 2147483647),
-                er.evidence_id
+                section_first_page,
+                section_evidence_order,
+                evidence_id
             LIMIT $3
             """,
             session_id,
             project_id,
             limit,
+            per_section_limit,
         )
         hits = []
         for row in rows:

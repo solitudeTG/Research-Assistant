@@ -223,10 +223,115 @@ async def test_answer_research_question_routes_whole_paper_summary_to_full_paper
     assert answer.to_dict()["task_route"]["route"] == "whole_paper_summary"
     assert answer.to_dict()["task_route"]["decision_source"] == "rule"
     assert answer.citation_count == 3
-    assert "Whole-paper summary based on citation evidence:" in answer.content
-    assert "Introduction" in answer.content
-    assert "Method" in answer.content
-    assert "Results" in answer.content
+    assert "Whole-paper hierarchical summary based on citation evidence:" in answer.content
+    assert "Section summaries:" in answer.content
+    assert "- Introduction:" in answer.content
+    assert "- Method:" in answer.content
+    assert "- Results:" in answer.content
+    assert "Global synthesis:" in answer.content
+
+
+@pytest.mark.asyncio
+async def test_whole_paper_summary_balances_dense_sections_before_global_synthesis(monkeypatch):
+    async def fake_summary_evidence(*args, **kwargs):
+        return [
+            EvidenceHit(
+                evidence_id=101,
+                chunk_id="chunk-intro-1",
+                paper_id="paper-1",
+                title="Dense Paper",
+                source_type="paper",
+                section="Introduction",
+                page_start=1,
+                page_end=1,
+                quote="The introduction states the research motivation.",
+                rank_score=1.0,
+            ),
+            EvidenceHit(
+                evidence_id=102,
+                chunk_id="chunk-intro-2",
+                paper_id="paper-1",
+                title="Dense Paper",
+                source_type="paper",
+                section="Introduction",
+                page_start=2,
+                page_end=2,
+                quote="The introduction repeats the motivation with additional background.",
+                rank_score=0.5,
+            ),
+            EvidenceHit(
+                evidence_id=103,
+                chunk_id="chunk-method",
+                paper_id="paper-1",
+                title="Dense Paper",
+                source_type="paper",
+                section="Method",
+                page_start=4,
+                page_end=4,
+                quote="The method introduces a hierarchical beamforming design.",
+                rank_score=0.333,
+            ),
+            EvidenceHit(
+                evidence_id=104,
+                chunk_id="chunk-experiment",
+                paper_id="paper-1",
+                title="Dense Paper",
+                source_type="paper",
+                section="Experiment",
+                page_start=7,
+                page_end=7,
+                quote="The experiment evaluates throughput and interference mitigation.",
+                rank_score=0.25,
+            ),
+            EvidenceHit(
+                evidence_id=105,
+                chunk_id="chunk-conclusion",
+                paper_id="paper-1",
+                title="Dense Paper",
+                source_type="paper",
+                section="Conclusion",
+                page_start=9,
+                page_end=9,
+                quote="The conclusion reports improved reliability and notes deployment constraints.",
+                rank_score=0.2,
+            ),
+        ]
+
+    async def fake_list_memory(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_whole_paper_evidence_in_database",
+        fake_summary_evidence,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_memory_entries_from_database",
+        fake_list_memory,
+    )
+
+    answer = await answer_research_question(
+        database_url="postgresql://test",
+        session_id="session-1",
+        question="Summarize this paper",
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=2,
+    )
+
+    section_block = answer.content.split("Section summaries:", 1)[1].split("Global synthesis:", 1)[0]
+    section_summary_lines = [
+        line for line in section_block.splitlines() if line.startswith("- ")
+    ]
+    assert len(section_summary_lines) == 4
+    assert sum(1 for line in section_summary_lines if line.startswith("- Introduction:")) == 1
+    assert any(line.startswith("- Method:") for line in section_summary_lines)
+    assert any(line.startswith("- Experiment:") for line in section_summary_lines)
+    assert any(line.startswith("- Conclusion:") for line in section_summary_lines)
+    assert "Global synthesis:" in answer.content
+    assert "The method introduces a hierarchical beamforming design." in answer.content
+    assert "[paper-1:Introduction:1]" in answer.content
+    assert answer.citation_count == 5
+    assert all(citation.source_type == "paper" for citation in answer.citations)
 
 
 @pytest.mark.asyncio

@@ -61,6 +61,8 @@ CONTEXT_BOUNDARIES = {
     "process_trace": ["tool_logs", "runtime_results", "agent_lifecycle"],
     "model_reasoning": ["model_reasoning"],
 }
+_WHOLE_PAPER_SECTION_EVIDENCE_LIMIT = 2
+_WHOLE_PAPER_SYNTHESIS_SECTION_LIMIT = 4
 
 
 @dataclass(frozen=True)
@@ -267,15 +269,57 @@ def _compose_whole_paper_summary(
 ) -> str:
     if not citations:
         return _compose_extractive_answer(citations, admission=admission)
-    lines = ["Whole-paper summary based on citation evidence:"]
-    section_seen: set[str] = set()
+    section_summaries = _section_summaries_from_citations(citations)
+    lines = [
+        "Whole-paper hierarchical summary based on citation evidence:",
+        f"Coverage: {len(citations)} citation evidence records across {len(section_summaries)} sections.",
+        "",
+        "Section summaries:",
+    ]
+    for summary in section_summaries:
+        lines.append(f"- {summary['section']}: {summary['summary']}")
+    lines.extend(["", "Global synthesis:"])
+    lines.extend(_global_synthesis_lines(section_summaries))
+    return "\n".join(lines)
+
+
+def _section_summaries_from_citations(citations: list[ResearchCitation]) -> list[dict[str, Any]]:
+    summaries: list[dict[str, Any]] = []
+    section_index: dict[str, dict[str, Any]] = {}
     for citation in citations:
         section = citation.section or "Paper"
-        if section in section_seen:
-            continue
-        section_seen.add(section)
-        lines.append(f"- {section}: {citation.quote} {citation.citation_label}")
-    return "\n".join(lines)
+        if section not in section_index:
+            section_summary = {
+                "section": section,
+                "citations": [],
+            }
+            section_index[section] = section_summary
+            summaries.append(section_summary)
+        section_index[section]["citations"].append(citation)
+
+    for summary in summaries:
+        selected = summary["citations"][:_WHOLE_PAPER_SECTION_EVIDENCE_LIMIT]
+        summary["summary"] = " ".join(
+            f"{citation.quote} {citation.citation_label}"
+            for citation in selected
+        )
+    return summaries
+
+
+def _global_synthesis_lines(section_summaries: list[dict[str, Any]]) -> list[str]:
+    selected = section_summaries[:_WHOLE_PAPER_SYNTHESIS_SECTION_LIMIT]
+    if not selected:
+        return ["- No admitted section evidence was available for synthesis."]
+
+    contribution_parts = [
+        f"{summary['citations'][0].quote} {summary['citations'][0].citation_label}"
+        for summary in selected
+        if summary["citations"]
+    ]
+    if not contribution_parts:
+        return ["- No admitted section evidence was available for synthesis."]
+
+    return ["- " + " ".join(contribution_parts)]
 
 
 def _citation_to_admission_hit(citation: ResearchCitation, index: int) -> Any:
