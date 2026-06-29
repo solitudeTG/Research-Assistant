@@ -44,6 +44,7 @@ updated: 2026-06-29
 | [F012 Chat To Library Promotion](F012-chat-to-library-promotion.md) | temporary upload promotion, trusted library ingestion | 加入研究库, promote to library, temporary PDF, chat upload, library action | `ScienceClaw/backend/route/sessions.py`; `ScienceClaw/backend/research_assistant/`; `ScienceClaw/frontend/src/pages/ChatPage.vue` | 修改普通 Chat 上传论文入库边界、回答底部“加入研究库”动作或 promotion trace 前。 |
 
 | [F013 Research Task Router and Whole Paper Summary](F013-research-task-router-whole-paper-summary.md) | task-aware research routing, whole-paper summary | research task router, whole paper summary, summarize this paper, evidence QA, route metadata | `ScienceClaw/backend/research_assistant/`; `ScienceClaw/backend/route/sessions.py`; `ScienceClaw/frontend/src/` | 修改研究问题路由、整篇论文总结、RAG 与 summary workflow 分流、route trace 或回答 metadata 前。 |
+| [F015 Session Evidence Boundary](F015-session-evidence-boundary.md) | session evidence, project evidence, temporary upload boundary | session evidence, temporary PDF, project evidence, evidence scope, 加入研究库, chat upload boundary | `ScienceClaw/backend/route/sessions.py`; `ScienceClaw/backend/research_assistant/`; `ScienceClaw/frontend/src/` | 修改 Chat 上传临时材料、Project evidence 边界、promotion eligibility、citation scope metadata 或重复上传反馈前。 |
 
 ## Planned Feature Candidates
 
