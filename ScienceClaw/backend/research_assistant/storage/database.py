@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 from backend.research_assistant.audit import EvidenceAudit
 from backend.research_assistant.models import IngestionResult
@@ -29,6 +30,18 @@ from backend.research_assistant.storage.repository import (
     persist_report_evidence_map,
     upsert_session_research_project,
 )
+
+
+async def ensure_research_schema_in_database(database_url: str) -> None:
+    import asyncpg
+
+    schema_path = Path(__file__).with_name("schema.sql")
+    schema_sql = schema_path.read_text(encoding="utf-8")
+    connection = await asyncpg.connect(database_url)
+    try:
+        await connection.execute(schema_sql)
+    finally:
+        await connection.close()
 
 
 @dataclass(frozen=True)

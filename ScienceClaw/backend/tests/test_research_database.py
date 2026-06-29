@@ -6,6 +6,7 @@ import pytest
 from backend.research_assistant.audit import EvidenceAudit, EvidenceAuditClaim
 from backend.research_assistant.storage import database
 from backend.research_assistant.storage.database import (
+    ensure_research_schema_in_database,
     get_research_session_status_from_database,
     hybrid_search_evidence_in_database,
     persist_chunk_embeddings_to_database,
@@ -63,6 +64,24 @@ class FakeConnection:
 
     async def executemany(self, sql, rows):
         self.executemany_calls.append((sql, rows))
+
+
+@pytest.mark.asyncio
+async def test_ensure_research_schema_in_database_executes_schema_and_closes_connection(monkeypatch):
+    fake_connection = FakeConnection()
+
+    async def connect(database_url):
+        assert database_url == "postgresql://test"
+        return fake_connection
+
+    monkeypatch.setitem(sys.modules, "asyncpg", types.SimpleNamespace(connect=connect))
+
+    await ensure_research_schema_in_database("postgresql://test")
+
+    assert len(fake_connection.executed) == 1
+    assert "create table if not exists research_projects" in fake_connection.executed[0][0].lower()
+    assert "create table if not exists research_session_projects" in fake_connection.executed[0][0].lower()
+    assert fake_connection.closed is True
 
 
 @pytest.mark.asyncio

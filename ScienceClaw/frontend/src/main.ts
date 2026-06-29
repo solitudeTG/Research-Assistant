@@ -45,11 +45,6 @@ export const router = createRouter({
           meta: { requiresAuth: true }
         },
         { 
-          path: ':sessionId', 
-          component: ChatPage,
-          meta: { requiresAuth: true }
-        },
-        { 
           path: 'skills', 
           component: SkillsPage,
           meta: { requiresAuth: true }
@@ -82,6 +77,11 @@ export const router = createRouter({
         {
           path: 'tasks',
           component: TasksPage,
+          meta: { requiresAuth: true }
+        },
+        {
+          path: ':sessionId',
+          component: ChatPage,
           meta: { requiresAuth: true }
         }
       ]

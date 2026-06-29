@@ -4,7 +4,7 @@ doc_kind: feature
 status: active
 owner: solitudeTG
 created: 2026-06-28
-updated: 2026-06-28
+updated: 2026-06-29
 ---
 
 # F009: Research Project Library Core
@@ -112,10 +112,13 @@ In Progress. The first vertical slice now creates/lists Research Projects, lists
 | --- | --- | --- | --- | --- |
 | 2026-06-28 | planned | User approved four-Feature breakdown | This Feature | Created to own Research Library and Project asset management. |
 | 2026-06-28 | in_progress | First F009 implementation slice | Focused tests and type-check | Project/Library core is implemented; project-scoped Chat remains F010. |
+| 2026-06-29 | patched | User E2E found Research Library create action appeared unresponsive | Browser E2E, backend schema check, focused tests, type-check, build | F009.1 restored static Library routing and startup schema initialization. |
 
 ## Patch History
 
-None yet.
+| Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| F009.1 | 2026-06-29 | pending | Real E2E validation showed the Research Library create action did not complete. | Fixed chat child routes were declared after `:sessionId`, and the running backend did not initialize `research_assistant/storage/schema.sql` on startup. | Static route-order contract test, research schema initialization unit test, PostgreSQL table check, and browser E2E project creation. | verified |
 
 ## Evidence
 
@@ -126,6 +129,14 @@ Verification evidence from 2026-06-28:
 - `npm.cmd run type-check` from `ScienceClaw/frontend` -> passed.
 - `npm.cmd run build` from `ScienceClaw/frontend` -> passed with existing Browserslist/CSS/chunk-size warnings.
 - `knowledge_check.py --feature-index docs/features/F009-research-project-library-core.md` -> pending for closeout after this update.
+
+Verification evidence from 2026-06-29:
+
+- Browser E2E on `http://localhost:5173/chat/research-library` created `E2E 验证课题 0629-1004` and showed the selected project detail with an empty paper table.
+- `docker compose exec -T postgres psql -U research -d research_assistant -c "select to_regclass('public.research_projects') as research_projects, to_regclass('public.research_session_projects') as research_session_projects;"` -> both tables returned.
+- `$env:PYTHONPATH='E:\Self-Project\Research-Assistant\ScienceClaw'; pytest ScienceClaw/backend/tests/test_research_database.py ScienceClaw/backend/tests/test_research_frontend_contracts.py -q` -> `42 passed`.
+- `npm.cmd run type-check` from `ScienceClaw/frontend` -> passed.
+- `npm.cmd run build` from `ScienceClaw/frontend` -> passed with existing Browserslist/CSS/chunk-size warnings.
 
 ## Recovery Snapshot
 

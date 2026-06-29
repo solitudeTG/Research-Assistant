@@ -26,6 +26,8 @@ from backend.route.im import router as im_router, start_im_runtime, stop_im_runt
 from backend.models import init_system_models
 from backend.user.bootstrap import ensure_admin_user
 from backend.im.migrations import backfill_session_sources
+from backend.config import settings
+from backend.research_assistant.storage.database import ensure_research_schema_in_database
 
 
 @asynccontextmanager
@@ -39,6 +41,10 @@ async def lifespan(app: FastAPI):
         await ensure_admin_user()
     except Exception as e:
         logger.error(f"Failed to bootstrap admin user: {e}")
+    try:
+        await ensure_research_schema_in_database(settings.research_database_url)
+    except Exception as e:
+        logger.error(f"Failed to initialize research schema: {e}")
     try:
         await cleanup_orphaned_sessions()
     except Exception as e:

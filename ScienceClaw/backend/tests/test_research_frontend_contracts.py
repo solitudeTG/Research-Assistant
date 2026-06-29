@@ -65,6 +65,19 @@ def test_research_library_page_uses_chinese_workbench_copy():
         assert stale_copy not in library_page
 
 
+def test_static_chat_routes_are_declared_before_session_id_route():
+    main_ts = (
+        Path(__file__).resolve().parents[2]
+        / "frontend"
+        / "src"
+        / "main.ts"
+    ).read_text(encoding="utf-8")
+
+    session_route_index = main_ts.index("path: ':sessionId'")
+    for route_path in ["path: 'skills'", "path: 'tools'", "path: 'science-tools/:toolName'", "path: 'research-library'", "path: 'tasks'"]:
+        assert main_ts.index(route_path) < session_route_index
+
+
 def test_frontend_exposes_session_project_binding_contracts():
     frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
     agent_api = (frontend_root / "api" / "agent.ts").read_text(encoding="utf-8")
