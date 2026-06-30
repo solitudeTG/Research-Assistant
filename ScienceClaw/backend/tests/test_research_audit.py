@@ -283,3 +283,62 @@ def test_audit_evidence_claims_rejects_overclaim_even_with_valid_citation_label(
     assert audit.claims[0].evidence_ids == []
     assert 0 < audit.claims[0].support_score < 1
     assert "No attached citation quote directly supports this claim." in audit.claims[0].notes[-1]
+
+
+def test_audit_evidence_claims_ignores_markdown_structure_lines():
+    audit = audit_evidence_claims(
+        answer_content=(
+            "**Global synthesis:**\n"
+            "- **Research problem:** Hybrid retrieval improves recall. [paper-1:Results:4]"
+        ),
+        citations=[
+            ResearchCitation(
+                evidence_id=17,
+                chunk_id="chunk-17",
+                paper_id="paper-1",
+                title="Hybrid Retrieval",
+                section="Results",
+                page_start=4,
+                page_end=4,
+                quote="Hybrid retrieval improves recall.",
+                citation_label="[paper-1:Results:4]",
+            )
+        ],
+    )
+
+    assert audit.claim_count == 1
+    assert audit.claims[0].claim_text == "- **Research problem:** Hybrid retrieval improves recall. [paper-1:Results:4]"
+    assert audit.claims[0].status == "approved"
+
+
+def test_audit_evidence_claims_marks_cited_synthesis_with_incomplete_support_as_partial():
+    audit = audit_evidence_claims(
+        answer_content=(
+            "- **Method:** The paper introduces a hybrid retrieval workflow that combines "
+            "lexical matching with vector search to improve recall and keep citations auditable. "
+            "[paper-1:Methods:2]"
+        ),
+        citations=[
+            ResearchCitation(
+                evidence_id=17,
+                chunk_id="chunk-17",
+                paper_id="paper-1",
+                title="Hybrid Retrieval",
+                section="Methods",
+                page_start=2,
+                page_end=2,
+                quote="Hybrid retrieval combines lexical matching and vector search to improve recall.",
+                citation_label="[paper-1:Methods:2]",
+            )
+        ],
+    )
+
+    assert audit.status == "partial"
+    assert audit.claim_count == 1
+    assert audit.approved_claim_count == 0
+    assert audit.partial_claim_count == 1
+    assert audit.unsupported_claim_count == 0
+    assert audit.claims[0].status == "partial"
+    assert audit.claims[0].evidence_ids == [17]
+    assert 0 < audit.claims[0].support_score < 1
+    assert "Cited evidence partially supports this synthesized claim." in audit.claims[0].notes

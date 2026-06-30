@@ -7,6 +7,7 @@ from typing import Iterable, Protocol
 
 CITATION_EVIDENCE_TYPES = ("paper", "web", "database")
 CONTEXT_ONLY_TYPES = ("memory", "model_reasoning", "process_trace", "tool_logs")
+PARTIAL_SUPPORT_THRESHOLD = 0.35
 
 
 class CitationLike(Protocol):
@@ -47,6 +48,10 @@ class EvidenceAudit:
         return sum(1 for claim in self.claims if claim.status == "unsupported")
 
     @property
+    def partial_claim_count(self) -> int:
+        return sum(1 for claim in self.claims if claim.status == "partial")
+
+    @property
     def invalid_source_count(self) -> int:
         return sum(1 for claim in self.claims if claim.status == "invalid_source")
 
@@ -55,6 +60,7 @@ class EvidenceAudit:
             "status": self.status,
             "claim_count": self.claim_count,
             "approved_claim_count": self.approved_claim_count,
+            "partial_claim_count": self.partial_claim_count,
             "unsupported_claim_count": self.unsupported_claim_count,
             "invalid_source_count": self.invalid_source_count,
             "boundaries": self.boundaries,
@@ -93,7 +99,7 @@ def _audit_claim(claim_text: str, citations: list[CitationLike]) -> EvidenceAudi
             support_score=0.0,
         )
 
-    claim_body = _remove_citation_labels(claim_text, citations)
+    claim_body = _claim_body_for_support(claim_text, citations)
     cited_labels = _citation_labels_in_claim(claim_text, citations)
     labeled_citations = [citation for citation in citations if getattr(citation, "citation_label", "")]
     if labeled_citations and not cited_labels:
@@ -156,6 +162,21 @@ def _audit_claim(claim_text: str, citations: list[CitationLike]) -> EvidenceAudi
             support_score=1.0,
         )
 
+    nearest_evidence_id, nearest_score = _nearest_citation_support(claim_body, citation_candidates)
+    if (
+        cited_labels
+        and _sentence_count(claim_body) <= 1
+        and nearest_evidence_id is not None
+        and nearest_score >= PARTIAL_SUPPORT_THRESHOLD
+    ):
+        return EvidenceAuditClaim(
+            claim_text=claim_text,
+            status="partial",
+            evidence_ids=[nearest_evidence_id],
+            notes=["Cited evidence partially supports this synthesized claim."],
+            support_score=nearest_score,
+        )
+
     nearest_evidence_id, nearest_score = _nearest_citation_support(claim_body, citations)
     notes = []
     if nearest_evidence_id is not None and nearest_score > 0:
@@ -175,7 +196,7 @@ def _overall_status(claims: list[EvidenceAuditClaim]) -> str:
         return "invalid_source"
     if all(claim.status == "approved" for claim in claims):
         return "approved"
-    if any(claim.status == "approved" for claim in claims):
+    if any(claim.status in {"approved", "partial"} for claim in claims):
         return "partial"
     return "unsupported"
 
@@ -184,12 +205,30 @@ def _extract_claim_texts(answer_content: str) -> list[str]:
     claims: list[str] = []
     for raw_line in answer_content.splitlines():
         line = raw_line.strip()
-        if not line or line.endswith(":"):
+        if not line:
+            continue
+        if _is_structural_line(line):
             continue
         line = re.sub(r"^\d+[\.)]\s*", "", line).strip()
         if line:
             claims.append(line)
     return claims
+
+
+def _is_structural_line(line: str) -> bool:
+    normalized = line.strip()
+    if not normalized:
+        return True
+    if re.fullmatch(r"[-*_`#\s]+", normalized):
+        return True
+    without_list_marker = re.sub(r"^[-*+]\s+", "", normalized).strip()
+    without_heading_marker = re.sub(r"^#{1,6}\s+", "", without_list_marker).strip()
+    without_markdown = re.sub(r"[*_`]+", "", without_heading_marker).strip()
+    if without_markdown.endswith(":"):
+        return True
+    if not re.search(r"[.!?。！？\]]", without_markdown) and len(_audit_terms(without_markdown)) <= 4:
+        return True
+    return False
 
 
 def _normalise_text(value: str) -> str:
@@ -205,12 +244,25 @@ def _remove_citation_labels(claim_text: str, citations: list[CitationLike]) -> s
     return _normalise_text(claim_body)
 
 
+def _claim_body_for_support(claim_text: str, citations: list[CitationLike]) -> str:
+    claim_body = _remove_citation_labels(claim_text, citations)
+    claim_body = re.sub(r"^[-*+]\s+", "", claim_body).strip()
+    claim_body = re.sub(r"^\*\*[^*]{1,80}:\*\*\s*", "", claim_body).strip()
+    claim_body = re.sub(r"^[a-z][a-z0-9 /_-]{1,80}:\s+", "", claim_body).strip()
+    return _normalise_text(claim_body)
+
+
 def _citation_labels_in_claim(claim_text: str, citations: list[CitationLike]) -> set[str]:
     return {
         citation.citation_label
         for citation in citations
         if getattr(citation, "citation_label", "") and citation.citation_label in claim_text
     }
+
+
+def _sentence_count(value: str) -> int:
+    sentences = [part for part in re.split(r"[.!?。！？]+", value) if part.strip()]
+    return len(sentences)
 
 
 def _citation_directly_supports_claim(claim_body: str, quote: str) -> bool:

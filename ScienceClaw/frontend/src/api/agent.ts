@@ -91,7 +91,7 @@ export interface ResearchEvidenceRecord {
 
 export interface ResearchAuditClaim {
   claim_text: string;
-  status: 'approved' | 'unsupported' | 'invalid_source';
+  status: 'approved' | 'partial' | 'unsupported' | 'invalid_source';
   evidence_ids: number[];
   notes: string[];
   support_score?: number;
@@ -101,6 +101,7 @@ export interface ResearchAudit {
   status: 'approved' | 'partial' | 'unsupported' | 'invalid_source';
   claim_count: number;
   approved_claim_count: number;
+  partial_claim_count?: number;
   unsupported_claim_count: number;
   invalid_source_count: number;
   boundaries: {
@@ -346,6 +347,7 @@ export async function answerResearchQuestion(
   const response = await apiClient.post<ApiResponse<ResearchAnswer>>(
     `/sessions/${sessionId}/research/answer`,
     { question, limit, model_config_id: modelConfigId || undefined },
+    { timeout: 300000 },
   );
   return response.data.data;
 }
@@ -535,6 +537,7 @@ export async function generateResearchReport(
   const response = await apiClient.post<ApiResponse<ResearchReport>>(
     `/sessions/${sessionId}/research/report`,
     { question, limit },
+    { timeout: 300000 },
   );
   return response.data.data;
 }

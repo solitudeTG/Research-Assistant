@@ -62,7 +62,7 @@ export interface ResearchContextBoundaries {
 
 export interface ResearchAuditClaimMetadata {
   claim_text: string;
-  status: 'approved' | 'unsupported' | 'invalid_source';
+  status: 'approved' | 'partial' | 'unsupported' | 'invalid_source';
   evidence_ids: number[];
   notes: string[];
   support_score?: number;
@@ -72,6 +72,7 @@ export interface ResearchAuditMetadata {
   status: 'approved' | 'partial' | 'unsupported' | 'invalid_source';
   claim_count: number;
   approved_claim_count: number;
+  partial_claim_count?: number;
   unsupported_claim_count: number;
   invalid_source_count: number;
   boundaries: {

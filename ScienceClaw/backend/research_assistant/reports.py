@@ -170,6 +170,7 @@ def _compose_markdown_report(
             f"- Status: `{answer.audit.status}`",
             f"- Claims: {answer.audit.claim_count}",
             f"- Approved: {answer.audit.approved_claim_count}",
+            f"- Partial: {answer.audit.partial_claim_count}",
             f"- Unsupported: {answer.audit.unsupported_claim_count}",
             f"- Invalid sources: {answer.audit.invalid_source_count}",
             f"- Citation evidence sources: {_format_sources(answer.audit.boundaries['citation_evidence'])}",
@@ -200,6 +201,7 @@ def _compose_trust_summary_lines(answer: ResearchAnswer) -> list[str]:
     return [
         f"- Audit status: `{summary['audit_status']}`",
         f"- Approved claims: {summary['approved_claim_count']} / {summary['claim_count']}",
+        f"- Partial claims: {summary['partial_claim_count']}",
         f"- Unsupported claims: {summary['unsupported_claim_count']}",
         f"- Invalid-source claims: {summary['invalid_source_count']}",
         f"- Citation evidence records: {summary['citation_evidence_count']}",
@@ -232,9 +234,18 @@ def _reader_summary_status(answer: ResearchAnswer) -> str:
     if answer.audit.claim_count and answer.audit.approved_claim_count == answer.audit.claim_count:
         return "All audited claims are approved by citation evidence."
     if answer.audit.approved_claim_count:
+        partial_note = ""
+        if answer.audit.partial_claim_count:
+            partial_note = f"; {answer.audit.partial_claim_count} partially supported"
         return (
-            f"{answer.audit.approved_claim_count} of {answer.audit.claim_count} audited claims are approved; "
+            f"{answer.audit.approved_claim_count} of {answer.audit.claim_count} audited claims are approved"
+            f"{partial_note}; "
             "unapproved claims remain evidence gaps."
+        )
+    if answer.audit.partial_claim_count:
+        return (
+            f"{answer.audit.partial_claim_count} of {answer.audit.claim_count} audited claims are partially supported; "
+            "no claim is fully approved yet."
         )
     return "No audited claims are approved yet."
 
@@ -261,7 +272,7 @@ def _reader_summary_memory_boundary(answer: ResearchAnswer) -> str:
 
 
 def _reader_summary_next_action(answer: ResearchAnswer) -> str:
-    if answer.audit.unsupported_claim_count or answer.audit.invalid_source_count or not answer.citations:
+    if answer.audit.partial_claim_count or answer.audit.unsupported_claim_count or answer.audit.invalid_source_count or not answer.citations:
         return "Resolve Evidence Gaps and Limitations before reusing this report as a cited output."
     return "Use the Evidence-Grounded Answer, then inspect Claim Checks and Citation Evidence before reuse."
 
@@ -271,6 +282,7 @@ def _build_trust_summary(answer: ResearchAnswer) -> dict:
         "audit_status": answer.audit.status,
         "claim_count": answer.audit.claim_count,
         "approved_claim_count": answer.audit.approved_claim_count,
+        "partial_claim_count": answer.audit.partial_claim_count,
         "unsupported_claim_count": answer.audit.unsupported_claim_count,
         "invalid_source_count": answer.audit.invalid_source_count,
         "citation_evidence_count": answer.citation_count,
@@ -448,7 +460,7 @@ def _build_evidence_gaps(answer: ResearchAnswer) -> list[dict]:
             "notes": claim.notes,
         }
         for claim in answer.audit.claims
-        if claim.status in {"unsupported", "invalid_source"}
+        if claim.status in {"partial", "unsupported", "invalid_source"}
     ]
 
 
@@ -472,7 +484,7 @@ def _build_limitations(answer: ResearchAnswer) -> list[dict]:
             {
                 "type": "evidence_gap",
                 "message": (
-                    f"Resolve {gap_count} unsupported or invalid-source claim"
+                    f"Resolve {gap_count} partial, unsupported, or invalid-source claim"
                     f"{'' if gap_count == 1 else 's'} before treating the report as complete."
                 ),
             }

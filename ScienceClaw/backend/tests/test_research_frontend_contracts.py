@@ -81,9 +81,47 @@ def test_activity_panel_keeps_unsupported_audit_claims_collapsed_by_default():
     assert "unsupportedResearchAuditClaims" in activity_panel
     assert "unsupportedAuditClaimsExpanded = ref(false)" in activity_panel
     assert "v-for=\"(claim, claimIndex) in approvedResearchAuditClaims\"" in activity_panel
+    assert "partialResearchAuditClaims" in activity_panel
+    assert "partialAuditClaimsExpanded = ref(false)" in activity_panel
+    assert "v-for=\"(claim, claimIndex) in partialResearchAuditClaims\"" in activity_panel
     assert "v-for=\"(claim, claimIndex) in unsupportedResearchAuditClaims\"" in activity_panel
     assert "unsupportedAuditClaimsExpanded && unsupportedResearchAuditClaims.length" in activity_panel
+    assert "claim.status !== 'approved' && claim.status !== 'partial'" in activity_panel
     assert "v-for=\"(claim, claimIndex) in researchSidecar.audit.claims\"" not in activity_panel
+
+
+def test_frontend_research_audit_contract_accepts_partial_claim_status():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    agent_api = (frontend_root / "api" / "agent.ts").read_text(encoding="utf-8")
+    message_types = (frontend_root / "types" / "message.ts").read_text(encoding="utf-8")
+    activity_panel = (frontend_root / "components" / "ActivityPanel.vue").read_text(encoding="utf-8")
+
+    assert "status: 'approved' | 'partial' | 'unsupported' | 'invalid_source'" in agent_api
+    assert "status: 'approved' | 'partial' | 'unsupported' | 'invalid_source'" in message_types
+    assert "partial_claim_count?: number" in agent_api
+    assert "partial_claim_count?: number" in message_types
+    assert "partial={{ researchSidecar.audit.partial_claim_count || 0 }}" in activity_panel
+    assert "部分支持 claims" in activity_panel
+
+
+def test_research_long_running_api_calls_override_default_timeout():
+    agent_api = (
+        Path(__file__).resolve().parents[2]
+        / "frontend"
+        / "src"
+        / "api"
+        / "agent.ts"
+    ).read_text(encoding="utf-8")
+
+    research_answer_start = agent_api.index("export async function answerResearchQuestion")
+    research_answer_end = agent_api.index("export async function getResearchStatus", research_answer_start)
+    research_answer_source = agent_api[research_answer_start:research_answer_end]
+    report_start = agent_api.index("export async function generateResearchReport")
+    report_end = agent_api.index("export async function stopSession", report_start)
+    report_source = agent_api[report_start:report_end]
+
+    assert "{ timeout: 300000 }" in research_answer_source
+    assert "{ timeout: 300000 }" in report_source
 
 
 def test_agent_api_exposes_web_and_database_evidence_ingestion():

@@ -133,6 +133,7 @@ async def test_generate_markdown_research_report_writes_artifact_and_evidence_ma
         "audit_status": "approved",
         "claim_count": 1,
         "approved_claim_count": 1,
+        "partial_claim_count": 0,
         "unsupported_claim_count": 0,
         "invalid_source_count": 0,
         "citation_evidence_count": 1,
@@ -325,7 +326,7 @@ async def test_generate_markdown_research_report_keeps_unsupported_claims_out_of
     ) in markdown
     assert "## Limitations and Next Steps" in markdown
     assert (
-        "- Resolve 1 unsupported or invalid-source claim before treating the report as complete."
+        "- Resolve 1 partial, unsupported, or invalid-source claim before treating the report as complete."
     ) in markdown
     assert "## Reader Summary" in markdown
     assert (
@@ -354,7 +355,7 @@ async def test_generate_markdown_research_report_keeps_unsupported_claims_out_of
     assert evidence["limitations"] == [
         {
             "type": "evidence_gap",
-            "message": "Resolve 1 unsupported or invalid-source claim before treating the report as complete.",
+            "message": "Resolve 1 partial, unsupported, or invalid-source claim before treating the report as complete.",
         }
     ]
     assert evidence["reader_summary"] == {
@@ -415,7 +416,7 @@ async def test_generate_markdown_research_report_uses_generic_no_citation_eviden
     assert evidence["limitations"] == [
         {
             "type": "evidence_gap",
-            "message": "Resolve 1 unsupported or invalid-source claim before treating the report as complete.",
+            "message": "Resolve 1 partial, unsupported, or invalid-source claim before treating the report as complete.",
         },
         {
             "type": "no_citation_evidence",

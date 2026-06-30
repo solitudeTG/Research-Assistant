@@ -108,6 +108,10 @@ class ResearchAuditResult:
     boundaries: dict[str, Any]
     claims: list[dict[str, Any]]
 
+    @property
+    def partial_claim_count(self) -> int:
+        return sum(1 for claim in self.claims if claim.get("status") == "partial")
+
     def to_dict(self) -> dict:
         return {
             "audit_id": self.audit_id,
@@ -117,6 +121,7 @@ class ResearchAuditResult:
             "status": self.status,
             "claim_count": self.claim_count,
             "approved_claim_count": self.approved_claim_count,
+            "partial_claim_count": self.partial_claim_count,
             "unsupported_claim_count": self.unsupported_claim_count,
             "invalid_source_count": self.invalid_source_count,
             "boundaries": self.boundaries,

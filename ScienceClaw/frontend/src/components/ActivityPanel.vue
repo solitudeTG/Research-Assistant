@@ -219,6 +219,7 @@
                 </div>
                 <div class="flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] text-[var(--text-tertiary)]">
                   <span>approved={{ researchSidecar.audit.approved_claim_count }}</span>
+                  <span>partial={{ researchSidecar.audit.partial_claim_count || 0 }}</span>
                   <span>unsupported={{ researchSidecar.audit.unsupported_claim_count }}</span>
                   <span>invalid={{ researchSidecar.audit.invalid_source_count }}</span>
                 </div>
@@ -237,6 +238,36 @@
                     </div>
                     <div v-if="claim.notes.length" class="mt-1 text-[10px] text-[var(--text-tertiary)]">
                       {{ claim.notes.join(' ') }}
+                    </div>
+                  </div>
+                </div>
+                <div v-if="partialResearchAuditClaims.length" class="mt-2">
+                  <button
+                    type="button"
+                    class="flex w-full items-center gap-2 rounded-md border border-[var(--border-light)] bg-[var(--background-menu-white)] px-2 py-1.5 text-left transition-colors hover:border-sky-200 hover:text-sky-700 dark:hover:border-sky-800/50 dark:hover:text-sky-300"
+                    @click.stop="partialAuditClaimsExpanded = !partialAuditClaimsExpanded"
+                  >
+                    <ChevronRightIcon :size="11"
+                      class="shrink-0 text-[var(--text-tertiary)] transition-transform duration-150"
+                      :class="{ 'rotate-90': partialAuditClaimsExpanded }" />
+                    <span class="min-w-0 flex-1 text-[11px] font-semibold text-[var(--text-secondary)]">部分支持 claims</span>
+                    <span class="shrink-0 font-mono text-[10px] text-[var(--text-tertiary)]">{{ partialResearchAuditClaims.length }}</span>
+                  </button>
+                  <div v-if="partialAuditClaimsExpanded && partialResearchAuditClaims.length" class="mt-1 flex flex-col gap-1">
+                    <div
+                      v-for="(claim, claimIndex) in partialResearchAuditClaims"
+                      :key="`partial-${claimIndex}`"
+                      class="rounded-md border border-[var(--border-light)] bg-[var(--background-menu-white)] px-2 py-1.5"
+                    >
+                      <div class="flex items-start gap-2">
+                        <span class="min-w-0 flex-1 text-[var(--text-secondary)]">{{ claim.claim_text }}</span>
+                        <span class="shrink-0 font-mono text-[10px] text-sky-600 dark:text-sky-300">
+                          {{ claim.status }}
+                        </span>
+                      </div>
+                      <div v-if="claim.notes.length" class="mt-1 text-[10px] text-[var(--text-tertiary)]">
+                        {{ claim.notes.join(' ') }}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -679,6 +710,7 @@ const researchTaskRouteExpanded = ref(false);
 const sourceQualityExpanded = ref(false);
 const evidenceAdmissionExpanded = ref(false);
 const researchEvidenceExpanded = ref(true);
+const partialAuditClaimsExpanded = ref(false);
 const unsupportedAuditClaimsExpanded = ref(false);
 const selectedRuntimeAuditPack = ref('all');
 
@@ -772,8 +804,12 @@ const approvedResearchAuditClaims = computed(() =>
   props.researchSidecar?.audit?.claims.filter(claim => claim.status === 'approved') ?? []
 );
 
+const partialResearchAuditClaims = computed(() =>
+  props.researchSidecar?.audit?.claims.filter(claim => claim.status === 'partial') ?? []
+);
+
 const unsupportedResearchAuditClaims = computed(() =>
-  props.researchSidecar?.audit?.claims.filter(claim => claim.status !== 'approved') ?? []
+  props.researchSidecar?.audit?.claims.filter(claim => claim.status !== 'approved' && claim.status !== 'partial') ?? []
 );
 
 const formatBoundaryValues = (values?: string[]) => {
