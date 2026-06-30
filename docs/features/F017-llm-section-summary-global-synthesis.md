@@ -115,7 +115,9 @@ Completed. F017 now uses an injectable/default LLM section-summary to global-syn
 
 ## Patch History
 
-None yet.
+| Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| F017.1 | 2026-06-30 | `4d1f046` | Live UI E2E could fall back to deterministic mode or accept unusable missing-context LLM prose. | Research answer did not reliably receive the selected model config, and the LLM synthesis path trusted missing-context/refusal output as usable. | Propagated model config into research answer, added missing-context/citation-label guards, deterministic section-context recovery, larger synthesis output budget, focused tests, and live UI trace verification. | completed |
 
 ## Evidence
 

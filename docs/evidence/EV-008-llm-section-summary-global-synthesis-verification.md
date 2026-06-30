@@ -68,6 +68,24 @@ curl.exe -s -X POST "http://localhost:12001/api/v1/sessions/mMKV5kKCEEcPKbxYQeUH
 python C:\Users\HUAWEI\.codex\skills\using-agentmentor\scripts\knowledge_check.py --root E:\Self-Project\Research-Assistant --docs-path docs --strict --feature-index F017-llm-section-summary-global-synthesis
 ```
 
+## Commands
+
+```powershell
+npm.cmd run type-check
+```
+
+```powershell
+$env:PYTHONPATH='E:\Self-Project\Research-Assistant;E:\Self-Project\Research-Assistant\ScienceClaw'; pytest ScienceClaw/backend/tests/test_research_answering.py ScienceClaw/backend/tests/test_research_session_routes.py -k "whole_paper_summary or langchain_whole_paper or model_config or research_answer" -q --basetemp=.pytest_tmp\f017-final-verify
+```
+
+```powershell
+python -X utf8 -c "<local live-session event check for session XKMcEkESLvRXve64QyFvcP>"
+```
+
+```powershell
+python C:\Users\HUAWEI\.codex\plugins\cache\personal\agentmentor\0.2.0+codex.20260604093000\skills\using-agentmentor\scripts\knowledge_check.py --root E:\Self-Project\Research-Assistant --docs-path docs --strict
+```
+
 ## Results
 
 Pass.
