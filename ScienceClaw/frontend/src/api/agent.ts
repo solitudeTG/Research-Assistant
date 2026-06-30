@@ -341,10 +341,11 @@ export async function answerResearchQuestion(
   sessionId: string,
   question: string,
   limit: number = 5,
+  modelConfigId?: string | null,
 ): Promise<ResearchAnswer> {
   const response = await apiClient.post<ApiResponse<ResearchAnswer>>(
     `/sessions/${sessionId}/research/answer`,
-    { question, limit },
+    { question, limit, model_config_id: modelConfigId || undefined },
   );
   return response.data.data;
 }

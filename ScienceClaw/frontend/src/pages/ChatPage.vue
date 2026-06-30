@@ -455,6 +455,12 @@ const models = ref<ModelConfig[]>([]);
 const selectedModelId = ref<string | null>(null);
 const { isSettingsDialogOpen, openSettingsDialog } = useSettingsDialog();
 
+const getEffectiveModelConfigId = () => {
+  if (selectedModelId.value) return selectedModelId.value;
+  const systemModel = models.value.find((model) => model.is_system);
+  return systemModel?.id || models.value[0]?.id || undefined;
+};
+
 
 // Create initial state factory
 const createInitialState = () => ({
@@ -1405,7 +1411,7 @@ const researchChat = async (message: string) => {
   activityPanelRef.value?.show();
 
   try {
-    await agentApi.answerResearchQuestion(sessionId.value, trimmed, 5);
+    await agentApi.answerResearchQuestion(sessionId.value, trimmed, 5, getEffectiveModelConfigId());
     activateResearchMode();
   } catch (error) {
     console.error('Research answer error:', error);
@@ -1579,7 +1585,7 @@ const chat = async (message: string = '', files: FileInfo[] = [], reconnect: boo
         event_id: lastEventId.value,
         attachments: files.map((file: FileInfo) => file.file_id),
         language: locale.value,
-        model_config_id: selectedModelId.value || undefined,
+        model_config_id: getEffectiveModelConfigId(),
         active_tool_packs: activeResearchToolPacks.value,
       },
       {

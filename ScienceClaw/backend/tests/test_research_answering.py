@@ -532,6 +532,55 @@ async def test_whole_paper_summary_uses_injected_llm_synthesizer_without_citing_
 
 
 @pytest.mark.asyncio
+async def test_langchain_whole_paper_synthesizer_recovers_from_missing_context_section_response(monkeypatch):
+    from backend.research_assistant.answering import LangChainWholePaperSynthesizer, ResearchCitation
+
+    class FakeModel:
+        def __init__(self):
+            self.prompts = []
+
+        async def ainvoke(self, prompt):
+            self.prompts.append(prompt)
+            if len(self.prompts) == 1:
+                return "Please provide the 15 section summaries with their original citation labels."
+            return "Global synthesis uses provided evidence [paper_1:Intro:1]."
+
+    fake_model = FakeModel()
+
+    def fake_get_llm_model(*args, **kwargs):
+        return fake_model
+
+    monkeypatch.setattr("backend.deepagent.engine.get_llm_model", fake_get_llm_model)
+
+    citation = ResearchCitation(
+        evidence_id=1,
+        chunk_id="chunk-1",
+        paper_id="paper_1",
+        title="Paper One",
+        section="Intro",
+        page_start=1,
+        page_end=1,
+        quote="The paper proposes a trustworthy research workflow.",
+        citation_label="[paper_1:Intro:1]",
+        source_type="paper",
+    )
+
+    content = await LangChainWholePaperSynthesizer(model_config={"model_name": "fake"}).synthesize(
+        question="Summarize the paper",
+        section_summaries=[{
+            "section": "Intro",
+            "summary": "The paper proposes a trustworthy research workflow.",
+            "citations": [citation],
+        }],
+        citations=[citation],
+    )
+
+    assert content == "Global synthesis uses provided evidence [paper_1:Intro:1]."
+    assert "The context-only section summaries are already included below" in fake_model.prompts[1]
+    assert "The paper proposes a trustworthy research workflow. [paper_1:Intro:1]" in fake_model.prompts[1]
+
+
+@pytest.mark.asyncio
 async def test_whole_paper_summary_falls_back_when_llm_synthesizer_fails(monkeypatch):
     async def fake_summary_evidence(*args, **kwargs):
         return [

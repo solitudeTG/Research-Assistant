@@ -1167,6 +1167,83 @@ async def test_research_answer_trace_names_whole_paper_summary_workflow(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_research_answer_uses_requested_model_config_for_llm_synthesis(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    session = FakeSession()
+    answer_kwargs = {}
+    saved_sessions = []
+
+    async def fake_get_session(session_id):
+        assert session_id == "session-1"
+        return session
+
+    async def fake_get_model_config(model_config_id):
+        assert model_config_id == "model-deepseek"
+        return types.SimpleNamespace(
+            model_dump=lambda: {
+                "id": "model-deepseek",
+                "model_name": "deepseek-chat",
+                "provider": "openai-compatible",
+            }
+        )
+
+    async def fake_save():
+        session.save_count += 1
+        saved_sessions.append(session)
+
+    session.save = fake_save
+
+    async def fake_answer(*args, **kwargs):
+        answer_kwargs.update(kwargs)
+        return ResearchAnswer(
+            content="Whole-paper LLM synthesis completed.",
+            citations=[],
+            summary_synthesis={
+                "mode": "llm_section_global",
+                "intermediate_boundary": "context_only",
+                "citation_source": "original_evidence",
+            },
+            task_route=ResearchTaskRoute(
+                route="whole_paper_summary",
+                decision_source="rule",
+                needs_retrieval=True,
+                scope="current_paper",
+                confidence=0.95,
+                reason="whole_paper_summary_intent",
+            ),
+        )
+
+    async def fake_persist_audit(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
+    monkeypatch.setattr(sessions, "get_model_config", fake_get_model_config)
+    monkeypatch.setattr(sessions, "answer_research_question", fake_answer)
+    monkeypatch.setattr(sessions, "persist_audit_result_to_database", fake_persist_audit)
+    monkeypatch.setattr(sessions, "_publish_session_event", lambda *args, **kwargs: None)
+
+    await sessions.answer_research_question_for_session(
+        "session-1",
+        sessions.ResearchAnswerRequest(
+            question="Please summarize this paper.",
+            model_config_id="model-deepseek",
+        ),
+        types.SimpleNamespace(id="user-1"),
+    )
+
+    assert answer_kwargs["model_config"] == {
+        "id": "model-deepseek",
+        "model_name": "deepseek-chat",
+        "provider": "openai-compatible",
+    }
+    assert session.model_config == answer_kwargs["model_config"]
+    assert saved_sessions
+    assert all(saved_session is session for saved_session in saved_sessions)
+    step_events = [event["data"] for event in session.events if event.get("event") == "step"]
+    assert step_events[-1]["description"] == "Whole-paper LLM synthesis completed"
+
+
+@pytest.mark.asyncio
 async def test_research_answer_passes_user_id_for_cross_session_memory_recall(monkeypatch):
     sessions = _load_sessions_module(monkeypatch)
     session = FakeSession()

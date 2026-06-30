@@ -146,6 +146,7 @@ class ChatRequest(BaseModel):
 class ResearchAnswerRequest(BaseModel):
     question: str = Field(..., description="Research question grounded in citation evidence")
     limit: int = Field(default=5, ge=1, le=20, description="Maximum evidence chunks to cite")
+    model_config_id: Optional[str] = Field(default=None, description="Model config ID to use for LLM synthesis")
 
 
 class ResearchReportRequest(BaseModel):
@@ -2594,6 +2595,14 @@ async def answer_research_question_for_session(
             "retrieval_scope": retrieval_scope,
             "project_id": project_id,
         }
+        model_config_dict = getattr(session, "model_config", None)
+        if body.model_config_id:
+            mc = await get_model_config(body.model_config_id)
+            if not mc:
+                raise HTTPException(status_code=400, detail="Model config not found")
+            model_config_dict = mc.model_dump()
+            session.model_config = model_config_dict
+            await session.save()
 
         user_event = _wrap_event("message", {
             "event_id": _new_event_id(),
@@ -2627,7 +2636,7 @@ async def answer_research_question_for_session(
                 embedding_model=settings.research_embedding_model,
                 limit=body.limit,
                 use_llm_whole_paper_synthesis=True,
-                model_config=getattr(session, "model_config", None),
+                model_config=model_config_dict,
             )
             await persist_audit_result_to_database(
                 settings.research_database_url,

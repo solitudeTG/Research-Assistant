@@ -172,13 +172,15 @@ class LangChainWholePaperSynthesizer:
     ) -> str:
         from backend.deepagent.engine import get_llm_model
 
-        model = get_llm_model(self.model_config, streaming=False)
+        model = get_llm_model(self.model_config, max_tokens_override=4096, streaming=False)
         section_summary_text = await _invoke_text_model(
             model,
             _section_synthesis_prompt(question=question, section_summaries=section_summaries),
         )
+        if _is_missing_context_response(section_summary_text) or not _contains_citation_label(section_summary_text):
+            section_summary_text = _deterministic_section_summary_context(section_summaries)
 
-        return await _invoke_text_model(
+        final_text = await _invoke_text_model(
             model,
             _global_synthesis_prompt(
                 question=question,
@@ -188,6 +190,9 @@ class LangChainWholePaperSynthesizer:
                 section_count=len(section_summaries),
             ),
         )
+        if _is_missing_context_response(final_text) or not _contains_citation_label(final_text):
+            raise ValueError("LLM synthesis returned an unusable missing-context response")
+        return final_text
 
 
 async def answer_research_question(
@@ -396,6 +401,40 @@ def _compose_deterministic_whole_paper_summary(
     return "\n".join(lines)
 
 
+def _contains_citation_label(text: str) -> bool:
+    return bool(re.search(r"\[paper_[^\]]+\]", text))
+
+
+def _is_missing_context_response(text: str) -> bool:
+    normalized = re.sub(r"\s+", " ", text.strip().lower())
+    if not normalized:
+        return True
+    missing_context_markers = [
+        "section summaries are missing",
+        "section summaries that should serve as context are missing",
+        "please provide the section summaries",
+        "please provide the 15 section summaries",
+        "unable to produce the requested summary because",
+        "cannot produce the requested summary because",
+    ]
+    return any(marker in normalized for marker in missing_context_markers)
+
+
+def _deterministic_section_summary_context(section_summaries: list[dict[str, Any]]) -> str:
+    lines = []
+    for section_summary in section_summaries:
+        section = section_summary.get("section") or "Unknown section"
+        summary = section_summary.get("summary") or ""
+        citation_labels = [
+            citation.citation_label
+            for citation in section_summary.get("citations", [])
+            if getattr(citation, "citation_label", None)
+        ]
+        label_text = " ".join(citation_labels)
+        lines.append(f"- {section}: {summary} {label_text}".strip())
+    return "\n".join(lines)
+
+
 async def _invoke_text_model(model: Any, prompt: str) -> str:
     if hasattr(model, "ainvoke"):
         response = await model.ainvoke(prompt)
@@ -418,6 +457,7 @@ def _section_synthesis_prompt(*, question: str, section_summaries: list[dict[str
         )
     return (
         "You are helping with a trustworthy research-paper workflow.\n"
+        "The citation evidence is already provided below; do not ask the user to provide more section summaries.\n"
         "Summarize each paper section using only the provided citation evidence.\n"
         "Generated summaries are context-only intermediate notes, not citation evidence.\n"
         "Every factual sentence should include one or more original citation labels from the evidence.\n"
@@ -439,6 +479,7 @@ def _global_synthesis_prompt(
 ) -> str:
     return (
         "You are composing the final answer for a trustworthy research-paper workflow.\n"
+        "The context-only section summaries are already included below; do not ask the user to provide them.\n"
         "Use the section summaries below as context-only intermediate notes.\n"
         "The final answer must preserve original citation labels already present in the section summaries.\n"
         "Do not cite the generated section summaries themselves. Do not add unsupported claims.\n\n"
