@@ -634,6 +634,21 @@ def test_chat_answer_error_uses_citation_evidence_wording():
     assert "Failed to answer from paper evidence" not in chat_page
 
 
+def test_frontend_surfaces_research_summary_synthesis_metadata():
+    frontend_root = Path(__file__).resolve().parents[2] / "frontend" / "src"
+    agent_api = (frontend_root / "api" / "agent.ts").read_text(encoding="utf-8")
+    message_types = (frontend_root / "types" / "message.ts").read_text(encoding="utf-8")
+    activity_panel = (frontend_root / "components" / "ActivityPanel.vue").read_text(encoding="utf-8")
+
+    assert "export interface ResearchSummarySynthesis" in agent_api
+    assert "summary_synthesis?: ResearchSummarySynthesis" in agent_api
+    assert "export interface ResearchSummarySynthesisMetadata" in message_types
+    assert "summary_synthesis?: ResearchSummarySynthesisMetadata" in message_types
+    assert "researchSidecar.summary_synthesis" in activity_panel
+    assert "综合阶段" in activity_panel
+    assert "citation_source={{ researchSidecar.summary_synthesis.citation_source }}" in activity_panel
+
+
 def test_chat_research_mode_tooltip_uses_citation_evidence_wording():
     chat_page = (
         Path(__file__).resolve().parents[2]

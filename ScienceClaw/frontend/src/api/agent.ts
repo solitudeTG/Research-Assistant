@@ -110,6 +110,14 @@ export interface ResearchAudit {
   claims: ResearchAuditClaim[];
 }
 
+export interface ResearchSummarySynthesis {
+  mode?: 'llm_section_global' | 'deterministic_extractive' | 'no_citation_evidence' | string;
+  intermediate_sources?: string[];
+  intermediate_boundary?: 'context_only' | string;
+  citation_source?: 'original_evidence' | string;
+  section_count?: number;
+}
+
 export interface ResearchAnswer {
   answer_id: string;
   content: string;
@@ -120,6 +128,7 @@ export interface ResearchAnswer {
   context_memory_conflict_count?: number;
   context_boundaries?: ResearchContextBoundaries;
   evidence_admission?: EvidenceAdmissionMetadata;
+  summary_synthesis?: ResearchSummarySynthesis;
   task_route?: ResearchTaskRouteMetadata;
   audit?: ResearchAudit;
   question?: string;

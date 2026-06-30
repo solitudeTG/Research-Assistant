@@ -81,6 +81,14 @@ export interface ResearchAuditMetadata {
   claims: ResearchAuditClaimMetadata[];
 }
 
+export interface ResearchSummarySynthesisMetadata {
+  mode?: 'llm_section_global' | 'deterministic_extractive' | 'no_citation_evidence' | string;
+  intermediate_sources?: string[];
+  intermediate_boundary?: 'context_only' | string;
+  citation_source?: 'original_evidence' | string;
+  section_count?: number;
+}
+
 export interface ResearchReportReaderSummary {
   status: string;
   evidence_basis: string;
@@ -103,6 +111,7 @@ export interface ResearchAnswerMetadata {
   context_memory_count?: number;
   context_memory_conflict_count?: number;
   context_boundaries?: ResearchContextBoundaries;
+  summary_synthesis?: ResearchSummarySynthesisMetadata;
   evidence_admission?: EvidenceAdmissionMetadata;
   task_route?: ResearchTaskRouteMetadata;
   audit?: ResearchAuditMetadata;

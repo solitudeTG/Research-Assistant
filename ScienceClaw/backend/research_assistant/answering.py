@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Protocol
 import re
+import logging
 
 import shortuuid
 
@@ -25,6 +26,8 @@ from backend.research_assistant.task_router import (
     classify_research_task,
     default_evidence_qa_route,
 )
+
+logger = logging.getLogger(__name__)
 
 _RECALL_STOP_WORDS = {
     "about",
@@ -91,6 +94,7 @@ class ResearchAnswer:
     content: str
     citations: list[ResearchCitation]
     context_memory: list[dict] = field(default_factory=list)
+    summary_synthesis: dict[str, Any] = field(default_factory=dict)
     audit: EvidenceAudit | None = None
     admission: EvidenceAdmissionResult | None = None
     task_route: ResearchTaskRoute = field(default_factory=default_evidence_qa_route)
@@ -137,10 +141,53 @@ class ResearchAnswer:
             "context_memory_count": self.context_memory_count,
             "context_memory_conflict_count": self.context_memory_conflict_count,
             "context_boundaries": CONTEXT_BOUNDARIES,
+            "summary_synthesis": self.summary_synthesis,
             "evidence_admission": self.admission.to_dict() if self.admission else {},
             "task_route": self.task_route.to_dict(),
             "audit": self.audit.to_dict() if self.audit else {},
         }
+
+
+class WholePaperSynthesizer(Protocol):
+    async def synthesize(
+        self,
+        *,
+        question: str,
+        section_summaries: list[dict[str, Any]],
+        citations: list[ResearchCitation],
+    ) -> str:
+        ...
+
+
+class LangChainWholePaperSynthesizer:
+    def __init__(self, *, model_config: dict[str, Any] | None = None) -> None:
+        self.model_config = model_config
+
+    async def synthesize(
+        self,
+        *,
+        question: str,
+        section_summaries: list[dict[str, Any]],
+        citations: list[ResearchCitation],
+    ) -> str:
+        from backend.deepagent.engine import get_llm_model
+
+        model = get_llm_model(self.model_config, streaming=False)
+        section_summary_text = await _invoke_text_model(
+            model,
+            _section_synthesis_prompt(question=question, section_summaries=section_summaries),
+        )
+
+        return await _invoke_text_model(
+            model,
+            _global_synthesis_prompt(
+                question=question,
+                section_summary_text=section_summary_text,
+                labels=_whole_paper_summary_labels(question),
+                citation_count=len(citations),
+                section_count=len(section_summaries),
+            ),
+        )
 
 
 async def answer_research_question(
@@ -153,6 +200,9 @@ async def answer_research_question(
     embedding_dimensions: int,
     embedding_model: str,
     limit: int = 5,
+    whole_paper_synthesizer: WholePaperSynthesizer | None = None,
+    use_llm_whole_paper_synthesis: bool = False,
+    model_config: dict[str, Any] | None = None,
 ) -> ResearchAnswer:
     task_route = classify_research_task(question)
     context_memory = await _load_context_memory(
@@ -182,11 +232,19 @@ async def answer_research_question(
         )
         admission = admit_evidence_hits(hits)
         citations = _citations_from_hits(admission.accepted_hits)
-        content = _compose_whole_paper_summary(citations, question=question, admission=admission)
+        content, summary_synthesis = await _compose_whole_paper_summary(
+            citations,
+            question=question,
+            admission=admission,
+            synthesizer=whole_paper_synthesizer,
+            use_llm_synthesis=use_llm_whole_paper_synthesis,
+            model_config=model_config,
+        )
         return ResearchAnswer(
             content=content,
             citations=citations,
             context_memory=context_memory,
+            summary_synthesis=summary_synthesis,
             admission=admission,
             task_route=task_route,
             audit=audit_evidence_claims(answer_content=content, citations=citations),
@@ -264,15 +322,66 @@ def _compose_skipped_answer() -> str:
     return "This turn does not require citation evidence retrieval."
 
 
-def _compose_whole_paper_summary(
+async def _compose_whole_paper_summary(
     citations: list[ResearchCitation],
     *,
     question: str = "",
     admission: EvidenceAdmissionResult | None = None,
+    synthesizer: WholePaperSynthesizer | None = None,
+    use_llm_synthesis: bool = False,
+    model_config: dict[str, Any] | None = None,
+) -> tuple[str, dict[str, Any]]:
+    if not citations:
+        return _compose_extractive_answer(citations, admission=admission), {
+            "mode": "no_citation_evidence",
+            "intermediate_sources": [],
+            "citation_source": "original_evidence",
+        }
+    section_summaries = _section_summaries_from_citations(citations)
+    if synthesizer is None and use_llm_synthesis:
+        synthesizer = LangChainWholePaperSynthesizer(model_config=model_config)
+    if synthesizer is not None:
+        try:
+            content = (await synthesizer.synthesize(
+                question=question,
+                section_summaries=section_summaries,
+                citations=citations,
+            )).strip()
+            if content:
+                return content, {
+                    "mode": "llm_section_global",
+                    "intermediate_sources": ["section_summaries"],
+                    "intermediate_boundary": "context_only",
+                    "citation_source": "original_evidence",
+                    "section_count": len(section_summaries),
+                }
+        except Exception as exc:
+            logger.warning("Whole-paper LLM synthesis failed; falling back to deterministic summary: %s", exc)
+
+    return _compose_deterministic_whole_paper_summary(
+        citations,
+        question=question,
+        admission=admission,
+        section_summaries=section_summaries,
+    ), {
+        "mode": "deterministic_extractive",
+        "intermediate_sources": ["bounded_original_quotes"],
+        "intermediate_boundary": "context_only",
+        "citation_source": "original_evidence",
+        "section_count": len(section_summaries),
+    }
+
+
+def _compose_deterministic_whole_paper_summary(
+    citations: list[ResearchCitation],
+    *,
+    question: str = "",
+    admission: EvidenceAdmissionResult | None = None,
+    section_summaries: list[dict[str, Any]] | None = None,
 ) -> str:
     if not citations:
         return _compose_extractive_answer(citations, admission=admission)
-    section_summaries = _section_summaries_from_citations(citations)
+    section_summaries = section_summaries or _section_summaries_from_citations(citations)
     labels = _whole_paper_summary_labels(question)
     lines = [
         labels["title"],
@@ -285,6 +394,65 @@ def _compose_whole_paper_summary(
     lines.extend(["", labels["synthesis"]])
     lines.extend(_global_synthesis_lines(section_summaries))
     return "\n".join(lines)
+
+
+async def _invoke_text_model(model: Any, prompt: str) -> str:
+    if hasattr(model, "ainvoke"):
+        response = await model.ainvoke(prompt)
+    else:
+        response = model.invoke(prompt)
+    content = getattr(response, "content", response)
+    if isinstance(content, list):
+        return "\n".join(str(part.get("text", part)) if isinstance(part, dict) else str(part) for part in content).strip()
+    return str(content).strip()
+
+
+def _section_synthesis_prompt(*, question: str, section_summaries: list[dict[str, Any]]) -> str:
+    section_blocks = []
+    for section_summary in section_summaries:
+        evidence_lines = []
+        for citation in section_summary.get("citations", []):
+            evidence_lines.append(f"- {citation.citation_label} {citation.quote}")
+        section_blocks.append(
+            f"## {section_summary.get('section')}\n" + "\n".join(evidence_lines)
+        )
+    return (
+        "You are helping with a trustworthy research-paper workflow.\n"
+        "Summarize each paper section using only the provided citation evidence.\n"
+        "Generated summaries are context-only intermediate notes, not citation evidence.\n"
+        "Every factual sentence should include one or more original citation labels from the evidence.\n"
+        "Do not invent claims, experiments, datasets, or conclusions.\n\n"
+        f"User question: {question}\n"
+        "Citation evidence grouped by section:\n"
+        + "\n\n".join(section_blocks)
+        + "\n\nReturn concise section summaries with the same section names."
+    )
+
+
+def _global_synthesis_prompt(
+    *,
+    question: str,
+    section_summary_text: str,
+    labels: dict[str, str],
+    citation_count: int,
+    section_count: int,
+) -> str:
+    return (
+        "You are composing the final answer for a trustworthy research-paper workflow.\n"
+        "Use the section summaries below as context-only intermediate notes.\n"
+        "The final answer must preserve original citation labels already present in the section summaries.\n"
+        "Do not cite the generated section summaries themselves. Do not add unsupported claims.\n\n"
+        f"User question: {question}\n"
+        "Required answer structure:\n"
+        f"{labels['title']}\n"
+        f"{labels['coverage'].format(citation_count=citation_count, section_count=section_count)}\n\n"
+        f"{labels['sections']}\n"
+        "- One bullet per important section.\n\n"
+        f"{labels['synthesis']}\n"
+        "- 3-6 bullets covering research problem, method, contribution, evidence-backed findings, and limitations if present.\n\n"
+        "Context-only section summaries:\n"
+        + section_summary_text
+    )
 
 
 def _whole_paper_summary_labels(question: str) -> dict[str, str]:

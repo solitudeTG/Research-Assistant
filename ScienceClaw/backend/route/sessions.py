@@ -2626,6 +2626,8 @@ async def answer_research_question_for_session(
                 embedding_dimensions=settings.research_embedding_dimensions,
                 embedding_model=settings.research_embedding_model,
                 limit=body.limit,
+                use_llm_whole_paper_synthesis=True,
+                model_config=getattr(session, "model_config", None),
             )
             await persist_audit_result_to_database(
                 settings.research_database_url,
@@ -2654,7 +2656,10 @@ async def answer_research_question_for_session(
         if admission_metadata.get("decision") == "skipped":
             retrieval_description = "Citation evidence retrieval skipped"
         elif task_route_metadata.get("route") == "whole_paper_summary":
-            retrieval_description = "Whole-paper summary evidence prepared"
+            if answer.summary_synthesis.get("mode") == "llm_section_global":
+                retrieval_description = "Whole-paper LLM synthesis completed"
+            else:
+                retrieval_description = "Whole-paper summary evidence prepared"
         else:
             retrieval_description = "Citation evidence retrieval completed"
         retrieval_completed = _research_upload_step_event(
@@ -2668,6 +2673,7 @@ async def answer_research_question_for_session(
                 "context_boundaries": CONTEXT_BOUNDARIES,
                 "evidence_admission": admission_metadata,
                 "task_route": task_route_metadata,
+                "summary_synthesis": answer.summary_synthesis,
                 "embedding_model": settings.research_embedding_model,
                 **retrieval_metadata,
             },

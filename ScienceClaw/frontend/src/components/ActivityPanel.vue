@@ -272,6 +272,19 @@
                 </div>
               </div>
 
+              <div v-if="researchSidecar.summary_synthesis" class="rounded-lg border border-[var(--border-light)] bg-[var(--fill-tsp-gray-main)] px-3 py-2">
+                <div class="mb-1.5 flex items-center justify-between gap-2">
+                  <span class="font-semibold text-[var(--text-secondary)]">综合阶段</span>
+                  <span class="font-mono text-[10px] text-[var(--text-tertiary)]">{{ researchSidecar.summary_synthesis.mode }}</span>
+                </div>
+                <div class="grid gap-1 font-mono text-[10px] text-[var(--text-tertiary)]">
+                  <span v-if="researchSidecar.summary_synthesis.section_count != null">sections={{ researchSidecar.summary_synthesis.section_count }}</span>
+                  <span v-if="researchSidecar.summary_synthesis.intermediate_boundary">intermediate={{ researchSidecar.summary_synthesis.intermediate_boundary }}</span>
+                  <span v-if="researchSidecar.summary_synthesis.citation_source">citation_source={{ researchSidecar.summary_synthesis.citation_source }}</span>
+                  <span v-if="researchSidecar.summary_synthesis.intermediate_sources?.length">sources={{ researchSidecar.summary_synthesis.intermediate_sources.join(',') }}</span>
+                </div>
+              </div>
+
               <div v-if="researchSidecar.citations?.length" class="rounded-lg border border-[var(--border-light)] bg-[var(--fill-tsp-gray-main)] px-3 py-2">
                 <div class="mb-1.5 flex items-center justify-between gap-2">
                   <span class="font-semibold text-[var(--text-secondary)]">引用证据</span>
