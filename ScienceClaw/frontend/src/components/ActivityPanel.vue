@@ -465,6 +465,14 @@
                             <span>boundary={{ item.tool.metadata.subagent_lifecycle.output_boundary }}</span>
                             <span>citation_evidence={{ item.tool.metadata.subagent_lifecycle.citation_evidence }}</span>
                           </div>
+                          <div v-if="item.tool.metadata.subagent_lifecycle.delegation_decision" class="mt-1 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] text-[var(--text-tertiary)]">
+                            <span>decision_source={{ item.tool.metadata.subagent_lifecycle.delegation_decision.decision_source }}</span>
+                            <span>decision={{ item.tool.metadata.subagent_lifecycle.delegation_decision.decision }}</span>
+                            <span>trigger={{ item.tool.metadata.subagent_lifecycle.delegation_decision.trigger }}</span>
+                          </div>
+                          <div v-if="item.tool.metadata.subagent_lifecycle.delegation_decision?.reason" class="mt-1 text-[11px] text-[var(--text-secondary)]">
+                            reason={{ item.tool.metadata.subagent_lifecycle.delegation_decision.reason }}
+                          </div>
                           <div v-if="item.tool.metadata.subagent_lifecycle.description" class="mt-1 text-[11px] text-[var(--text-secondary)]">
                             {{ item.tool.metadata.subagent_lifecycle.description }}
                           </div>
@@ -551,6 +559,53 @@
                   <span>needs_retrieval={{ route.needs_retrieval }}</span>
                   <span>confidence={{ route.confidence }}</span>
                   <span v-if="route.reason">reason={{ route.reason }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <template v-if="multiAgentDecisionSteps.length > 0">
+          <div
+            @click="multiAgentDecisionExpanded = !multiAgentDecisionExpanded"
+            class="flex-shrink-0 flex items-center gap-2 cursor-pointer select-none group/sec px-4 py-2.5 border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50/50 dark:hover:bg-gray-800/30 transition-colors"
+          >
+            <ChevronRightIcon :size="12"
+              class="text-gray-400 dark:text-gray-500 transition-transform duration-150 flex-shrink-0"
+              :class="{ 'rotate-90': multiAgentDecisionExpanded }" />
+            <ShieldCheck :size="13" class="text-indigo-500 flex-shrink-0" />
+            <span class="text-[12px] font-semibold transition-colors"
+              :class="multiAgentDecisionExpanded ? 'text-gray-600 dark:text-gray-300' : 'text-gray-400 dark:text-gray-500 group-hover/sec:text-gray-600 dark:group-hover/sec:text-gray-300'">
+              多 Agent 决策
+            </span>
+            <span class="text-[10px] text-gray-400 dark:text-gray-500 font-bold tabular-nums ml-auto bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded-md">
+              {{ multiAgentDecisionSteps.length }}
+            </span>
+          </div>
+          <div v-if="multiAgentDecisionExpanded" class="border-b border-gray-100 dark:border-gray-800 px-4 py-2 overflow-y-auto min-h-0 section-content-enter" style="flex: 0.55 1 0%; min-height: 44px;">
+            <div class="flex flex-col gap-2">
+              <div v-for="{ step, decision } in multiAgentDecisionSteps" :key="`multi-agent-${step.id}`"
+                class="text-[11px] leading-[1.5] text-[var(--text-secondary)] bg-[var(--fill-tsp-gray-main)] rounded-lg px-3 py-2 border border-[var(--border-light)]">
+                <div class="flex items-center gap-2 min-w-0">
+                  <span class="font-semibold text-[var(--text-secondary)] truncate">{{ step.description }}</span>
+                  <span class="ml-auto flex-shrink-0 rounded-md px-1.5 py-0.5 font-mono text-[10px]"
+                    :class="decision.enabled ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/30 dark:text-indigo-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'">
+                    {{ decision.enabled ? 'delegate' : 'single_agent' }}
+                  </span>
+                </div>
+                <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] text-[var(--text-tertiary)]">
+                  <span>decision_source={{ decision.decision_source }}</span>
+                  <span>trigger={{ decision.trigger }}</span>
+                  <span>confidence={{ decision.confidence }}</span>
+                  <span>reader={{ decision.requires_reader }}</span>
+                  <span>auditor={{ decision.requires_auditor }}</span>
+                </div>
+                <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] text-[var(--text-tertiary)]">
+                  <span>selected={{ decision.selected_agents.join(',') || 'none' }}</span>
+                  <span>skipped={{ decision.skipped_agents.join(',') || 'none' }}</span>
+                </div>
+                <div v-if="decision.reason" class="mt-1 text-[11px] text-[var(--text-secondary)]">
+                  reason={{ decision.reason }}
                 </div>
               </div>
             </div>
@@ -727,6 +782,7 @@ const todosExpanded = ref(true);
 const toolsExpanded = ref(true);
 const runtimeAuditExpanded = ref(false);
 const researchTaskRouteExpanded = ref(false);
+const multiAgentDecisionExpanded = ref(true);
 const sourceQualityExpanded = ref(false);
 const evidenceAdmissionExpanded = ref(false);
 const researchEvidenceExpanded = ref(true);
@@ -801,6 +857,7 @@ type ActivityPlanStep = NonNullable<PlanEventData['steps']>[number];
 type SourceQuality = NonNullable<NonNullable<ActivityPlanStep['metadata']>['source_quality']>;
 type EvidenceAdmission = NonNullable<NonNullable<ActivityPlanStep['metadata']>['evidence_admission']>;
 type ResearchTaskRoute = NonNullable<NonNullable<ActivityPlanStep['metadata']>['task_route']>;
+type MultiAgentDecision = NonNullable<NonNullable<ActivityPlanStep['metadata']>['multi_agent_decision']>;
 
 const sourceQualitySteps = computed(() =>
   (props.plan?.steps ?? [])
@@ -818,6 +875,12 @@ const researchTaskRouteSteps = computed(() =>
   (props.plan?.steps ?? [])
     .map(step => ({ step, route: step.metadata?.task_route }))
     .filter((item): item is { step: ActivityPlanStep; route: ResearchTaskRoute } => !!item.route)
+);
+
+const multiAgentDecisionSteps = computed(() =>
+  (props.plan?.steps ?? [])
+    .map(step => ({ step, decision: step.metadata?.multi_agent_decision }))
+    .filter((item): item is { step: ActivityPlanStep; decision: MultiAgentDecision } => !!item.decision)
 );
 
 const approvedResearchAuditClaims = computed(() =>

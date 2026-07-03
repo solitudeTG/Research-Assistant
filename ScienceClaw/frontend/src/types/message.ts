@@ -1,5 +1,5 @@
 import type { FileInfo } from '../api/file';
-import type { EvidenceAdmissionMetadata, ResearchTaskRouteMetadata, ToolMetaData, StatisticsData, RoundFileInfo, ResearchToolPackMetadata, ToolResultContract, ToolRuntimeResultSummary } from './event';
+import type { EvidenceAdmissionMetadata, ResearchTaskRouteMetadata, ToolMetaData, StatisticsData, RoundFileInfo, ResearchToolPackMetadata, ToolResultContract, ToolRuntimeResultSummary, SubagentLifecycleMetadata } from './event';
 
 export type MessageType = "user" | "assistant" | "tool" | "step" | "attachments" | "thinking";
 
@@ -125,18 +125,6 @@ export interface ResearchAnswerMetadata {
     citation_count: number;
     reader_summary?: ResearchReportReaderSummary;
   };
-}
-
-export interface SubagentLifecycleMetadata {
-  task_id: string;
-  agent_name: string;
-  agent_role: string;
-  phase: string;
-  status: string;
-  description?: string;
-  output_boundary: 'context_only' | 'process_trace' | 'artifact' | string;
-  citation_evidence: false;
-  evidence_refs?: Array<Record<string, any>>;
 }
 
 export interface ToolContent extends BaseContent {

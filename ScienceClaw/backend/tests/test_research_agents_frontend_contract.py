@@ -38,6 +38,7 @@ def test_research_agents_frontend_route_api_and_navigation_contract():
     assert "citation_evidence" in page_source
     assert "context_only" in page_source
     assert "process_trace" in page_source
+    assert "边界审计智能体" in page_source
 
     api_source = (FRONTEND / "api" / "agent.ts").read_text(encoding="utf-8")
     assert "ResearchAgentDefinition" in api_source
@@ -56,6 +57,14 @@ def test_research_agents_frontend_route_api_and_navigation_contract():
     assert "editDraft" in page_source
     assert "saveAgentEdits" in page_source
     assert "updateResearchAgent" in page_source
+
+    activity_panel_source = (FRONTEND / "components" / "ActivityPanel.vue").read_text(encoding="utf-8")
+    assert "delegation_decision" in activity_panel_source
+    assert "multi_agent_decision" in activity_panel_source
+    assert "多 Agent 决策" in activity_panel_source
+    assert "decision_source" in activity_panel_source
+    assert "trigger=" in activity_panel_source
+    assert "reason=" in activity_panel_source
 
     router_source = (FRONTEND / "main.ts").read_text(encoding="utf-8")
     assert "ResearchAgentsPage" in router_source

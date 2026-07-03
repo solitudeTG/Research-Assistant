@@ -404,6 +404,11 @@ const agentCopy: Record<string, { displayName: string; description: string }> = 
   },
 };
 
+agentCopy.research_auditor = {
+  displayName: '边界审计智能体',
+  description: '审查草稿结论、引用证据与证据边界之间的匹配关系，只返回过程审计结果，不写最终回答。',
+};
+
 const orderedAgents = computed(() => [...agents.value].sort((left, right) => {
   const leftIndex = preferredAgentOrder.indexOf(left.name);
   const rightIndex = preferredAgentOrder.indexOf(right.name);
