@@ -57,6 +57,7 @@ from backend.research_assistant.ingestion import ingest_uploaded_paper, is_resea
 from backend.research_assistant.parsers import PaperParseError
 from backend.research_assistant.reports import generate_markdown_research_report
 from backend.research_assistant.tool_validation import tool_source_sha256, validate_staged_tool
+from backend.research_assistant.subagents import system_builtin_subagent_definitions
 from backend.research_assistant.storage.database import (
     create_research_project_in_database,
     delete_memory_entry_from_database,
@@ -2026,7 +2027,12 @@ async def list_research_agents_for_user(
             settings.research_database_url,
             enabled_only=True,
         )
-        return ApiResponse(data={"agents": [agent.to_dict() for agent in agents]})
+        registry_agents = [
+            *system_builtin_subagent_definitions(),
+            *agents,
+        ]
+        registry_agents.sort(key=lambda agent: (0 if agent.agent_type == "system_builtin" else 1, agent.name))
+        return ApiResponse(data={"agents": [agent.to_dict() for agent in registry_agents]})
     except Exception as exc:
         logger.exception("list_research_agents_for_user failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc

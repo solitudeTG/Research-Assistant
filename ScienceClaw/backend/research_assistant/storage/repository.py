@@ -236,6 +236,9 @@ async def ensure_subagent_definitions(
             (
                 definition.name,
                 definition.display_name,
+                definition.agent_type,
+                definition.source,
+                definition.editable,
                 definition.description,
                 definition.system_prompt,
                 _json(definition.skill_refs),
@@ -248,6 +251,7 @@ async def ensure_subagent_definitions(
                 definition.version,
                 definition.validation_status,
                 definition.citation_evidence,
+                _json(definition.metadata or {}),
             )
         )
 
@@ -256,6 +260,9 @@ async def ensure_subagent_definitions(
         INSERT INTO research_subagent_definitions (
             name,
             display_name,
+            agent_type,
+            source,
+            editable,
             description,
             system_prompt,
             skill_refs,
@@ -268,11 +275,15 @@ async def ensure_subagent_definitions(
             version,
             validation_status,
             citation_evidence,
+            metadata,
             updated_at
         )
-        VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7::jsonb, $8, $9, $10, $11, $12, $13, $14, now())
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, $11, $12, $13, $14, $15, $16, $17, $18::jsonb, now())
         ON CONFLICT (name) DO UPDATE SET
             display_name = EXCLUDED.display_name,
+            agent_type = EXCLUDED.agent_type,
+            source = EXCLUDED.source,
+            editable = EXCLUDED.editable,
             description = EXCLUDED.description,
             system_prompt = EXCLUDED.system_prompt,
             skill_refs = EXCLUDED.skill_refs,
@@ -285,6 +296,7 @@ async def ensure_subagent_definitions(
             version = EXCLUDED.version,
             validation_status = EXCLUDED.validation_status,
             citation_evidence = EXCLUDED.citation_evidence,
+            metadata = EXCLUDED.metadata,
             updated_at = now()
         """,
         rows,
@@ -302,6 +314,9 @@ async def list_subagent_definitions(
         SELECT
             name,
             display_name,
+            agent_type,
+            source,
+            editable,
             description,
             system_prompt,
             skill_refs,
@@ -313,7 +328,8 @@ async def list_subagent_definitions(
             enabled,
             version,
             validation_status,
-            citation_evidence
+            citation_evidence,
+            metadata
         FROM research_subagent_definitions
         {where}
         ORDER BY name
@@ -1424,6 +1440,9 @@ def _subagent_definition_from_row(row: Any) -> SubagentDefinition:
     return SubagentDefinition(
         name=str(row["name"]),
         display_name=str(row["display_name"]),
+        agent_type=str(_row_get(row, "agent_type", "custom")),
+        source=str(_row_get(row, "source", "registry")),
+        editable=bool(_row_get(row, "editable", True)),
         description=str(row["description"]),
         system_prompt=str(row["system_prompt"]),
         skill_refs=_json_value(row["skill_refs"], default=[]),
@@ -1436,6 +1455,7 @@ def _subagent_definition_from_row(row: Any) -> SubagentDefinition:
         version=int(row["version"] or 1),
         validation_status=str(row["validation_status"]),
         citation_evidence=bool(row["citation_evidence"]),
+        metadata=_json_value(_row_get(row, "metadata", None), default={}),
     )
 
 

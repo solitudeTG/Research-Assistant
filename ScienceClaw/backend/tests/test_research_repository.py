@@ -118,10 +118,13 @@ async def test_ensure_subagent_definitions_upserts_governed_defaults():
     first_row = rows[0]
     assert first_row[0] == "research_auditor"
     assert first_row[1] == "Auditor Agent"
-    assert first_row[7] == "process_trace"
-    assert first_row[8] is False
-    assert first_row[9] is False
-    assert first_row[13] is False
+    assert first_row[2] == "custom"
+    assert first_row[3] == "registry"
+    assert first_row[4] is True
+    assert first_row[10] == "process_trace"
+    assert first_row[11] is False
+    assert first_row[12] is False
+    assert first_row[16] is False
 
 
 @pytest.mark.asyncio
@@ -131,6 +134,9 @@ async def test_list_subagent_definitions_returns_enabled_registry_rows():
         {
             "name": "paper_reader_worker",
             "display_name": "Reader Worker",
+            "agent_type": "custom",
+            "source": "registry",
+            "editable": True,
             "description": "Read scoped papers.",
             "system_prompt": "You are a scoped Reader Worker.",
             "skill_refs": '["research-paper-reading"]',
@@ -143,6 +149,7 @@ async def test_list_subagent_definitions_returns_enabled_registry_rows():
             "version": 1,
             "validation_status": "valid",
             "citation_evidence": False,
+            "metadata": '{"ui_order":2}',
         }
     ]
 
@@ -154,8 +161,12 @@ async def test_list_subagent_definitions_returns_enabled_registry_rows():
     assert args == ()
     assert len(definitions) == 1
     assert definitions[0].name == "paper_reader_worker"
+    assert definitions[0].agent_type == "custom"
+    assert definitions[0].source == "registry"
+    assert definitions[0].editable is True
     assert definitions[0].allowed_tools == ["read_research_evidence"]
     assert definitions[0].input_boundaries == {"requires": ["material_package"]}
+    assert definitions[0].metadata == {"ui_order": 2}
 
 
 @pytest.mark.asyncio

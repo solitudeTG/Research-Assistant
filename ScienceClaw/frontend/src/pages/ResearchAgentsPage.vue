@@ -4,7 +4,7 @@
       <div class="min-w-0">
         <h1 class="truncate text-base font-semibold text-[var(--text-primary)]">研究智能体</h1>
         <p class="mt-0.5 text-xs text-[var(--text-tertiary)]">
-          受治理的科研 subagent 配置，供 Supervisor 在证据审计和范围化阅读任务中按需调度。
+          管理 Supervisor 可委派的研究 subagent；系统内置 Agent 只读展示，用户自定义 Agent 才允许治理和验证。
         </p>
       </div>
       <button
@@ -18,17 +18,17 @@
     </div>
 
     <div class="flex min-h-0 flex-1">
-      <aside class="flex w-[340px] flex-shrink-0 flex-col border-r border-[var(--border-light)] bg-[var(--background-white-main)]">
+      <aside class="flex w-[360px] flex-shrink-0 flex-col border-r border-[var(--border-light)] bg-[var(--background-white-main)]">
         <div class="border-b border-[var(--border-light)] px-3 py-2">
           <div class="flex items-center justify-between text-[11px] text-[var(--text-tertiary)]">
-            <span>已注册 subagent</span>
+            <span>已注册 Agent</span>
             <span class="tabular-nums">{{ agents.length }}</span>
           </div>
         </div>
 
         <div class="min-h-0 flex-1 overflow-y-auto p-2">
           <button
-            v-for="agent in agents"
+            v-for="agent in orderedAgents"
             :key="agent.name"
             class="mb-1 w-full rounded-md border px-3 py-2 text-left transition-colors"
             :class="selectedAgentName === agent.name
@@ -45,16 +45,17 @@
                 {{ agent.enabled ? '已启用' : '已停用' }}
               </span>
             </div>
-            <div class="mt-1 flex items-center gap-2 text-[10px] text-[var(--text-tertiary)]">
+            <div class="mt-1 flex min-w-0 flex-wrap items-center gap-1.5 text-[10px] text-[var(--text-tertiary)]">
               <span class="font-mono">{{ agent.name }}</span>
-              <span>v{{ agent.version }}</span>
+              <span class="rounded bg-[var(--fill-tsp-gray-main)] px-1.5 py-0.5">{{ agentTypeLabel(agent) }}</span>
+              <span class="rounded bg-[var(--fill-tsp-gray-main)] px-1.5 py-0.5">{{ editabilityLabel(agent) }}</span>
               <span>{{ validationStatusLabel(agent.validation_status) }}</span>
             </div>
             <p class="mt-1 line-clamp-2 text-xs opacity-75">{{ displayAgentDescription(agent) }}</p>
           </button>
 
           <div v-if="!agents.length && !loading" class="px-3 py-8 text-center text-xs text-[var(--text-tertiary)]">
-            暂无已启用的受治理研究智能体。
+            暂无已注册的研究智能体。
           </div>
         </div>
       </aside>
@@ -65,7 +66,8 @@
             <div class="flex flex-wrap items-start justify-between gap-3">
               <div class="min-w-0">
                 <div class="flex items-center gap-2">
-                  <ShieldCheck v-if="selectedAgent.name === 'research_auditor'" :size="18" class="text-blue-500" />
+                  <Cpu v-if="selectedAgent.agent_type === 'system_builtin'" :size="18" class="text-slate-500" />
+                  <ShieldCheck v-else-if="selectedAgent.name === 'research_auditor'" :size="18" class="text-blue-500" />
                   <BookOpenCheck v-else :size="18" class="text-emerald-500" />
                   <h2 class="truncate text-base font-semibold text-[var(--text-primary)]">
                     {{ displayAgentName(selectedAgent) }}
@@ -77,7 +79,10 @@
               </div>
               <div class="flex flex-wrap items-center gap-2">
                 <span class="rounded-md bg-[var(--fill-tsp-gray-main)] px-2 py-1 text-[11px] font-medium text-[var(--text-secondary)]">
-                  {{ selectedAgent.output_boundary }}
+                  {{ agentTypeLabel(selectedAgent) }}
+                </span>
+                <span class="rounded-md bg-[var(--fill-tsp-gray-main)] px-2 py-1 text-[11px] font-medium text-[var(--text-secondary)]">
+                  {{ editabilityLabel(selectedAgent) }}
                 </span>
                 <span
                   class="rounded-md px-2 py-1 text-[11px] font-medium"
@@ -89,19 +94,34 @@
             </div>
           </section>
 
-          <section class="grid grid-cols-1 gap-3 xl:grid-cols-3">
+          <section class="grid grid-cols-1 gap-3 xl:grid-cols-4">
             <div class="rounded-lg border border-[var(--border-light)] bg-[var(--background-white-main)] p-3">
-              <div class="mb-2 flex items-center justify-between">
-                <h3 class="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">边界</h3>
-                <span class="text-[10px] text-[var(--text-tertiary)]">F020</span>
-              </div>
+              <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Registry</h3>
               <dl class="space-y-2 text-xs">
                 <div class="flex justify-between gap-3">
-                  <dt class="text-[var(--text-tertiary)]">可直接回复用户</dt>
+                  <dt class="text-[var(--text-tertiary)]">类型</dt>
+                  <dd class="font-mono text-[var(--text-primary)]">{{ selectedAgent.agent_type }}</dd>
+                </div>
+                <div class="flex justify-between gap-3">
+                  <dt class="text-[var(--text-tertiary)]">来源</dt>
+                  <dd class="font-mono text-[var(--text-primary)]">{{ selectedAgent.source }}</dd>
+                </div>
+                <div class="flex justify-between gap-3">
+                  <dt class="text-[var(--text-tertiary)]">editable</dt>
+                  <dd class="text-[var(--text-primary)]">{{ booleanLabel(selectedAgent.editable) }}</dd>
+                </div>
+              </dl>
+            </div>
+
+            <div class="rounded-lg border border-[var(--border-light)] bg-[var(--background-white-main)] p-3">
+              <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">边界</h3>
+              <dl class="space-y-2 text-xs">
+                <div class="flex justify-between gap-3">
+                  <dt class="text-[var(--text-tertiary)]">直接回复用户</dt>
                   <dd class="text-[var(--text-primary)]">{{ booleanLabel(selectedAgent.can_answer_user) }}</dd>
                 </div>
                 <div class="flex justify-between gap-3">
-                  <dt class="text-[var(--text-tertiary)]">可写入产物</dt>
+                  <dt class="text-[var(--text-tertiary)]">写入产物</dt>
                   <dd class="text-[var(--text-primary)]">{{ booleanLabel(selectedAgent.can_write_artifacts) }}</dd>
                 </div>
                 <div class="flex justify-between gap-3">
@@ -109,17 +129,14 @@
                   <dd class="font-mono text-[var(--text-primary)]">{{ selectedAgent.output_boundary }}</dd>
                 </div>
               </dl>
-              <div class="mt-3 border-t border-[var(--border-light)] pt-2">
-                <div class="mb-1 text-[10px] uppercase tracking-wide text-[var(--text-tertiary)]">允许输出</div>
-                <div class="flex flex-wrap gap-1">
-                  <span
-                    v-for="boundary in governedOutputBoundaries"
-                    :key="boundary"
-                    class="rounded bg-[var(--fill-tsp-gray-main)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--text-secondary)]"
-                  >
-                    {{ boundary }}
-                  </span>
-                </div>
+              <div class="mt-3 flex flex-wrap gap-1 border-t border-[var(--border-light)] pt-2">
+                <span
+                  v-for="boundary in governedOutputBoundaries"
+                  :key="boundary"
+                  class="rounded bg-[var(--fill-tsp-gray-main)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--text-secondary)]"
+                >
+                  {{ boundary }}
+                </span>
               </div>
             </div>
 
@@ -136,22 +153,19 @@
                 >
                   {{ tool }}
                 </span>
+                <span v-if="!selectedAgent.allowed_tools.length" class="text-xs text-[var(--text-tertiary)]">无挂载工具</span>
               </div>
             </div>
 
             <div class="rounded-lg border border-[var(--border-light)] bg-[var(--background-white-main)] p-3">
               <div class="mb-2 flex items-center justify-between">
-                <h3 class="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">技能</h3>
-                <span class="text-[10px] tabular-nums text-[var(--text-tertiary)]">{{ selectedAgent.skill_refs.length }}</span>
+                <h3 class="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">治理动作</h3>
+                <Lock v-if="!selectedAgent.editable" :size="13" class="text-[var(--text-tertiary)]" />
               </div>
-              <div class="flex flex-wrap gap-1.5">
-                <span
-                  v-for="skill in selectedAgent.skill_refs"
-                  :key="skill"
-                  class="rounded-md bg-[var(--fill-tsp-gray-main)] px-2 py-1 font-mono text-[11px] text-[var(--text-secondary)]"
-                >
-                  {{ skill }}
-                </span>
+              <div class="flex flex-wrap gap-2">
+                <button class="h-7 rounded-md border border-[var(--border-light)] px-2 text-xs text-[var(--text-secondary)] disabled:cursor-not-allowed disabled:opacity-50" :disabled="!selectedAgent.editable">编辑</button>
+                <button class="h-7 rounded-md border border-[var(--border-light)] px-2 text-xs text-[var(--text-secondary)] disabled:cursor-not-allowed disabled:opacity-50" :disabled="!selectedAgent.editable">启停</button>
+                <button class="h-7 rounded-md border border-[var(--border-light)] px-2 text-xs text-[var(--text-secondary)] disabled:cursor-not-allowed disabled:opacity-50" :disabled="!selectedAgent.editable">运行验证</button>
               </div>
             </div>
           </section>
@@ -161,14 +175,14 @@
               <div class="border-b border-[var(--border-light)] px-3 py-2">
                 <h3 class="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">系统提示词</h3>
               </div>
-              <pre class="max-h-[360px] overflow-auto whitespace-pre-wrap px-3 py-3 text-xs leading-5 text-[var(--text-secondary)]">{{ selectedAgent.system_prompt }}</pre>
+              <pre class="max-h-[360px] overflow-auto whitespace-pre-wrap px-3 py-3 text-xs leading-5 text-[var(--text-secondary)]">{{ selectedAgent.system_prompt || '系统内置 Agent 由 DeepAgents runtime 管理，不在本 Registry 中编辑 system_prompt。' }}</pre>
             </div>
 
             <div class="rounded-lg border border-[var(--border-light)] bg-[var(--background-white-main)]">
               <div class="border-b border-[var(--border-light)] px-3 py-2">
-                <h3 class="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">输入边界</h3>
+                <h3 class="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">输入边界与 metadata</h3>
               </div>
-              <pre class="max-h-[360px] overflow-auto whitespace-pre-wrap px-3 py-3 text-xs leading-5 text-[var(--text-secondary)]">{{ formattedInputBoundaries }}</pre>
+              <pre class="max-h-[360px] overflow-auto whitespace-pre-wrap px-3 py-3 text-xs leading-5 text-[var(--text-secondary)]">{{ formattedGovernance }}</pre>
             </div>
           </section>
         </div>
@@ -183,15 +197,20 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
-import { BookOpenCheck, RefreshCw, ShieldCheck } from 'lucide-vue-next';
+import { BookOpenCheck, Cpu, Lock, RefreshCw, ShieldCheck } from 'lucide-vue-next';
 import { listResearchAgents, type ResearchAgentDefinition } from '../api/agent';
 
 const agents = ref<ResearchAgentDefinition[]>([]);
 const selectedAgentName = ref('');
 const loading = ref(false);
-const preferredAgentOrder = ['research_auditor', 'paper_reader_worker'];
+const preferredAgentOrder = ['general-purpose', 'research_auditor', 'paper_reader_worker'];
 const governedOutputBoundaries = ['context_only', 'process_trace'];
-const builtinAgentCopy: Record<string, { displayName: string; description: string }> = {
+
+const agentCopy: Record<string, { displayName: string; description: string }> = {
+  'general-purpose': {
+    displayName: '通用执行 Agent',
+    description: 'DeepAgents 默认携带的系统内置 Agent。它属于过程 trace，不写 citation evidence，也不允许在 Registry 中编辑。',
+  },
   research_auditor: {
     displayName: '审计智能体',
     description: '审查草稿结论与引用证据之间的匹配关系，只返回过程审计结果，不写最终回答。',
@@ -202,19 +221,38 @@ const builtinAgentCopy: Record<string, { displayName: string; description: strin
   },
 };
 
-const selectedAgent = computed(() => agents.value.find(agent => agent.name === selectedAgentName.value) || agents.value[0] || null);
+const orderedAgents = computed(() => [...agents.value].sort((left, right) => {
+  const leftIndex = preferredAgentOrder.indexOf(left.name);
+  const rightIndex = preferredAgentOrder.indexOf(right.name);
+  const normalizedLeft = leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex;
+  const normalizedRight = rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex;
+  return normalizedLeft - normalizedRight || left.display_name.localeCompare(right.display_name);
+}));
 
-const formattedInputBoundaries = computed(() => {
+const selectedAgent = computed(() => agents.value.find(agent => agent.name === selectedAgentName.value) || orderedAgents.value[0] || null);
+
+const formattedGovernance = computed(() => {
   if (!selectedAgent.value) return '';
-  return JSON.stringify(selectedAgent.value.input_boundaries, null, 2);
+  return JSON.stringify({
+    input_boundaries: selectedAgent.value.input_boundaries,
+    metadata: selectedAgent.value.metadata,
+  }, null, 2);
 });
 
 const displayAgentName = (agent: ResearchAgentDefinition) => (
-  builtinAgentCopy[agent.name]?.displayName || agent.display_name
+  agentCopy[agent.name]?.displayName || agent.display_name
 );
 
 const displayAgentDescription = (agent: ResearchAgentDefinition) => (
-  builtinAgentCopy[agent.name]?.description || agent.description
+  agentCopy[agent.name]?.description || agent.description
+);
+
+const agentTypeLabel = (agent: ResearchAgentDefinition) => (
+  agent.agent_type === 'system_builtin' ? '系统内置' : (agent.agent_type === 'custom' ? '用户自定义' : agent.agent_type)
+);
+
+const editabilityLabel = (agent: ResearchAgentDefinition) => (
+  agent.editable ? '可编辑' : '只读'
 );
 
 const booleanLabel = (value: boolean) => (value ? '是' : '否');
@@ -224,6 +262,7 @@ const validationStatusLabel = (status: string) => {
     valid: '已验证',
     invalid: '未通过',
     draft: '草稿',
+    system_managed: '系统托管',
   };
   return labels[status] || status;
 };
@@ -231,16 +270,9 @@ const validationStatusLabel = (status: string) => {
 const refreshAgents = async () => {
   loading.value = true;
   try {
-    const loadedAgents = await listResearchAgents();
-    agents.value = loadedAgents.sort((left, right) => {
-      const leftIndex = preferredAgentOrder.indexOf(left.name);
-      const rightIndex = preferredAgentOrder.indexOf(right.name);
-      const normalizedLeft = leftIndex === -1 ? Number.MAX_SAFE_INTEGER : leftIndex;
-      const normalizedRight = rightIndex === -1 ? Number.MAX_SAFE_INTEGER : rightIndex;
-      return normalizedLeft - normalizedRight || left.display_name.localeCompare(right.display_name);
-    });
+    agents.value = await listResearchAgents();
     if (!agents.value.some(agent => agent.name === selectedAgentName.value)) {
-      selectedAgentName.value = agents.value[0]?.name || '';
+      selectedAgentName.value = orderedAgents.value[0]?.name || '';
     }
   } finally {
     loading.value = false;

@@ -296,6 +296,9 @@ export interface RuntimeResultAuditExport extends RuntimeResultAudit {
 export interface ResearchAgentDefinition {
   name: string;
   display_name: string;
+  agent_type: 'system_builtin' | 'custom' | string;
+  source: string;
+  editable: boolean;
   description: string;
   system_prompt: string;
   skill_refs: string[];
@@ -308,6 +311,7 @@ export interface ResearchAgentDefinition {
   version: number;
   validation_status: 'valid' | 'invalid' | 'draft' | string;
   citation_evidence: boolean;
+  metadata: Record<string, unknown>;
 }
 
 export async function createSession(data: CreateSessionRequest): Promise<Session> {

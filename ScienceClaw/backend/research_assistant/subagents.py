@@ -12,7 +12,8 @@ from backend.research_assistant.audit import audit_evidence_claims as _audit_evi
 
 
 OUTPUT_BOUNDARIES = {"context_only", "process_trace", "artifact"}
-VALIDATION_STATUSES = {"valid", "invalid", "draft"}
+AGENT_TYPES = {"system_builtin", "custom"}
+VALIDATION_STATUSES = {"valid", "invalid", "draft", "system_managed"}
 
 
 @dataclass(frozen=True)
@@ -31,9 +32,15 @@ class SubagentDefinition:
     version: int = 1
     validation_status: str = "valid"
     citation_evidence: bool = False
+    agent_type: str = "custom"
+    source: str = "registry"
+    editable: bool = True
+    metadata: dict[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return asdict(self)
+        data = asdict(self)
+        data["metadata"] = data["metadata"] or {}
+        return data
 
 
 @dataclass(frozen=True)
@@ -101,15 +108,60 @@ def default_subagent_definitions() -> list[SubagentDefinition]:
     return definitions
 
 
+def system_builtin_subagent_definitions() -> list[SubagentDefinition]:
+    definitions = [
+        SubagentDefinition(
+            name="general-purpose",
+            display_name="General Purpose",
+            agent_type="system_builtin",
+            source="deepagents_builtin",
+            editable=False,
+            description="DeepAgents built-in general task worker.",
+            system_prompt="",
+            skill_refs=[],
+            allowed_tools=[],
+            input_boundaries={},
+            output_boundary="process_trace",
+            can_answer_user=False,
+            can_write_artifacts=False,
+            enabled=True,
+            validation_status="system_managed",
+            citation_evidence=False,
+            metadata={"runtime_managed": True},
+        ),
+    ]
+    for definition in definitions:
+        validate_subagent_definition(definition)
+    return definitions
+
+
+def registry_subagent_definitions() -> list[SubagentDefinition]:
+    return [*system_builtin_subagent_definitions(), *default_subagent_definitions()]
+
+
 def validate_subagent_definition(definition: SubagentDefinition) -> None:
     if not definition.name.strip():
         raise ValueError("subagent name is required")
     if not definition.description.strip():
         raise ValueError(f"{definition.name}: description is required")
-    if not definition.system_prompt.strip():
-        raise ValueError(f"{definition.name}: system_prompt is required")
-    if not definition.allowed_tools:
-        raise ValueError(f"{definition.name}: allowed_tools must not be empty")
+    if definition.agent_type not in AGENT_TYPES:
+        raise ValueError(f"{definition.name}: agent_type is invalid")
+    if not definition.source.strip():
+        raise ValueError(f"{definition.name}: source is required")
+    if definition.agent_type == "custom":
+        if not definition.system_prompt.strip():
+            raise ValueError(f"{definition.name}: system_prompt is required")
+        if not definition.allowed_tools:
+            raise ValueError(f"{definition.name}: allowed_tools must not be empty")
+        if definition.source != "registry":
+            raise ValueError(f"{definition.name}: custom source must be registry")
+        if not definition.editable:
+            raise ValueError(f"{definition.name}: custom agents must be editable")
+    if definition.agent_type == "system_builtin":
+        if definition.editable:
+            raise ValueError(f"{definition.name}: system_builtin agents must be read-only")
+        if definition.can_write_artifacts:
+            raise ValueError(f"{definition.name}: system_builtin agents cannot write artifacts in F020")
     if definition.output_boundary not in OUTPUT_BOUNDARIES:
         raise ValueError(f"{definition.name}: output_boundary is invalid")
     if definition.validation_status not in VALIDATION_STATUSES:
@@ -128,7 +180,7 @@ def build_deepagents_subagent_configs(
     configs: list[dict[str, Any]] = []
     for definition in definitions:
         validate_subagent_definition(definition)
-        if not definition.enabled:
+        if not definition.enabled or definition.agent_type != "custom":
             continue
         tools = []
         for tool_name in definition.allowed_tools:

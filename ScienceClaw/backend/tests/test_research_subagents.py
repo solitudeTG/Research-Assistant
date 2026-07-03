@@ -9,6 +9,8 @@ from backend.research_assistant.subagents import (
     build_deepagents_subagent_configs,
     build_subagent_lifecycle_step_event,
     default_subagent_definitions,
+    registry_subagent_definitions,
+    system_builtin_subagent_definitions,
     validate_subagent_definition,
 )
 
@@ -23,6 +25,9 @@ def test_default_research_subagents_are_governed_workers_not_user_agents():
     assert set(definitions) == {"research_auditor", "paper_reader_worker"}
 
     auditor = definitions["research_auditor"]
+    assert auditor.agent_type == "custom"
+    assert auditor.source == "registry"
+    assert auditor.editable is True
     assert auditor.display_name == "Auditor Agent"
     assert auditor.output_boundary == "process_trace"
     assert auditor.allowed_tools == ["audit_evidence_claims"]
@@ -33,6 +38,9 @@ def test_default_research_subagents_are_governed_workers_not_user_agents():
     assert "cannot upgrade" in auditor.system_prompt
 
     reader = definitions["paper_reader_worker"]
+    assert reader.agent_type == "custom"
+    assert reader.source == "registry"
+    assert reader.editable is True
     assert reader.display_name == "Reader Worker"
     assert reader.output_boundary == "context_only"
     assert reader.allowed_tools == ["read_research_evidence"]
@@ -41,6 +49,34 @@ def test_default_research_subagents_are_governed_workers_not_user_agents():
     assert reader.citation_evidence is False
     assert "multi-paper" in reader.description
     assert "follow-up" in reader.description
+
+
+def test_registry_read_model_includes_read_only_system_builtin_agent():
+    definitions = {definition.name: definition for definition in registry_subagent_definitions()}
+
+    assert set(definitions) == {"general-purpose", "research_auditor", "paper_reader_worker"}
+    builtin = definitions["general-purpose"]
+    assert builtin.agent_type == "system_builtin"
+    assert builtin.source == "deepagents_builtin"
+    assert builtin.editable is False
+    assert builtin.enabled is True
+    assert builtin.output_boundary == "process_trace"
+    assert builtin.citation_evidence is False
+    assert builtin.validation_status == "system_managed"
+    assert builtin.allowed_tools == []
+    assert builtin.can_answer_user is False
+
+
+def test_system_builtin_agent_validation_rejects_editable_or_citation_evidence():
+    builtin = system_builtin_subagent_definitions()[0]
+
+    validate_subagent_definition(builtin)
+
+    with pytest.raises(ValueError, match="system_builtin"):
+        validate_subagent_definition(replace(builtin, editable=True))
+
+    with pytest.raises(ValueError, match="citation_evidence"):
+        validate_subagent_definition(replace(builtin, citation_evidence=True))
 
 
 def test_subagent_definition_validation_rejects_boundary_drift():

@@ -83,11 +83,17 @@ class FakeProjectPaper:
 class FakeSubagentDefinition:
     def __init__(self, *, name="research_auditor"):
         self.name = name
+        self.agent_type = "custom"
+        self.source = "registry"
+        self.editable = True
 
     def to_dict(self):
         return {
             "name": self.name,
             "display_name": "Auditor Agent",
+            "agent_type": "custom",
+            "source": "registry",
+            "editable": True,
             "description": "Audit claims.",
             "system_prompt": "You are the Research Auditor Agent.",
             "skill_refs": ["research-evidence-audit"],
@@ -100,6 +106,7 @@ class FakeSubagentDefinition:
             "version": 1,
             "validation_status": "valid",
             "citation_evidence": False,
+            "metadata": {},
         }
 
 
@@ -280,9 +287,17 @@ async def test_list_research_agents_route_returns_governed_registry(monkeypatch)
         ("ensure", sessions.settings.research_database_url),
         ("list", sessions.settings.research_database_url, True),
     ]
-    assert response.data["agents"][0]["name"] == "research_auditor"
-    assert response.data["agents"][0]["can_answer_user"] is False
-    assert response.data["agents"][0]["citation_evidence"] is False
+    assert response.data["agents"][0]["name"] == "general-purpose"
+    agents = {agent["name"]: agent for agent in response.data["agents"]}
+    assert set(agents) == {"general-purpose", "research_auditor"}
+    assert agents["general-purpose"]["agent_type"] == "system_builtin"
+    assert agents["general-purpose"]["source"] == "deepagents_builtin"
+    assert agents["general-purpose"]["editable"] is False
+    assert agents["general-purpose"]["citation_evidence"] is False
+    assert agents["research_auditor"]["agent_type"] == "custom"
+    assert agents["research_auditor"]["editable"] is True
+    assert agents["research_auditor"]["can_answer_user"] is False
+    assert agents["research_auditor"]["citation_evidence"] is False
 
 
 @pytest.mark.asyncio

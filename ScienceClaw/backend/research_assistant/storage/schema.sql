@@ -165,6 +165,9 @@ CREATE INDEX IF NOT EXISTS research_memory_entries_user_layer_created_idx
 CREATE TABLE IF NOT EXISTS research_subagent_definitions (
     name TEXT PRIMARY KEY,
     display_name TEXT NOT NULL,
+    agent_type TEXT NOT NULL DEFAULT 'custom' CHECK (agent_type IN ('system_builtin', 'custom')),
+    source TEXT NOT NULL DEFAULT 'registry',
+    editable BOOLEAN NOT NULL DEFAULT true,
     description TEXT NOT NULL,
     system_prompt TEXT NOT NULL,
     skill_refs JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -175,11 +178,21 @@ CREATE TABLE IF NOT EXISTS research_subagent_definitions (
     can_write_artifacts BOOLEAN NOT NULL DEFAULT false,
     enabled BOOLEAN NOT NULL DEFAULT true,
     version INTEGER NOT NULL DEFAULT 1,
-    validation_status TEXT NOT NULL CHECK (validation_status IN ('valid', 'invalid', 'draft')),
+    validation_status TEXT NOT NULL CHECK (validation_status IN ('valid', 'invalid', 'draft', 'system_managed')),
     citation_evidence BOOLEAN NOT NULL DEFAULT false CHECK (citation_evidence = false),
+    metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE research_subagent_definitions
+    ADD COLUMN IF NOT EXISTS agent_type TEXT NOT NULL DEFAULT 'custom';
+ALTER TABLE research_subagent_definitions
+    ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'registry';
+ALTER TABLE research_subagent_definitions
+    ADD COLUMN IF NOT EXISTS editable BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE research_subagent_definitions
+    ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 CREATE INDEX IF NOT EXISTS research_subagent_definitions_enabled_idx
     ON research_subagent_definitions (enabled, name);
