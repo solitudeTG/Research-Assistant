@@ -385,18 +385,26 @@ def _citation_payloads(citations_json: str) -> list[CitationPayload]:
     if not isinstance(payload, list):
         raise ValueError("citations_json must decode to a JSON array")
     citations: list[CitationPayload] = []
-    for item in payload:
+    for index, item in enumerate(payload, start=1):
         if not isinstance(item, dict):
             continue
+        raw_evidence_id = item.get("evidence_id")
         citations.append(
             CitationPayload(
-                evidence_id=int(item.get("evidence_id", 0)),
+                evidence_id=_safe_int(raw_evidence_id, fallback=index),
                 quote=str(item.get("quote", "")),
                 source_type=str(item.get("source_type", "")),
-                citation_label=str(item.get("citation_label", "")),
+                citation_label=str(item.get("citation_label") or raw_evidence_id or ""),
             )
         )
     return citations
+
+
+def _safe_int(value: Any, *, fallback: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return fallback
 
 
 def _json_loads(value: str, *, default: Any) -> Any:

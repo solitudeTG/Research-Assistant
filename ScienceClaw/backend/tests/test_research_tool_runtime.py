@@ -10,6 +10,7 @@ import pytest
 import Tools
 from backend.deepagent import agent
 from backend.deepagent.sse_middleware import SSEMonitoringMiddleware
+from backend.research_assistant.subagents import SubagentDefinition
 
 
 def _tool(name: str, pack_id: str | None = None):
@@ -49,8 +50,17 @@ def test_supervisor_prompt_guides_autonomous_research_subagent_delegation():
     prompt = agent.get_system_prompt("/workspace")
 
     assert "## Research Subagent Delegation" in prompt
+    assert "## Required Research Delegation" in prompt
     assert "simple factual Q&A or casual chat" in prompt
     assert "Stay single-agent" in prompt
+    assert "must delegate at least one scoped read" in prompt
+    assert "must delegate an independent audit" in prompt
+    assert "web_search`, `web_crawl`, reading files yourself, or writing todos do not satisfy" in prompt
+    assert "Before finalizing a matching task" in prompt
+    assert "When both reader and auditor criteria match" in prompt
+    assert "Reader first, then draft, then Auditor" in prompt
+    assert "Do not call Auditor before Reader for two-or-more-material synthesis" in prompt
+    assert "Do not replace required delegation with repeated write_todos" in prompt
     assert "paper_reader_worker" in prompt
     assert "research_auditor" in prompt
     assert "Choose autonomously" in prompt
@@ -374,6 +384,71 @@ async def test_deep_agent_registers_governed_research_subagents(monkeypatch, tmp
     assert subagent_names == {"research_auditor", "paper_reader_worker"}
     assert captured["kwargs"]["subagents"][0]["tools"]
     assert all(subagent["name"] != "general-purpose" for subagent in subagents)
+
+
+@pytest.mark.asyncio
+async def test_deep_agent_uses_enabled_registry_subagent_definitions(monkeypatch, tmp_path):
+    captured = {}
+
+    class FakeSandbox:
+        def __init__(self, *, session_id: str, base_dir: str, **kwargs):
+            self.workspace = str(tmp_path / session_id)
+            (tmp_path / session_id).mkdir(parents=True, exist_ok=True)
+
+        async def get_context(self):
+            return {"success": False}
+
+    async def fake_list_subagents(database_url, *, enabled_only):
+        assert enabled_only is True
+        return [
+            SubagentDefinition(
+                name="research_auditor",
+                display_name="Auditor Agent",
+                description="Edited auditor description from registry.",
+                system_prompt="You are the edited Research Auditor Agent.",
+                skill_refs=["research-evidence-audit"],
+                allowed_tools=["audit_evidence_claims"],
+                input_boundaries={"requires": ["answer_content", "citations"]},
+                output_boundary="process_trace",
+                can_answer_user=False,
+                can_write_artifacts=False,
+                enabled=True,
+            )
+        ]
+
+    monkeypatch.setattr(agent, "FullSandboxBackend", FakeSandbox)
+    monkeypatch.setattr(agent, "get_llm_model", lambda *args, **kwargs: SimpleNamespace(profile={"max_input_tokens": 4096}))
+    monkeypatch.setattr(agent, "_collect_tools", lambda **kwargs: [])
+    monkeypatch.setattr(agent, "_build_backend", lambda *args, **kwargs: "backend")
+    def fake_create_deep_agent(**kwargs):
+        captured["kwargs"] = kwargs
+        return "compiled-agent"
+
+    monkeypatch.setattr(agent, "create_deep_agent", fake_create_deep_agent)
+    monkeypatch.setattr(agent, "ensure_subagent_definitions_in_database", lambda database_url: None)
+    monkeypatch.setattr(agent, "list_subagent_definitions_from_database", fake_list_subagents)
+    monkeypatch.setattr(agent, "_WORKSPACE_DIR", str(tmp_path))
+    monkeypatch.setattr(agent, "_BUILTIN_SKILLS_DIR", str(tmp_path / "missing-builtin"))
+    monkeypatch.setattr(agent, "_EXTERNAL_SKILLS_DIR", str(tmp_path / "missing-external"))
+    monkeypatch.setattr(agent._dir_watcher, "has_changed", lambda path: False)
+    monkeypatch.setitem(
+        sys.modules,
+        "backend.task_settings",
+        types.SimpleNamespace(TaskSettings=lambda: None),
+    )
+
+    await agent.deep_agent(
+        session_id="session-1",
+        task_settings=SimpleNamespace(
+            max_tokens=2048,
+            sandbox_exec_timeout=30,
+            max_output_chars=8000,
+        ),
+    )
+
+    subagents = captured["kwargs"]["subagents"]
+    assert [subagent["name"] for subagent in subagents] == ["research_auditor"]
+    assert subagents[0]["description"] == "Edited auditor description from registry."
 
 
 def test_chat_active_tool_packs_accept_only_research_packs(monkeypatch):

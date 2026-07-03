@@ -200,6 +200,31 @@ def test_auditor_tool_returns_minimal_process_trace_envelope():
     assert result["metadata"]["deterministic_boundary"] is True
 
 
+def test_auditor_tool_accepts_material_labels_without_crashing():
+    result = audit_evidence_claims.invoke(
+        {
+            "answer_content": "Context corruption risks citation pollution [A].",
+            "citations_json": json.dumps(
+                [
+                    {
+                        "evidence_id": "A",
+                        "quote": "Long context can produce citation pollution.",
+                        "source_type": "evidence_material",
+                        "citation_label": "[A]",
+                    }
+                ]
+            ),
+        }
+    )
+
+    assert result["status"] == "completed"
+    assert result["agent"] == "research_auditor"
+    assert result["boundary"] == "process_trace"
+    assert result["citation_evidence"] is False
+    assert result["content"]["audit"]["status"] == "invalid_source"
+    assert result["metadata"]["audit_status"] == "invalid_source"
+
+
 def test_reader_tool_returns_minimal_context_only_envelope_with_metadata_refs():
     result = read_research_evidence.invoke(
         {

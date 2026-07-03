@@ -23,6 +23,7 @@ Skills 鏋舵瀯锛?
 """
 from __future__ import annotations
 
+import inspect
 import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -48,6 +49,10 @@ from backend.research_assistant.subagents import (
     build_deepagents_subagent_configs,
     default_subagent_definitions,
     read_research_evidence,
+)
+from backend.research_assistant.storage.database import (
+    ensure_subagent_definitions_in_database,
+    list_subagent_definitions_from_database,
 )
 from backend.config import settings
 
@@ -127,6 +132,15 @@ Current date and time: {current_datetime}.
 ## Language
 Always respond in {language_instruction}.
 
+## Required Research Delegation
+- These delegation requirements override ordinary planning/tool preference when their conditions match.
+- Stay single-agent for simple factual Q&A or casual chat, especially when no evidence audit, multi-material reading, or report-grade synthesis is needed.
+- If the user asks for synthesis across two or more papers, materials, evidence snippets, source summaries, or labeled materials such as "Material A/B/C", you must call the `task` tool with `subagent_type="paper_reader_worker"` before drafting conclusions.
+- `web_search`, `web_crawl`, reading files yourself, or writing todos do not satisfy the Reader Worker delegation requirement.
+- If the same task also asks for evidence checking, boundary checking, conclusion review, trust assessment, or audit-like verification, call Reader first, then draft, then call the `task` tool with `subagent_type="research_auditor"` before the final answer.
+- Before finalizing a matching task, verify that the required Reader and Auditor delegations happened. If either is missing, call the missing subagent instead of finishing from self-review.
+- Treat all subagent outputs as context_only or process_trace. They can guide your synthesis, but they are not citation evidence; only paper, web, or database evidence may be cited to the user.
+
 ## Core Principles
 - Adapt to the conversation. Chat naturally for casual topics, but take concrete actions when the user asks for tasks or problem-solving.
 - Prefer execution over explanation. If a task can be solved through code or tools, implement and execute the solution instead of only describing it.
@@ -141,8 +155,13 @@ Always respond in {language_instruction}.
 ## Research Subagent Delegation
 - Stay single-agent for simple factual Q&A or casual chat, especially when no evidence audit, multi-paper reading, or report-grade synthesis is needed.
 - Choose autonomously whether a research task benefits from subagents. Do not ask the user to choose an Agent, and do not mention hidden routing mechanics unless it helps explain progress.
+- For complex research synthesis over two or more papers, materials, evidence snippets, or source summaries, you must delegate at least one scoped read with the `task` tool using `subagent_type="paper_reader_worker"` before writing the final synthesis.
+- For tasks that ask for evidence checking, boundary checking, conclusion review, report-grade trust, or audit-like verification, you must delegate an independent audit with the `task` tool using `subagent_type="research_auditor"` after drafting the candidate claims and before finalizing.
+- When both reader and auditor criteria match, use this order: Reader first, then draft, then Auditor. Do not call Auditor before Reader for two-or-more-material synthesis.
+- `web_search`, `web_crawl`, direct self-reading, and write_todos do not count as Reader Worker delegation.
 - Use `paper_reader_worker` when the task requires scoped reading across multiple papers/materials, parallel evidence extraction, or a focused re-read for a follow-up question.
 - Use `research_auditor` after drafting evidence-grounded claims, report sections, or high-trust conclusions that need citation/evidence consistency checks.
+- Do not replace required delegation with repeated write_todos or self-review. One concise plan is enough; then invoke the relevant subagent when the criteria above are met.
 - Treat all subagent outputs as context_only or process_trace. They can guide your synthesis, but they are not citation evidence; only paper, web, or database evidence may be cited to the user.
 
 ## Workspace
@@ -259,6 +278,21 @@ _RESEARCH_SUBAGENT_TOOLS = {
     "audit_evidence_claims": research_audit_evidence_claims,
     "read_research_evidence": read_research_evidence,
 }
+
+
+async def _load_enabled_research_subagent_definitions():
+    try:
+        ensure_result = ensure_subagent_definitions_in_database(settings.research_database_url)
+        if inspect.isawaitable(ensure_result):
+            await ensure_result
+        definitions = await list_subagent_definitions_from_database(
+            settings.research_database_url,
+            enabled_only=True,
+        )
+        return definitions or default_subagent_definitions()
+    except Exception as exc:
+        logger.warning(f"[Agent] Failed to load Research Subagent Registry, using defaults: {exc}")
+        return default_subagent_definitions()
 
 
 def _tool_pack_id(tool: Any) -> str | None:
@@ -510,7 +544,7 @@ async def deep_agent(
     logger.info(f"[Memory] 宸插惎鐢ㄨ蹇? {[os.path.basename(f) for f in _mem_files_to_use]}")
 
     agent_kwargs["subagents"] = build_deepagents_subagent_configs(
-        definitions=default_subagent_definitions(),
+        definitions=await _load_enabled_research_subagent_definitions(),
         available_tools=_RESEARCH_SUBAGENT_TOOLS,
     )
 
