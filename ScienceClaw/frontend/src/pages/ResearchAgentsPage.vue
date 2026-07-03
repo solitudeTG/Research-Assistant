@@ -163,7 +163,13 @@
                 <Lock v-if="!selectedAgent.editable" :size="13" class="text-[var(--text-tertiary)]" />
               </div>
               <div class="flex flex-wrap gap-2">
-                <button class="h-7 rounded-md border border-[var(--border-light)] px-2 text-xs text-[var(--text-secondary)] disabled:cursor-not-allowed disabled:opacity-50" :disabled="!selectedAgent.editable">编辑</button>
+                <button
+                  class="h-7 rounded-md border border-[var(--border-light)] px-2 text-xs text-[var(--text-secondary)] disabled:cursor-not-allowed disabled:opacity-50"
+                  :disabled="!selectedAgent.editable"
+                  @click="startEditing(selectedAgent)"
+                >
+                  编辑
+                </button>
                 <button class="h-7 rounded-md border border-[var(--border-light)] px-2 text-xs text-[var(--text-secondary)] disabled:cursor-not-allowed disabled:opacity-50" :disabled="!selectedAgent.editable">启停</button>
                 <button
                   class="h-7 rounded-md border border-[var(--border-light)] px-2 text-xs text-[var(--text-secondary)] disabled:cursor-not-allowed disabled:opacity-50"
@@ -172,6 +178,79 @@
                 >
                   {{ validatingAgentName === selectedAgent.name ? '验证中' : '运行验证' }}
                 </button>
+              </div>
+            </div>
+          </section>
+
+          <section
+            v-if="selectedAgent.editable && editingAgentName === selectedAgent.name"
+            class="rounded-lg border border-[var(--border-light)] bg-[var(--background-white-main)]"
+          >
+            <div class="flex items-center justify-between border-b border-[var(--border-light)] px-3 py-2">
+              <h3 class="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Custom Agent 编辑</h3>
+              <div class="flex items-center gap-2">
+                <button
+                  class="h-7 rounded-md border border-[var(--border-light)] px-2 text-xs text-[var(--text-secondary)] disabled:cursor-not-allowed disabled:opacity-50"
+                  :disabled="savingAgentName === selectedAgent.name"
+                  @click="cancelEditing"
+                >
+                  取消
+                </button>
+                <button
+                  class="h-7 rounded-md bg-blue-600 px-2.5 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-60"
+                  :disabled="savingAgentName === selectedAgent.name"
+                  @click="saveAgentEdits(selectedAgent)"
+                >
+                  {{ savingAgentName === selectedAgent.name ? '保存中' : '保存' }}
+                </button>
+              </div>
+            </div>
+            <div class="grid gap-3 p-3 text-xs xl:grid-cols-2">
+              <label class="flex flex-col gap-1">
+                <span class="text-[var(--text-tertiary)]">显示名称</span>
+                <input v-model="editDraft.display_name" class="h-8 rounded-md border border-[var(--border-light)] bg-transparent px-2 text-[var(--text-primary)]" />
+              </label>
+              <label class="flex flex-col gap-1">
+                <span class="text-[var(--text-tertiary)]">启用状态</span>
+                <select v-model="editDraft.enabled" class="h-8 rounded-md border border-[var(--border-light)] bg-[var(--background-white-main)] px-2 text-[var(--text-primary)]">
+                  <option :value="true">已启用</option>
+                  <option :value="false">已停用</option>
+                </select>
+              </label>
+              <label class="flex flex-col gap-1 xl:col-span-2">
+                <span class="text-[var(--text-tertiary)]">委派描述</span>
+                <textarea v-model="editDraft.description" rows="3" class="rounded-md border border-[var(--border-light)] bg-transparent px-2 py-1.5 text-[var(--text-primary)]" />
+              </label>
+              <label class="flex flex-col gap-1 xl:col-span-2">
+                <span class="text-[var(--text-tertiary)]">System Prompt</span>
+                <textarea v-model="editDraft.system_prompt" rows="5" class="rounded-md border border-[var(--border-light)] bg-transparent px-2 py-1.5 font-mono text-[var(--text-primary)]" />
+              </label>
+              <label class="flex flex-col gap-1">
+                <span class="text-[var(--text-tertiary)]">Skill refs</span>
+                <input v-model="editDraft.skill_refs_text" class="h-8 rounded-md border border-[var(--border-light)] bg-transparent px-2 font-mono text-[var(--text-primary)]" />
+              </label>
+              <label class="flex flex-col gap-1">
+                <span class="text-[var(--text-tertiary)]">Allowed tools</span>
+                <input v-model="editDraft.allowed_tools_text" class="h-8 rounded-md border border-[var(--border-light)] bg-transparent px-2 font-mono text-[var(--text-primary)]" />
+              </label>
+              <label class="flex flex-col gap-1">
+                <span class="text-[var(--text-tertiary)]">输出边界</span>
+                <select v-model="editDraft.output_boundary" class="h-8 rounded-md border border-[var(--border-light)] bg-[var(--background-white-main)] px-2 font-mono text-[var(--text-primary)]">
+                  <option value="context_only">context_only</option>
+                  <option value="process_trace">process_trace</option>
+                  <option value="artifact">artifact</option>
+                </select>
+              </label>
+              <label class="flex flex-col gap-1">
+                <span class="text-[var(--text-tertiary)]">Metadata JSON</span>
+                <textarea v-model="editDraft.metadata_text" rows="4" class="rounded-md border border-[var(--border-light)] bg-transparent px-2 py-1.5 font-mono text-[var(--text-primary)]" />
+              </label>
+              <label class="flex flex-col gap-1 xl:col-span-2">
+                <span class="text-[var(--text-tertiary)]">Input boundaries JSON</span>
+                <textarea v-model="editDraft.input_boundaries_text" rows="4" class="rounded-md border border-[var(--border-light)] bg-transparent px-2 py-1.5 font-mono text-[var(--text-primary)]" />
+              </label>
+              <div v-if="editError" class="rounded-md bg-red-50 px-2 py-1.5 text-red-700 dark:bg-red-950/30 dark:text-red-300 xl:col-span-2">
+                {{ editError }}
               </div>
             </div>
           </section>
@@ -266,19 +345,47 @@ import { AlertCircle, BookOpenCheck, CheckCircle2, Cpu, History, Lock, RefreshCw
 import {
   listResearchAgentRuns,
   listResearchAgents,
+  updateResearchAgent,
   validateResearchAgent,
   type ResearchAgentDefinition,
   type ResearchAgentRun,
+  type ResearchAgentUpdateRequest,
   type ResearchAgentValidationResult,
 } from '../api/agent';
+
+interface AgentEditDraft {
+  display_name: string;
+  description: string;
+  system_prompt: string;
+  skill_refs_text: string;
+  allowed_tools_text: string;
+  input_boundaries_text: string;
+  output_boundary: string;
+  enabled: boolean;
+  metadata_text: string;
+}
 
 const agents = ref<ResearchAgentDefinition[]>([]);
 const selectedAgentName = ref('');
 const loading = ref(false);
 const loadingRunsAgentName = ref('');
 const validatingAgentName = ref('');
+const savingAgentName = ref('');
+const editingAgentName = ref('');
+const editError = ref('');
 const recentRuns = ref<Record<string, ResearchAgentRun[]>>({});
 const validationResults = ref<Record<string, ResearchAgentValidationResult>>({});
+const editDraft = ref<AgentEditDraft>({
+  display_name: '',
+  description: '',
+  system_prompt: '',
+  skill_refs_text: '',
+  allowed_tools_text: '',
+  input_boundaries_text: '{}',
+  output_boundary: 'process_trace',
+  enabled: true,
+  metadata_text: '{}',
+});
 const preferredAgentOrder = ['general-purpose', 'research_auditor', 'paper_reader_worker'];
 const governedOutputBoundaries = ['context_only', 'process_trace'];
 
@@ -357,6 +464,78 @@ const formatValidationPreview = (value: unknown) => {
   return JSON.stringify(value, null, 2);
 };
 
+const commaList = (value: string) => value
+  .split(',')
+  .map(item => item.trim())
+  .filter(Boolean);
+
+const parseJsonObject = (value: string, label: string): Record<string, unknown> => {
+  const parsed = JSON.parse(value || '{}');
+  if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+    throw new Error(`${label} 必须是 JSON object`);
+  }
+  return parsed as Record<string, unknown>;
+};
+
+const startEditing = (agent: ResearchAgentDefinition) => {
+  if (!agent.editable) return;
+  editingAgentName.value = agent.name;
+  editError.value = '';
+  editDraft.value = {
+    display_name: agent.display_name,
+    description: agent.description,
+    system_prompt: agent.system_prompt,
+    skill_refs_text: agent.skill_refs.join(', '),
+    allowed_tools_text: agent.allowed_tools.join(', '),
+    input_boundaries_text: JSON.stringify(agent.input_boundaries || {}, null, 2),
+    output_boundary: agent.output_boundary,
+    enabled: agent.enabled,
+    metadata_text: JSON.stringify(agent.metadata || {}, null, 2),
+  };
+};
+
+const cancelEditing = () => {
+  editingAgentName.value = '';
+  editError.value = '';
+};
+
+const saveAgentEdits = async (agent: ResearchAgentDefinition) => {
+  if (!agent.editable) return;
+  editError.value = '';
+  let payload: ResearchAgentUpdateRequest;
+  try {
+    payload = {
+      display_name: editDraft.value.display_name.trim(),
+      description: editDraft.value.description.trim(),
+      system_prompt: editDraft.value.system_prompt.trim(),
+      skill_refs: commaList(editDraft.value.skill_refs_text),
+      allowed_tools: commaList(editDraft.value.allowed_tools_text),
+      input_boundaries: parseJsonObject(editDraft.value.input_boundaries_text, 'Input boundaries'),
+      output_boundary: editDraft.value.output_boundary,
+      enabled: Boolean(editDraft.value.enabled),
+      metadata: parseJsonObject(editDraft.value.metadata_text, 'Metadata'),
+    };
+  } catch (error) {
+    editError.value = error instanceof Error ? error.message : String(error);
+    return;
+  }
+  savingAgentName.value = agent.name;
+  try {
+    const updated = await updateResearchAgent(agent.name, payload);
+    agents.value = agents.value.map(item => item.name === updated.name ? updated : item);
+    validationResults.value = Object.fromEntries(
+      Object.entries(validationResults.value).filter(([name]) => name !== updated.name),
+    );
+    editingAgentName.value = '';
+  } catch (error) {
+    editError.value = error instanceof Error ? error.message : String(error);
+  } finally {
+    if (savingAgentName.value === agent.name) {
+      savingAgentName.value = '';
+    }
+  }
+};
+
 const loadAgentRuns = async (agentName: string) => {
   loadingRunsAgentName.value = agentName;
   try {
@@ -402,6 +581,9 @@ watch(
   () => selectedAgent.value?.name,
   (agentName) => {
     if (agentName) {
+      if (editingAgentName.value && editingAgentName.value !== agentName) {
+        cancelEditing();
+      }
       void loadAgentRuns(agentName);
     }
   },

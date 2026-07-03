@@ -86,27 +86,41 @@ class FakeSubagentDefinition:
         self.agent_type = "custom"
         self.source = "registry"
         self.editable = True
+        self.display_name = "Auditor Agent"
+        self.description = "Audit claims."
+        self.system_prompt = "You are the Research Auditor Agent."
+        self.skill_refs = ["research-evidence-audit"]
+        self.allowed_tools = ["audit_evidence_claims"]
+        self.input_boundaries = {}
+        self.output_boundary = "process_trace"
+        self.can_answer_user = False
+        self.can_write_artifacts = False
+        self.enabled = True
+        self.version = 1
+        self.validation_status = "valid"
+        self.citation_evidence = False
+        self.metadata = {}
 
     def to_dict(self):
         return {
             "name": self.name,
-            "display_name": "Auditor Agent",
-            "agent_type": "custom",
-            "source": "registry",
-            "editable": True,
-            "description": "Audit claims.",
-            "system_prompt": "You are the Research Auditor Agent.",
-            "skill_refs": ["research-evidence-audit"],
-            "allowed_tools": ["audit_evidence_claims"],
-            "input_boundaries": {},
-            "output_boundary": "process_trace",
-            "can_answer_user": False,
-            "can_write_artifacts": False,
-            "enabled": True,
-            "version": 1,
-            "validation_status": "valid",
-            "citation_evidence": False,
-            "metadata": {},
+            "display_name": self.display_name,
+            "agent_type": self.agent_type,
+            "source": self.source,
+            "editable": self.editable,
+            "description": self.description,
+            "system_prompt": self.system_prompt,
+            "skill_refs": self.skill_refs,
+            "allowed_tools": self.allowed_tools,
+            "input_boundaries": self.input_boundaries,
+            "output_boundary": self.output_boundary,
+            "can_answer_user": self.can_answer_user,
+            "can_write_artifacts": self.can_write_artifacts,
+            "enabled": self.enabled,
+            "version": self.version,
+            "validation_status": self.validation_status,
+            "citation_evidence": self.citation_evidence,
+            "metadata": self.metadata,
         }
 
 
@@ -285,7 +299,7 @@ async def test_list_research_agents_route_returns_governed_registry(monkeypatch)
 
     assert calls == [
         ("ensure", sessions.settings.research_database_url),
-        ("list", sessions.settings.research_database_url, True),
+        ("list", sessions.settings.research_database_url, False),
     ]
     assert response.data["agents"][0]["name"] == "general-purpose"
     agents = {agent["name"]: agent for agent in response.data["agents"]}
@@ -364,6 +378,90 @@ async def test_validate_research_agent_route_runs_custom_validation_example(monk
     assert response.data["example_result"]["agent"] == "paper_reader_worker"
     assert response.data["example_result"]["boundary"] == "context_only"
     assert response.data["example_result"]["citation_evidence"] is False
+
+
+@pytest.mark.asyncio
+async def test_update_research_agent_route_allows_custom_agent_edits(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    calls = []
+
+    async def fake_ensure_agents(database_url):
+        calls.append(("ensure", database_url))
+
+    async def fake_list_agents(database_url, *, enabled_only):
+        calls.append(("list", database_url, enabled_only))
+        return [FakeSubagentDefinition(name="paper_reader_worker")]
+
+    async def fake_update_agent(database_url, *, name, updates):
+        calls.append(("update", database_url, name, updates))
+        updated = FakeSubagentDefinition(name=name)
+        updated.display_name = updates["display_name"]
+        updated.description = updates["description"]
+        updated.system_prompt = updates["system_prompt"]
+        updated.enabled = updates["enabled"]
+        updated.version = 2
+        updated.validation_status = "draft"
+        return updated
+
+    monkeypatch.setattr(sessions, "ensure_subagent_definitions_in_database", fake_ensure_agents)
+    monkeypatch.setattr(sessions, "list_subagent_definitions_from_database", fake_list_agents)
+    monkeypatch.setattr(sessions, "update_subagent_definition_in_database", fake_update_agent)
+
+    payload = sessions.ResearchAgentUpdateRequest(
+        display_name="Reader Worker Tuned",
+        description="Read scoped materials with sharper extraction.",
+        system_prompt="You are a scoped Reader Worker. Return context-only notes.",
+        skill_refs=["research-paper-reading"],
+        allowed_tools=["read_research_evidence"],
+        input_boundaries={"requires": ["material_package"]},
+        output_boundary="context_only",
+        enabled=False,
+        metadata={"edited_by": "route-test"},
+    )
+
+    response = await sessions.update_research_agent_for_user(
+        "paper_reader_worker",
+        payload,
+        current_user=types.SimpleNamespace(id="user-1"),
+    )
+
+    assert calls[0] == ("ensure", sessions.settings.research_database_url)
+    assert calls[1] == ("list", sessions.settings.research_database_url, False)
+    assert calls[2][0:3] == (
+        "update",
+        sessions.settings.research_database_url,
+        "paper_reader_worker",
+    )
+    assert calls[2][3]["display_name"] == "Reader Worker Tuned"
+    assert calls[2][3]["enabled"] is False
+    assert response.data["agent"]["name"] == "paper_reader_worker"
+    assert response.data["agent"]["editable"] is True
+    assert response.data["agent"]["validation_status"] == "draft"
+
+
+@pytest.mark.asyncio
+async def test_update_research_agent_route_rejects_system_builtin(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+
+    async def fake_ensure_agents(database_url):
+        return None
+
+    async def fake_list_agents(database_url, *, enabled_only):
+        return []
+
+    monkeypatch.setattr(sessions, "ensure_subagent_definitions_in_database", fake_ensure_agents)
+    monkeypatch.setattr(sessions, "list_subagent_definitions_from_database", fake_list_agents)
+
+    payload = sessions.ResearchAgentUpdateRequest(description="Cannot edit built-in")
+
+    with pytest.raises(Exception) as exc_info:
+        await sessions.update_research_agent_for_user(
+            "general-purpose",
+            payload,
+            current_user=types.SimpleNamespace(id="user-1"),
+        )
+
+    assert getattr(exc_info.value, "status_code", None) == 403
 
 
 @pytest.mark.asyncio

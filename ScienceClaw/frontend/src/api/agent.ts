@@ -341,6 +341,18 @@ export interface ResearchAgentValidationResult {
   errors: string[];
 }
 
+export interface ResearchAgentUpdateRequest {
+  display_name?: string;
+  description?: string;
+  system_prompt?: string;
+  skill_refs?: string[];
+  allowed_tools?: string[];
+  input_boundaries?: Record<string, unknown>;
+  output_boundary?: 'context_only' | 'process_trace' | 'artifact' | string;
+  enabled?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
 export async function createSession(data: CreateSessionRequest): Promise<Session> {
   const response = await apiClient.put<ApiResponse<Session>>('/sessions', data);
   return response.data.data;
@@ -571,6 +583,17 @@ export async function validateResearchAgent(agentName: string): Promise<Research
     `/sessions/research/agents/${encodeURIComponent(agentName)}/validate`,
   );
   return response.data.data;
+}
+
+export async function updateResearchAgent(
+  agentName: string,
+  payload: ResearchAgentUpdateRequest,
+): Promise<ResearchAgentDefinition> {
+  const response = await apiClient.patch<ApiResponse<{ agent: ResearchAgentDefinition }>>(
+    `/sessions/research/agents/${encodeURIComponent(agentName)}`,
+    payload,
+  );
+  return response.data.data.agent;
 }
 
 export async function promoteResearchMemory(

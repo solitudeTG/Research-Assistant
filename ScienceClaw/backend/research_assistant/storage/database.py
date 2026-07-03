@@ -37,6 +37,7 @@ from backend.research_assistant.storage.repository import (
     persist_memory_entry,
     persist_report_evidence_map,
     persist_subagent_run,
+    update_subagent_definition,
     upsert_session_research_project,
 )
 
@@ -151,6 +152,21 @@ async def list_subagent_definitions_from_database(
     connection = await asyncpg.connect(database_url)
     try:
         return await list_subagent_definitions(connection, enabled_only=enabled_only)
+    finally:
+        await connection.close()
+
+
+async def update_subagent_definition_in_database(
+    database_url: str,
+    *,
+    name: str,
+    updates: dict,
+) -> SubagentDefinition:
+    import asyncpg
+
+    connection = await asyncpg.connect(database_url)
+    try:
+        return await update_subagent_definition(connection, name=name, updates=updates)
     finally:
         await connection.close()
 

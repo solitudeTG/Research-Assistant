@@ -79,6 +79,7 @@ from backend.research_assistant.storage.database import (
     persist_database_evidence_source_to_database,
     persist_memory_entry_to_database,
     persist_web_evidence_source_to_database,
+    update_subagent_definition_in_database,
     upsert_session_research_project_in_database,
 )
 from backend.user.dependencies import get_current_user, require_user, User
@@ -206,6 +207,18 @@ class DatabaseEvidenceIngestRequest(BaseModel):
 class RuntimeResultAuditExportRequest(BaseModel):
     tool_pack_id: Optional[str] = Field(default=None, description="Optional research tool pack id filter")
     result_sha256: Optional[str] = Field(default=None, description="Optional stable runtime result hash filter")
+
+
+class ResearchAgentUpdateRequest(BaseModel):
+    display_name: Optional[str] = Field(default=None, min_length=1, description="Custom Research Agent display name")
+    description: Optional[str] = Field(default=None, min_length=1, description="Delegation description shown to Supervisor")
+    system_prompt: Optional[str] = Field(default=None, min_length=1, description="Custom Research Agent system prompt")
+    skill_refs: Optional[List[str]] = Field(default=None, description="Skill references attached to this custom agent")
+    allowed_tools: Optional[List[str]] = Field(default=None, description="Allowed tool names for this custom agent")
+    input_boundaries: Optional[Dict[str, Any]] = Field(default=None, description="Input boundary metadata")
+    output_boundary: Optional[str] = Field(default=None, description="Output boundary")
+    enabled: Optional[bool] = Field(default=None, description="Whether Supervisor may delegate to this custom agent")
+    metadata: Optional[Dict[str, Any]] = Field(default=None, description="Extensible governance metadata")
 
 
 def _source_quality(source_type: str, identity: dict[str, Any]) -> dict[str, Any]:
@@ -2030,7 +2043,7 @@ async def list_research_agents_for_user(
         await ensure_subagent_definitions_in_database(settings.research_database_url)
         agents = await list_subagent_definitions_from_database(
             settings.research_database_url,
-            enabled_only=True,
+            enabled_only=False,
         )
         registry_agents = [
             *system_builtin_subagent_definitions(),
@@ -2040,6 +2053,57 @@ async def list_research_agents_for_user(
         return ApiResponse(data={"agents": [agent.to_dict() for agent in registry_agents]})
     except Exception as exc:
         logger.exception("list_research_agents_for_user failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.patch("/research/agents/{agent_name}", response_model=ApiResponse)
+async def update_research_agent_for_user(
+    agent_name: str,
+    payload: ResearchAgentUpdateRequest,
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """Update a custom Research Agent definition."""
+    try:
+        await ensure_subagent_definitions_in_database(settings.research_database_url)
+        custom_agents = await list_subagent_definitions_from_database(
+            settings.research_database_url,
+            enabled_only=False,
+        )
+        registry_agents = [
+            *system_builtin_subagent_definitions(),
+            *custom_agents,
+        ]
+        definitions = {definition.name: definition for definition in registry_agents}
+        definition = definitions.get(agent_name)
+        if definition is None:
+            raise HTTPException(status_code=404, detail="Research Agent not found")
+        if definition.agent_type != "custom" or not definition.editable:
+            raise HTTPException(status_code=403, detail="Research Agent is system managed and read-only")
+
+        patch = payload.model_dump(exclude_unset=True)
+        updates = {
+            "display_name": patch.get("display_name", definition.display_name),
+            "description": patch.get("description", definition.description),
+            "system_prompt": patch.get("system_prompt", definition.system_prompt),
+            "skill_refs": patch.get("skill_refs", definition.skill_refs),
+            "allowed_tools": patch.get("allowed_tools", definition.allowed_tools),
+            "input_boundaries": patch.get("input_boundaries", definition.input_boundaries),
+            "output_boundary": patch.get("output_boundary", definition.output_boundary),
+            "enabled": patch.get("enabled", definition.enabled),
+            "metadata": patch.get("metadata", definition.metadata or {}),
+        }
+        updated = await update_subagent_definition_in_database(
+            settings.research_database_url,
+            name=agent_name,
+            updates=updates,
+        )
+        return ApiResponse(data={"agent": updated.to_dict()})
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("update_research_agent_for_user failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 

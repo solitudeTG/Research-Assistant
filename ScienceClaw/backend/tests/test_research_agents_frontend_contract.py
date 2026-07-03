@@ -46,7 +46,16 @@ def test_research_agents_frontend_route_api_and_navigation_contract():
     assert "listResearchAgents" in api_source
     assert "listResearchAgentRuns" in api_source
     assert "validateResearchAgent" in api_source
+    assert "ResearchAgentUpdateRequest" in api_source
+    assert "updateResearchAgent" in api_source
+    assert ".patch<ApiResponse<{ agent: ResearchAgentDefinition }>>" in api_source
     assert "/sessions/research/agents" in api_source
+    assert "`/sessions/research/agents/${encodeURIComponent(agentName)}`" in api_source
+
+    assert "editingAgentName" in page_source
+    assert "editDraft" in page_source
+    assert "saveAgentEdits" in page_source
+    assert "updateResearchAgent" in page_source
 
     router_source = (FRONTEND / "main.ts").read_text(encoding="utf-8")
     assert "ResearchAgentsPage" in router_source

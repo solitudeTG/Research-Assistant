@@ -279,25 +279,7 @@ async def ensure_subagent_definitions(
             updated_at
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, $11, $12, $13, $14, $15, $16, $17, $18::jsonb, now())
-        ON CONFLICT (name) DO UPDATE SET
-            display_name = EXCLUDED.display_name,
-            agent_type = EXCLUDED.agent_type,
-            source = EXCLUDED.source,
-            editable = EXCLUDED.editable,
-            description = EXCLUDED.description,
-            system_prompt = EXCLUDED.system_prompt,
-            skill_refs = EXCLUDED.skill_refs,
-            allowed_tools = EXCLUDED.allowed_tools,
-            input_boundaries = EXCLUDED.input_boundaries,
-            output_boundary = EXCLUDED.output_boundary,
-            can_answer_user = EXCLUDED.can_answer_user,
-            can_write_artifacts = EXCLUDED.can_write_artifacts,
-            enabled = EXCLUDED.enabled,
-            version = EXCLUDED.version,
-            validation_status = EXCLUDED.validation_status,
-            citation_evidence = EXCLUDED.citation_evidence,
-            metadata = EXCLUDED.metadata,
-            updated_at = now()
+        ON CONFLICT (name) DO NOTHING
         """,
         rows,
     )
@@ -339,6 +321,94 @@ async def list_subagent_definitions(
     for definition in definitions:
         validate_subagent_definition(definition)
     return definitions
+
+
+async def update_subagent_definition(
+    connection: Any,
+    *,
+    name: str,
+    updates: dict[str, Any],
+) -> SubagentDefinition:
+    candidate = SubagentDefinition(
+        name=name,
+        display_name=str(updates["display_name"]),
+        agent_type="custom",
+        source="registry",
+        editable=True,
+        description=str(updates["description"]),
+        system_prompt=str(updates["system_prompt"]),
+        skill_refs=list(updates["skill_refs"]),
+        allowed_tools=list(updates["allowed_tools"]),
+        input_boundaries=dict(updates["input_boundaries"]),
+        output_boundary=str(updates["output_boundary"]),
+        can_answer_user=False,
+        can_write_artifacts=False,
+        enabled=bool(updates["enabled"]),
+        version=1,
+        validation_status="draft",
+        citation_evidence=False,
+        metadata=dict(updates.get("metadata") or {}),
+    )
+    validate_subagent_definition(candidate)
+
+    row = await connection.fetchrow(
+        """
+        UPDATE research_subagent_definitions
+        SET
+            display_name = $1,
+            description = $2,
+            system_prompt = $3,
+            skill_refs = $4::jsonb,
+            allowed_tools = $5::jsonb,
+            input_boundaries = $6::jsonb,
+            output_boundary = $7,
+            enabled = $8,
+            validation_status = $9,
+            metadata = $10::jsonb,
+            citation_evidence = $11,
+            version = version + 1,
+            updated_at = now()
+        WHERE name = $12
+          AND agent_type = 'custom'
+          AND editable = true
+        RETURNING
+            name,
+            display_name,
+            agent_type,
+            source,
+            editable,
+            description,
+            system_prompt,
+            skill_refs,
+            allowed_tools,
+            input_boundaries,
+            output_boundary,
+            can_answer_user,
+            can_write_artifacts,
+            enabled,
+            version,
+            validation_status,
+            citation_evidence,
+            metadata
+        """,
+        candidate.display_name,
+        candidate.description,
+        candidate.system_prompt,
+        _json(candidate.skill_refs),
+        _json(candidate.allowed_tools),
+        _json(candidate.input_boundaries),
+        candidate.output_boundary,
+        candidate.enabled,
+        candidate.validation_status,
+        _json(candidate.metadata or {}),
+        False,
+        name,
+    )
+    if row is None:
+        raise ValueError("editable custom Research Agent not found")
+    definition = _subagent_definition_from_row(row)
+    validate_subagent_definition(definition)
+    return definition
 
 
 async def persist_subagent_run(
