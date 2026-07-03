@@ -14,6 +14,7 @@ from backend.research_assistant.audit import audit_evidence_claims as _audit_evi
 OUTPUT_BOUNDARIES = {"context_only", "process_trace", "artifact"}
 AGENT_TYPES = {"system_builtin", "custom"}
 VALIDATION_STATUSES = {"valid", "invalid", "draft", "system_managed"}
+RESULT_STATUSES = {"queued", "running", "completed", "failed", "deferred", "cancelled"}
 
 
 @dataclass(frozen=True)
@@ -276,6 +277,33 @@ def build_subagent_lifecycle_step_event(
     }
 
 
+def build_subagent_result_envelope(
+    *,
+    status: str,
+    agent: str,
+    boundary: str,
+    content: Any,
+    metadata: dict[str, Any] | None = None,
+    citation_evidence: bool = False,
+) -> dict[str, Any]:
+    if status not in RESULT_STATUSES:
+        raise ValueError("status is invalid")
+    if not agent.strip():
+        raise ValueError("agent is required")
+    if boundary not in OUTPUT_BOUNDARIES:
+        raise ValueError("boundary is invalid")
+    if citation_evidence:
+        raise ValueError("subagent result envelope cannot be citation evidence")
+    return {
+        "status": status,
+        "agent": agent,
+        "boundary": boundary,
+        "citation_evidence": False,
+        "content": content,
+        "metadata": metadata or {},
+    }
+
+
 @tool
 def audit_evidence_claims(answer_content: str, citations_json: str) -> dict[str, Any]:
     """Audit answer claims against citation evidence.
@@ -289,12 +317,18 @@ def audit_evidence_claims(answer_content: str, citations_json: str) -> dict[str,
     """
     citations = _citation_payloads(citations_json)
     audit = _audit_evidence_claims(answer_content=answer_content, citations=citations)
-    return {
-        **audit.to_dict(),
-        "output_boundary": "process_trace",
-        "citation_evidence": False,
-        "deterministic_boundary": True,
-    }
+    audit_payload = audit.to_dict()
+    return build_subagent_result_envelope(
+        status="completed",
+        agent="research_auditor",
+        boundary="process_trace",
+        content={"audit": audit_payload},
+        metadata={
+            "audit_status": audit.status,
+            "claim_count": audit.claim_count,
+            "deterministic_boundary": True,
+        },
+    )
 
 
 @tool
@@ -334,12 +368,16 @@ def read_research_evidence(material_package_json: str) -> dict[str, Any]:
             }
         )
 
-    return {
-        "notes": notes,
-        "evidence_refs": evidence_refs,
-        "output_boundary": "context_only",
-        "citation_evidence": False,
-    }
+    return build_subagent_result_envelope(
+        status="completed",
+        agent="paper_reader_worker",
+        boundary="context_only",
+        content={"notes": notes},
+        metadata={
+            "evidence_refs": evidence_refs,
+            "record_count": len(records),
+        },
+    )
 
 
 def _citation_payloads(citations_json: str) -> list[CitationPayload]:

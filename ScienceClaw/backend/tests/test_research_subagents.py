@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 
 import pytest
 
 from backend.research_assistant.subagents import (
     SubagentDefinition,
+    audit_evidence_claims,
     build_deepagents_subagent_configs,
     build_subagent_lifecycle_step_event,
+    build_subagent_result_envelope,
     default_subagent_definitions,
+    read_research_evidence,
     registry_subagent_definitions,
     system_builtin_subagent_definitions,
     validate_subagent_definition,
@@ -156,3 +160,68 @@ def test_subagent_lifecycle_event_is_a_real_step_with_boundary_metadata():
         "citation_evidence": False,
         "evidence_refs": [{"evidence_id": 12, "source_type": "paper"}],
     }
+
+
+def test_subagent_result_envelope_keeps_stable_top_level_fields_minimal():
+    envelope = build_subagent_result_envelope(
+        status="completed",
+        agent="general-purpose",
+        boundary="process_trace",
+        content="runtime note",
+        metadata={"extension": {"future": True}},
+    )
+
+    assert set(envelope) == {"status", "agent", "boundary", "citation_evidence", "content", "metadata"}
+    assert envelope == {
+        "status": "completed",
+        "agent": "general-purpose",
+        "boundary": "process_trace",
+        "citation_evidence": False,
+        "content": "runtime note",
+        "metadata": {"extension": {"future": True}},
+    }
+
+
+def test_auditor_tool_returns_minimal_process_trace_envelope():
+    result = audit_evidence_claims.invoke(
+        {
+            "answer_content": "Unsupported claim.",
+            "citations_json": "[]",
+        }
+    )
+
+    assert set(result) == {"status", "agent", "boundary", "citation_evidence", "content", "metadata"}
+    assert result["status"] == "completed"
+    assert result["agent"] == "research_auditor"
+    assert result["boundary"] == "process_trace"
+    assert result["citation_evidence"] is False
+    assert result["content"]["audit"]["status"] == "unsupported"
+    assert result["metadata"]["audit_status"] == "unsupported"
+    assert result["metadata"]["deterministic_boundary"] is True
+
+
+def test_reader_tool_returns_minimal_context_only_envelope_with_metadata_refs():
+    result = read_research_evidence.invoke(
+        {
+            "material_package_json": json.dumps(
+                {
+                    "records": [
+                        {
+                            "evidence_id": 17,
+                            "source_type": "paper",
+                            "title": "Trace Honesty",
+                            "quote": "Reader notes are context only.",
+                        }
+                    ]
+                }
+            )
+        }
+    )
+
+    assert set(result) == {"status", "agent", "boundary", "citation_evidence", "content", "metadata"}
+    assert result["status"] == "completed"
+    assert result["agent"] == "paper_reader_worker"
+    assert result["boundary"] == "context_only"
+    assert result["citation_evidence"] is False
+    assert result["content"]["notes"][0]["note"] == "Reader notes are context only."
+    assert result["metadata"]["evidence_refs"] == [{"evidence_id": 17, "source_type": "paper"}]
