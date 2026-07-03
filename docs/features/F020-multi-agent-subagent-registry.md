@@ -80,6 +80,7 @@ Active implementation anchor. 已完成第一条可验证能力增量：默认 A
 - [EV-013 F020 Live Chat Multi-Agent E2E Verification](../evidence/EV-013-f020-live-chat-multi-agent-e2e-verification.md)
 - [EV-014 F020 Agent Governance Verification](../evidence/EV-014-f020-agent-governance-verification.md)
 - [EV-015 F020 Custom Agent Edit and Autonomous Chat E2E](../evidence/EV-015-f020-custom-agent-edit-and-autonomous-chat-e2e.md)
+- [EV-016 F020 Supervisor Decision And Guard Live UI E2E](../evidence/EV-016-f020-supervisor-decision-and-guard-e2e.md)
 
 ### Decisions / ADRs
 
@@ -154,10 +155,13 @@ F020 的后续落地必须按可验证能力增量推进。以下 slice 是当�
 | 2026-07-03 | active | Refined Registry and envelope principles | User product discussion and this Feature | Decided not to block DeepAgents `general-purpose`; instead surface it as read-only `system_builtin`, keep Auditor/Reader as editable `custom`, and reduce result envelope to minimal fields plus `metadata`. |
 | 2026-07-03 | active | Implemented F020.1-F020.5 governance slices | EV-014 | Added Registry type split, Supervisor delegation prompt, lifecycle metadata hardening, minimal result envelope, recent-run preview, validation examples, and live Research Agents UI verification. |
 | 2026-07-03 | active | Closed custom edit and autonomous chat E2E gaps | EV-015 | Verified custom Agent editing in the real Research Agents page and verified a real Chat task where Supervisor autonomously invoked Reader Worker before Auditor Agent. |
+| 2026-07-03 | active | Hardened Supervisor decision metadata and guard-backed live routing | EV-016 | Added inspectable `multi_agent_decision`, preserved plan metadata, kept simple questions single-agent, and verified complex multi-material boundary checks emit real Reader/Auditor lifecycle in live UI. |
 
 ## Patch History
 
-None yet.
+| Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| F020.6 | 2026-07-03 | pending | Live UI complex task could complete without Reader/Auditor despite prompt guidance. | Prompt-only delegation was not stable enough for the current model under accepted strong routing conditions. | Added inspectable `multi_agent_decision`, a narrow Supervisor delegation guard, plan metadata preservation, and live simple/complex E2E evidence in EV-016. | implemented |
 
 ## Evidence
 
@@ -166,8 +170,9 @@ None yet.
 - EV-013 verifies the live chat multi-agent E2E trace for an explicit complex task, including Reader Worker, Auditor Agent, ActivityPanel screenshot, and evidence-boundary metadata.
 - EV-014 verifies F020.1-F020.5 governance slices, focused backend/frontend checks, and Research Agents live UI validation with recent-run preview and validation example.
 - EV-015 verifies real custom Agent editing and real autonomous Chat E2E with `paper_reader_worker` followed by `research_auditor`.
+- EV-016 verifies inspectable `multi_agent_decision`, simple single-Agent live chat, complex Reader/Auditor lifecycle, and the Chinese Registry naming fix.
 
-Strict autonomous trigger policy remains prompt-guided rather than deterministic; EV-015 records the current qwen-model live UI acceptance evidence and residual cross-model risk.
+Strict autonomous trigger policy is now prompt-guided plus a narrow Supervisor delegation guard for accepted strong conditions. EV-016 records why the guard exists: prompt-only delegation was not stable enough for live UI acceptance with the current model.
 
 ## Recovery Snapshot
 
