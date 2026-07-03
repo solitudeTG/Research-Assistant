@@ -24,6 +24,10 @@ def test_research_agents_frontend_route_api_and_navigation_contract():
     assert "工具" in page_source
     assert "系统提示词" in page_source
     assert "治理动作" in page_source
+    assert "最近运行" in page_source
+    assert "验证示例" in page_source
+    assert "暂无真实运行记录" in page_source
+    assert "运行验证" in page_source
     assert "research_auditor" in page_source
     assert "paper_reader_worker" in page_source
     assert "general-purpose" in page_source
@@ -37,7 +41,11 @@ def test_research_agents_frontend_route_api_and_navigation_contract():
 
     api_source = (FRONTEND / "api" / "agent.ts").read_text(encoding="utf-8")
     assert "ResearchAgentDefinition" in api_source
+    assert "ResearchAgentRun" in api_source
+    assert "ResearchAgentValidationResult" in api_source
     assert "listResearchAgents" in api_source
+    assert "listResearchAgentRuns" in api_source
+    assert "validateResearchAgent" in api_source
     assert "/sessions/research/agents" in api_source
 
     router_source = (FRONTEND / "main.ts").read_text(encoding="utf-8")

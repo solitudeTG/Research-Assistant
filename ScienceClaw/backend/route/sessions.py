@@ -57,7 +57,11 @@ from backend.research_assistant.ingestion import ingest_uploaded_paper, is_resea
 from backend.research_assistant.parsers import PaperParseError
 from backend.research_assistant.reports import generate_markdown_research_report
 from backend.research_assistant.tool_validation import tool_source_sha256, validate_staged_tool
-from backend.research_assistant.subagents import system_builtin_subagent_definitions
+from backend.research_assistant.subagents import (
+    audit_evidence_claims as validate_auditor_example,
+    read_research_evidence as validate_reader_example,
+    system_builtin_subagent_definitions,
+)
 from backend.research_assistant.storage.database import (
     create_research_project_in_database,
     delete_memory_entry_from_database,
@@ -66,6 +70,7 @@ from backend.research_assistant.storage.database import (
     get_evidence_record_from_database,
     get_research_session_status_from_database,
     get_session_research_project_from_database,
+    list_recent_subagent_runs_from_database,
     list_subagent_definitions_from_database,
     list_project_paper_assets_from_database,
     list_memory_entries_from_database,
@@ -2036,6 +2041,130 @@ async def list_research_agents_for_user(
     except Exception as exc:
         logger.exception("list_research_agents_for_user failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/research/agents/{agent_name}/runs", response_model=ApiResponse)
+async def list_research_agent_runs_for_user(
+    agent_name: str,
+    limit: int = Query(default=5, ge=1, le=20),
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """List recent persisted lifecycle runs for a visible Research Agent."""
+    try:
+        runs = await list_recent_subagent_runs_from_database(
+            settings.research_database_url,
+            agent_name=agent_name,
+            limit=limit,
+        )
+        return ApiResponse(data={"agent_name": agent_name, "runs": runs})
+    except Exception as exc:
+        logger.exception("list_research_agent_runs_for_user failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/research/agents/{agent_name}/validate", response_model=ApiResponse)
+async def validate_research_agent_for_user(
+    agent_name: str,
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """Run a bounded validation example for a governed Research Agent."""
+    try:
+        await ensure_subagent_definitions_in_database(settings.research_database_url)
+        custom_agents = await list_subagent_definitions_from_database(
+            settings.research_database_url,
+            enabled_only=False,
+        )
+        registry_agents = [
+            *system_builtin_subagent_definitions(),
+            *custom_agents,
+        ]
+        definitions = {definition.name: definition for definition in registry_agents}
+        definition = definitions.get(agent_name)
+        if definition is None:
+            raise HTTPException(status_code=404, detail="Research Agent not found")
+
+        if definition.agent_type == "system_builtin":
+            return ApiResponse(
+                data={
+                    "agent_name": agent_name,
+                    "status": "system_managed",
+                    "editable": False,
+                    "checks": ["system_builtin_read_only", "runtime_managed"],
+                    "example_result": None,
+                    "validated_at": datetime.now(timezone.utc).isoformat(),
+                    "errors": [],
+                }
+            )
+
+        validation = _run_research_agent_validation_example(agent_name)
+        validation.update(
+            {
+                "agent_name": agent_name,
+                "editable": bool(definition.editable),
+                "validated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        return ApiResponse(data=validation)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("validate_research_agent_for_user failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+def _run_research_agent_validation_example(agent_name: str) -> Dict[str, Any]:
+    checks = ["definition_contract"]
+    errors: list[str] = []
+    example_result: Any = None
+    try:
+        if agent_name == "research_auditor":
+            example_result = validate_auditor_example.invoke(
+                {
+                    "answer_content": "Unsupported validation claim.",
+                    "citations_json": "[]",
+                }
+            )
+        elif agent_name == "paper_reader_worker":
+            example_result = validate_reader_example.invoke(
+                {
+                    "material_package_json": json.dumps(
+                        {
+                            "records": [
+                                {
+                                    "evidence_id": 1,
+                                    "source_type": "paper",
+                                    "title": "Validation Example",
+                                    "quote": "Reader validation keeps notes context-only.",
+                                }
+                            ]
+                        }
+                    )
+                }
+            )
+        else:
+            errors.append("No validation example is registered for this custom agent.")
+
+        if isinstance(example_result, dict):
+            expected_keys = {"status", "agent", "boundary", "citation_evidence", "content", "metadata"}
+            if set(example_result) == expected_keys:
+                checks.append("minimal_envelope")
+            else:
+                errors.append("Example result does not match the minimal envelope.")
+            if example_result.get("citation_evidence") is False:
+                checks.append("citation_evidence_false")
+            else:
+                errors.append("Example result must not be citation evidence.")
+        elif not errors:
+            errors.append("Validation example did not return a structured result.")
+    except Exception as exc:
+        errors.append(str(exc))
+
+    return {
+        "status": "failed" if errors else "passed",
+        "checks": checks,
+        "example_result": example_result,
+        "errors": errors,
+    }
 
 
 @router.get("/research/projects/{project_id}/papers", response_model=ApiResponse)

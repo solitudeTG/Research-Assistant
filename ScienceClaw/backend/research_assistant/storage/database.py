@@ -25,6 +25,7 @@ from backend.research_assistant.storage.repository import (
     get_evidence_record,
     get_session_research_project,
     list_subagent_definitions,
+    list_recent_subagent_runs,
     list_project_paper_assets,
     list_memory_entries,
     list_research_projects,
@@ -187,6 +188,21 @@ async def persist_subagent_run_to_database(
             warnings=warnings,
             errors=errors,
         )
+    finally:
+        await connection.close()
+
+
+async def list_recent_subagent_runs_from_database(
+    database_url: str,
+    *,
+    agent_name: str,
+    limit: int = 5,
+) -> list[dict]:
+    import asyncpg
+
+    connection = await asyncpg.connect(database_url)
+    try:
+        return await list_recent_subagent_runs(connection, agent_name=agent_name, limit=limit)
     finally:
         await connection.close()
 

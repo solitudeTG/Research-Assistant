@@ -33,7 +33,9 @@ from backend.deepagent.diagnostic import DIAGNOSTIC_ENABLED
 from backend.deepagent.plan_types import PlanStep, normalize_plan_steps
 from backend.deepagent.sessions import ScienceSession
 from backend.deepagent.sse_middleware import SSEMonitoringMiddleware
+from backend.research_assistant.storage.database import persist_subagent_run_to_database
 from backend.task_settings import get_task_settings, TaskSettings
+from backend.config import settings
 
 
 # ───────────────────────────────────────────────────────────────────
@@ -42,6 +44,33 @@ from backend.task_settings import get_task_settings, TaskSettings
 
 _THINK_TAG_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 _THINK_CONTENT_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
+
+
+async def _persist_subagent_lifecycle_run(
+    lifecycle: dict[str, Any],
+    *,
+    input_boundary: dict[str, Any] | None = None,
+    outputs: dict[str, Any] | None = None,
+) -> None:
+    if not lifecycle:
+        return
+    try:
+        await persist_subagent_run_to_database(
+            settings.research_database_url,
+            task_id=str(lifecycle["task_id"]),
+            parent_workflow_id=str(lifecycle.get("workflow_id") or lifecycle["task_id"]),
+            agent_name=str(lifecycle["agent_name"]),
+            agent_role=str(lifecycle.get("agent_role") or "subagent"),
+            status=str(lifecycle.get("status") or "running"),
+            input_boundary=input_boundary or {},
+            output_boundary=str(lifecycle.get("output_boundary") or "process_trace"),
+            evidence_refs=lifecycle.get("evidence_refs") if isinstance(lifecycle.get("evidence_refs"), list) else [],
+            outputs=outputs or {},
+            warnings=[],
+            errors=[],
+        )
+    except Exception:
+        logger.warning("[DeepAgent] failed to persist subagent lifecycle run", exc_info=True)
 
 
 def _extract_thinking(msg: "AIMessage") -> tuple[str, str]:
@@ -537,12 +566,28 @@ async def _arun_deep_agent_stream(
                             "tool_meta": mw_data.get("tool_meta", {}),
                             "subagent_lifecycle": mw_data.get("subagent_lifecycle"),
                         })
+                        if isinstance(mw_data.get("subagent_lifecycle"), dict):
+                            await _persist_subagent_lifecycle_run(
+                                mw_data["subagent_lifecycle"],
+                                input_boundary={
+                                    "args": mw_data.get("args", {}),
+                                    "description": mw_data["subagent_lifecycle"].get("description", ""),
+                                },
+                            )
                     elif mw_type == "middleware_tool_complete":
                         _mw_cache.setdefault(call_id, {}).update({
                             "duration_ms": mw_data.get("duration_ms"),
                             "tool_meta": mw_data.get("tool_meta", {}),
                             "subagent_lifecycle": mw_data.get("subagent_lifecycle"),
                         })
+                        if isinstance(mw_data.get("subagent_lifecycle"), dict):
+                            await _persist_subagent_lifecycle_run(
+                                mw_data["subagent_lifecycle"],
+                                input_boundary={
+                                    "description": mw_data["subagent_lifecycle"].get("description", ""),
+                                },
+                                outputs={"result_summary": mw_data.get("result_summary", "")},
+                            )
                     elif mw_type == "middleware_todos_update":
                         new_todos = mw_data.get("todos", [])
                         if new_todos and new_todos != _current_todos:

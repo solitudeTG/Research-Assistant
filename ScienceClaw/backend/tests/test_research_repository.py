@@ -17,6 +17,7 @@ from backend.research_assistant.storage.repository import (
     create_research_project,
     ensure_subagent_definitions,
     get_session_research_project,
+    list_recent_subagent_runs,
     list_subagent_definitions,
     list_project_paper_assets,
     list_research_projects,
@@ -194,6 +195,55 @@ async def test_persist_subagent_run_records_context_only_boundary():
     assert args[2] == "paper_reader_worker"
     assert args[6] == "context_only"
     assert args[7] is False
+
+
+@pytest.mark.asyncio
+async def test_list_recent_subagent_runs_returns_preview_rows():
+    connection = RecordingConnection()
+    connection.fetch_result = [
+        {
+            "task_id": "task-1",
+            "parent_workflow_id": "workflow-1",
+            "agent_name": "paper_reader_worker",
+            "agent_role": "reader",
+            "status": "completed",
+            "input_boundary": '{"scope":"selected"}',
+            "output_boundary": "context_only",
+            "citation_evidence": False,
+            "evidence_refs": '[{"evidence_id":9,"source_type":"paper"}]',
+            "outputs": '{"status":"completed"}',
+            "warnings": "[]",
+            "errors": "[]",
+            "started_at": "2026-07-03T10:00:00Z",
+            "completed_at": "2026-07-03T10:00:05Z",
+        }
+    ]
+
+    runs = await list_recent_subagent_runs(connection, agent_name="paper_reader_worker", limit=3)
+
+    sql, args = connection.fetch_calls[0]
+    assert "from research_subagent_runs" in sql.lower()
+    assert "where agent_name = $1" in sql.lower()
+    assert "limit $2" in sql.lower()
+    assert args == ("paper_reader_worker", 3)
+    assert runs == [
+        {
+            "task_id": "task-1",
+            "parent_workflow_id": "workflow-1",
+            "agent_name": "paper_reader_worker",
+            "agent_role": "reader",
+            "status": "completed",
+            "input_boundary": {"scope": "selected"},
+            "output_boundary": "context_only",
+            "citation_evidence": False,
+            "evidence_refs": [{"evidence_id": 9, "source_type": "paper"}],
+            "outputs": {"status": "completed"},
+            "warnings": [],
+            "errors": [],
+            "started_at": "2026-07-03T10:00:00Z",
+            "completed_at": "2026-07-03T10:00:05Z",
+        }
+    ]
 
 
 @pytest.mark.asyncio

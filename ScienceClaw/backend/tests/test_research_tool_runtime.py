@@ -276,6 +276,58 @@ def test_task_tool_trace_labels_deepagents_builtin_subagent_metadata():
 
 
 @pytest.mark.asyncio
+async def test_runner_persists_real_subagent_lifecycle_runs(monkeypatch):
+    async def unused_get_task_settings(*args, **kwargs):
+        return SimpleNamespace()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "backend.deepagent.sessions",
+        types.SimpleNamespace(ScienceSession=object),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "backend.task_settings",
+        types.SimpleNamespace(get_task_settings=unused_get_task_settings, TaskSettings=object),
+    )
+    sys.modules.pop("backend.deepagent.runner", None)
+    runner = importlib.import_module("backend.deepagent.runner")
+    calls = []
+
+    async def fake_persist(database_url, **kwargs):
+        calls.append((database_url, kwargs))
+
+    monkeypatch.setattr(runner, "persist_subagent_run_to_database", fake_persist)
+
+    await runner._persist_subagent_lifecycle_run(
+        {
+            "workflow_id": "workflow-1",
+            "task_id": "task-1",
+            "agent_name": "paper_reader_worker",
+            "agent_role": "reader",
+            "status": "completed",
+            "output_boundary": "context_only",
+            "citation_evidence": False,
+            "evidence_refs": [{"evidence_id": 9, "source_type": "paper"}],
+        },
+        input_boundary={"description": "Read selected paper"},
+        outputs={"result_summary": "notes"},
+    )
+
+    assert len(calls) == 1
+    _, kwargs = calls[0]
+    assert kwargs["task_id"] == "task-1"
+    assert kwargs["parent_workflow_id"] == "workflow-1"
+    assert kwargs["agent_name"] == "paper_reader_worker"
+    assert kwargs["agent_role"] == "reader"
+    assert kwargs["status"] == "completed"
+    assert kwargs["input_boundary"] == {"description": "Read selected paper"}
+    assert kwargs["output_boundary"] == "context_only"
+    assert kwargs["evidence_refs"] == [{"evidence_id": 9, "source_type": "paper"}]
+    assert kwargs["outputs"] == {"result_summary": "notes"}
+
+
+@pytest.mark.asyncio
 async def test_deep_agent_registers_governed_research_subagents(monkeypatch, tmp_path):
     captured = {}
 

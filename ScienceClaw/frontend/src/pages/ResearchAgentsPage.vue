@@ -165,7 +165,72 @@
               <div class="flex flex-wrap gap-2">
                 <button class="h-7 rounded-md border border-[var(--border-light)] px-2 text-xs text-[var(--text-secondary)] disabled:cursor-not-allowed disabled:opacity-50" :disabled="!selectedAgent.editable">编辑</button>
                 <button class="h-7 rounded-md border border-[var(--border-light)] px-2 text-xs text-[var(--text-secondary)] disabled:cursor-not-allowed disabled:opacity-50" :disabled="!selectedAgent.editable">启停</button>
-                <button class="h-7 rounded-md border border-[var(--border-light)] px-2 text-xs text-[var(--text-secondary)] disabled:cursor-not-allowed disabled:opacity-50" :disabled="!selectedAgent.editable">运行验证</button>
+                <button
+                  class="h-7 rounded-md border border-[var(--border-light)] px-2 text-xs text-[var(--text-secondary)] disabled:cursor-not-allowed disabled:opacity-50"
+                  :disabled="!selectedAgent.editable || validatingAgentName === selectedAgent.name"
+                  @click="runValidation(selectedAgent)"
+                >
+                  {{ validatingAgentName === selectedAgent.name ? '验证中' : '运行验证' }}
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <section class="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <div class="rounded-lg border border-[var(--border-light)] bg-[var(--background-white-main)]">
+              <div class="flex items-center justify-between border-b border-[var(--border-light)] px-3 py-2">
+                <h3 class="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">最近运行</h3>
+                <History :size="14" class="text-[var(--text-tertiary)]" />
+              </div>
+              <div class="divide-y divide-[var(--border-light)]">
+                <div
+                  v-for="run in selectedAgentRuns"
+                  :key="run.task_id"
+                  class="px-3 py-2 text-xs"
+                >
+                  <div class="flex items-center justify-between gap-2">
+                    <span class="font-mono text-[var(--text-primary)]">{{ run.task_id }}</span>
+                    <span class="rounded bg-[var(--fill-tsp-gray-main)] px-1.5 py-0.5 text-[10px] text-[var(--text-secondary)]">{{ run.status }}</span>
+                  </div>
+                  <div class="mt-1 flex flex-wrap gap-2 text-[10px] text-[var(--text-tertiary)]">
+                    <span>{{ formatRunTime(run.completed_at || run.started_at) }}</span>
+                    <span class="font-mono">{{ run.output_boundary }}</span>
+                    <span>citation_evidence={{ run.citation_evidence }}</span>
+                  </div>
+                </div>
+                <div v-if="!selectedAgentRuns.length" class="px-3 py-5 text-xs text-[var(--text-tertiary)]">
+                  暂无真实运行记录
+                </div>
+              </div>
+            </div>
+
+            <div class="rounded-lg border border-[var(--border-light)] bg-[var(--background-white-main)]">
+              <div class="flex items-center justify-between border-b border-[var(--border-light)] px-3 py-2">
+                <h3 class="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">验证示例</h3>
+                <CheckCircle2 v-if="selectedValidation?.status === 'passed'" :size="14" class="text-emerald-500" />
+                <AlertCircle v-else :size="14" class="text-[var(--text-tertiary)]" />
+              </div>
+              <div class="px-3 py-3 text-xs">
+                <template v-if="selectedValidation">
+                  <div class="mb-2 flex items-center justify-between">
+                    <span class="text-[var(--text-tertiary)]">状态</span>
+                    <span class="font-medium text-[var(--text-primary)]">{{ selectedValidation.status }}</span>
+                  </div>
+                  <div class="mb-2 flex flex-wrap gap-1.5">
+                    <span
+                      v-for="check in selectedValidation.checks"
+                      :key="check"
+                      class="rounded bg-[var(--fill-tsp-gray-main)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--text-secondary)]"
+                    >
+                      {{ check }}
+                    </span>
+                  </div>
+                  <pre v-if="selectedValidation.errors.length" class="max-h-28 overflow-auto whitespace-pre-wrap rounded bg-red-50 p-2 text-[11px] text-red-700 dark:bg-red-950/30 dark:text-red-300">{{ selectedValidation.errors.join('\n') }}</pre>
+                  <pre v-else class="max-h-28 overflow-auto whitespace-pre-wrap rounded bg-[var(--fill-tsp-gray-main)] p-2 text-[11px] text-[var(--text-secondary)]">{{ formatValidationPreview(selectedValidation.example_result) }}</pre>
+                </template>
+                <div v-else class="text-[var(--text-tertiary)]">
+                  {{ selectedAgent.editable ? '运行验证以检查 minimal envelope 与证据边界。' : '系统内置 Agent 由 runtime 管理，无需自定义验证。' }}
+                </div>
               </div>
             </div>
           </section>
@@ -196,13 +261,24 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import { BookOpenCheck, Cpu, Lock, RefreshCw, ShieldCheck } from 'lucide-vue-next';
-import { listResearchAgents, type ResearchAgentDefinition } from '../api/agent';
+import { computed, onMounted, ref, watch } from 'vue';
+import { AlertCircle, BookOpenCheck, CheckCircle2, Cpu, History, Lock, RefreshCw, ShieldCheck } from 'lucide-vue-next';
+import {
+  listResearchAgentRuns,
+  listResearchAgents,
+  validateResearchAgent,
+  type ResearchAgentDefinition,
+  type ResearchAgentRun,
+  type ResearchAgentValidationResult,
+} from '../api/agent';
 
 const agents = ref<ResearchAgentDefinition[]>([]);
 const selectedAgentName = ref('');
 const loading = ref(false);
+const loadingRunsAgentName = ref('');
+const validatingAgentName = ref('');
+const recentRuns = ref<Record<string, ResearchAgentRun[]>>({});
+const validationResults = ref<Record<string, ResearchAgentValidationResult>>({});
 const preferredAgentOrder = ['general-purpose', 'research_auditor', 'paper_reader_worker'];
 const governedOutputBoundaries = ['context_only', 'process_trace'];
 
@@ -230,6 +306,8 @@ const orderedAgents = computed(() => [...agents.value].sort((left, right) => {
 }));
 
 const selectedAgent = computed(() => agents.value.find(agent => agent.name === selectedAgentName.value) || orderedAgents.value[0] || null);
+const selectedAgentRuns = computed(() => selectedAgent.value ? (recentRuns.value[selectedAgent.value.name] || []) : []);
+const selectedValidation = computed(() => selectedAgent.value ? validationResults.value[selectedAgent.value.name] : null);
 
 const formattedGovernance = computed(() => {
   if (!selectedAgent.value) return '';
@@ -267,6 +345,47 @@ const validationStatusLabel = (status: string) => {
   return labels[status] || status;
 };
 
+const formatRunTime = (value?: string | null) => {
+  if (!value) return '时间未知';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+};
+
+const formatValidationPreview = (value: unknown) => {
+  if (value === undefined || value === null) return '无示例输出';
+  return JSON.stringify(value, null, 2);
+};
+
+const loadAgentRuns = async (agentName: string) => {
+  loadingRunsAgentName.value = agentName;
+  try {
+    recentRuns.value = {
+      ...recentRuns.value,
+      [agentName]: await listResearchAgentRuns(agentName, 5),
+    };
+  } finally {
+    if (loadingRunsAgentName.value === agentName) {
+      loadingRunsAgentName.value = '';
+    }
+  }
+};
+
+const runValidation = async (agentToValidate: ResearchAgentDefinition) => {
+  if (!agentToValidate.editable) return;
+  validatingAgentName.value = agentToValidate.name;
+  try {
+    validationResults.value = {
+      ...validationResults.value,
+      [agentToValidate.name]: await validateResearchAgent(agentToValidate.name),
+    };
+  } finally {
+    if (validatingAgentName.value === agentToValidate.name) {
+      validatingAgentName.value = '';
+    }
+  }
+};
+
 const refreshAgents = async () => {
   loading.value = true;
   try {
@@ -278,6 +397,15 @@ const refreshAgents = async () => {
     loading.value = false;
   }
 };
+
+watch(
+  () => selectedAgent.value?.name,
+  (agentName) => {
+    if (agentName) {
+      void loadAgentRuns(agentName);
+    }
+  },
+);
 
 onMounted(refreshAgents);
 </script>

@@ -404,6 +404,41 @@ async def persist_subagent_run(
     )
 
 
+async def list_recent_subagent_runs(
+    connection: Any,
+    *,
+    agent_name: str,
+    limit: int = 5,
+) -> list[dict[str, Any]]:
+    bounded_limit = max(1, min(int(limit), 20))
+    rows = await connection.fetch(
+        """
+        SELECT
+            task_id,
+            parent_workflow_id,
+            agent_name,
+            agent_role,
+            status,
+            input_boundary,
+            output_boundary,
+            citation_evidence,
+            evidence_refs,
+            outputs,
+            warnings,
+            errors,
+            started_at,
+            completed_at
+        FROM research_subagent_runs
+        WHERE agent_name = $1
+        ORDER BY COALESCE(completed_at, started_at) DESC
+        LIMIT $2
+        """,
+        agent_name,
+        bounded_limit,
+    )
+    return [_subagent_run_from_row(row) for row in rows]
+
+
 async def list_research_projects(
     connection: Any,
     *,
@@ -1457,6 +1492,31 @@ def _subagent_definition_from_row(row: Any) -> SubagentDefinition:
         citation_evidence=bool(row["citation_evidence"]),
         metadata=_json_value(_row_get(row, "metadata", None), default={}),
     )
+
+
+def _iso_datetime(value: Any) -> Any:
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
+
+
+def _subagent_run_from_row(row: Any) -> dict[str, Any]:
+    return {
+        "task_id": str(row["task_id"]),
+        "parent_workflow_id": str(row["parent_workflow_id"]),
+        "agent_name": str(row["agent_name"]),
+        "agent_role": str(row["agent_role"]),
+        "status": str(row["status"]),
+        "input_boundary": _json_value(row["input_boundary"], default={}),
+        "output_boundary": str(row["output_boundary"]),
+        "citation_evidence": bool(row["citation_evidence"]),
+        "evidence_refs": _json_value(row["evidence_refs"], default=[]),
+        "outputs": _json_value(row["outputs"], default={}),
+        "warnings": _json_value(row["warnings"], default=[]),
+        "errors": _json_value(row["errors"], default=[]),
+        "started_at": _iso_datetime(row["started_at"]),
+        "completed_at": _iso_datetime(row["completed_at"]),
+    }
 
 
 def _project_paper_asset_from_row(row: Any) -> ResearchProjectPaperAsset:

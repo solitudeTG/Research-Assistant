@@ -301,6 +301,72 @@ async def test_list_research_agents_route_returns_governed_registry(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_list_research_agent_runs_route_returns_recent_preview(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    calls = []
+
+    async def fake_list_runs(database_url, *, agent_name, limit):
+        calls.append((database_url, agent_name, limit))
+        return [
+            {
+                "task_id": "task-1",
+                "agent_name": agent_name,
+                "status": "completed",
+                "output_boundary": "context_only",
+                "citation_evidence": False,
+            }
+        ]
+
+    monkeypatch.setattr(sessions, "list_recent_subagent_runs_from_database", fake_list_runs)
+
+    response = await sessions.list_research_agent_runs_for_user(
+        "paper_reader_worker",
+        limit=3,
+        current_user=types.SimpleNamespace(id="user-1"),
+    )
+
+    assert calls == [(sessions.settings.research_database_url, "paper_reader_worker", 3)]
+    assert response.data == {
+        "agent_name": "paper_reader_worker",
+        "runs": [
+            {
+                "task_id": "task-1",
+                "agent_name": "paper_reader_worker",
+                "status": "completed",
+                "output_boundary": "context_only",
+                "citation_evidence": False,
+            }
+        ],
+    }
+
+
+@pytest.mark.asyncio
+async def test_validate_research_agent_route_runs_custom_validation_example(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+
+    async def fake_ensure_agents(database_url):
+        return None
+
+    async def fake_list_agents(database_url, *, enabled_only):
+        return [FakeSubagentDefinition(name="paper_reader_worker")]
+
+    monkeypatch.setattr(sessions, "ensure_subagent_definitions_in_database", fake_ensure_agents)
+    monkeypatch.setattr(sessions, "list_subagent_definitions_from_database", fake_list_agents)
+
+    response = await sessions.validate_research_agent_for_user(
+        "paper_reader_worker",
+        current_user=types.SimpleNamespace(id="user-1"),
+    )
+
+    assert response.data["agent_name"] == "paper_reader_worker"
+    assert response.data["status"] == "passed"
+    assert response.data["editable"] is True
+    assert response.data["example_result"]["agent"] == "paper_reader_worker"
+    assert response.data["example_result"]["boundary"] == "context_only"
+    assert response.data["example_result"]["citation_evidence"] is False
+
+
+@pytest.mark.asyncio
 async def test_list_research_project_papers_route_returns_project_assets(monkeypatch):
     sessions = _load_sessions_module(monkeypatch)
     called = {}
