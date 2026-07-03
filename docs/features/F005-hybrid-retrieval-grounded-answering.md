@@ -4,7 +4,7 @@ doc_kind: feature
 status: active
 owner: solitudeTG
 created: 2026-06-28
-updated: 2026-06-28
+updated: 2026-06-29
 ---
 
 # F005: Hybrid Retrieval and Grounded Answering
@@ -56,7 +56,9 @@ Vector-only retrieval was rejected because scholarly terms, years, identifiers, 
 
 ## Current Status
 
-In Progress. Initial retrieval and grounded answer slices have verification evidence recorded in `F001`.
+Completed for MVP scope.
+
+The current MVP combines PostgreSQL FTS and pgvector retrieval, returns inspectable citation evidence, generates citation-grounded answers, handles no-citation paths with generic citation-evidence wording, and supports project-scoped retrieval/admission as later slices. This does not claim final ranking quality, reranker support, or online LLM-backed answer E2E.
 
 ## Links
 
@@ -89,23 +91,26 @@ In Progress. Initial retrieval and grounded answer slices have verification evid
 
 ## Acceptance Criteria
 
-- [ ] Hybrid retrieval combines lexical and vector candidates.
-- [ ] Retrieval returns inspectable citation evidence records.
-- [ ] Research answers use citation evidence and expose citations.
-- [ ] No-citation answers do not imply an evidence source that was not searched.
+- [x] Hybrid retrieval combines lexical and vector candidates.
+- [x] Retrieval returns inspectable citation evidence records.
+- [x] Research answers use citation evidence and expose citations.
+- [x] No-citation answers do not imply an evidence source that was not searched.
 
 ## Acceptance Map
 
 | Claim | Acceptance | Evidence | Status |
 | --- | --- | --- | --- |
-| Hybrid retrieval returns citation evidence. | Retrieval combines FTS and pgvector candidates and returns evidence records. | Historical retrieval evidence in `F001`. | Partial |
-| Research answers are citation-grounded. | Answer generation uses retrieved evidence and exposes citation metadata. | Historical answering/route/frontend evidence in `F001`. | Partial |
+| Hybrid retrieval returns citation evidence. | Retrieval combines PostgreSQL FTS and pgvector candidates and returns evidence records with source/chunk identity. | Historical `test_research_retrieval.py` verification from `F001`; current research backend suite passed on 2026-06-29. | MVP done |
+| Research answers are citation-grounded. | Answer generation uses retrieved eligible evidence, exposes citation metadata, and preserves source identity. | Historical answering, route, frontend, source-type, and source-identity tests from `F001`; current research backend suite passed on 2026-06-29. | MVP done |
+| No-citation behavior is honest. | Answers without eligible evidence use generic citation-evidence wording and do not imply only uploaded papers were searched. | Historical generic no-citation answer/report/route red-green verification from `F001`. | MVP done |
+| Retrieval scope can be constrained by Project. | Bound Chat sessions pass `project_id` into retrieval and unbound sessions keep session-scoped retrieval. | F010 evidence and current retrieval/answering tests. | MVP done |
 
 ## State Timeline
 
 | Date | State | Trigger | Evidence | Note |
 | --- | --- | --- | --- | --- |
 | 2026-06-28 | active | Feature split from F001 | This Feature and `INDEX.md` | Created to own retrieval and answer recovery. |
+| 2026-06-29 | MVP completed | F001 historical evidence migrated to owning Feature | Current research backend suite and AgentMentor strict check | Ranking/eval and LLM-backed answer E2E remain future scope. |
 
 ## Patch History
 
@@ -113,16 +118,23 @@ None yet.
 
 ## Evidence
 
-Move focused retrieval/answering evidence here on the next retrieval or answer behavior change.
+Historical retrieval/answering evidence migrated from `F001`:
+
+- `test_research_retrieval.py` verified FTS plus pgvector candidate retrieval and citation evidence records.
+- `test_research_answering.py` verified citation-grounded answers, source-type preservation, source-identity preservation, project-id threading, whole-paper summary routing, no-citation behavior, and context-only memory separation.
+- Route/frontend contract tests verified answer metadata, citation evidence mode wording, ActivityPanel metadata, and source-type-aware citation display.
+- F010 added Project-scoped retrieval and verified that bound chats constrain retrieval by Project while unbound chats remain session-scoped.
+- F011 added admission filtering on top of retrieval candidates; admission policy evidence is owned by F011, but it confirms weak retrieval candidates are not injected as citation evidence.
+- Current document-convergence verification: `$env:PYTHONPATH='E:\Self-Project\Research-Assistant\ScienceClaw'; python -m pytest ScienceClaw\backend\tests -k research -q --basetemp .pytest_tmp\progress-audit` -> `178 passed`; `knowledge_check.py --strict` -> 0 errors, 0 warnings.
 
 ## Recovery Snapshot
 
 - Read first: `ADR-001`, this Feature, F004 for citation eligibility.
-- Current capability state: Initial retrieval/answering path exists; detailed evidence remains in `F001`.
+- Current capability state: MVP retrieval/answering path is complete, including source identity, project scope, and no-citation honesty.
 - Known risks: Scoring formula and online LLM-backed E2E remain incomplete.
 - Next safe action: Attribute retrieval or answer-route changes here and verify focused tests.
 - Unblock condition: Provider key/model is needed for LLM-backed E2E claims.
 
 ## Next Step
 
-Move retrieval and answer-specific evidence from `F001` into this Feature during the next behavior change.
+Create a focused eval/ranking slice before changing thresholds, scoring formulas, reranker strategy, or claiming online LLM-backed answer quality.

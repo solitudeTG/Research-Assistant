@@ -161,3 +161,48 @@ CREATE INDEX IF NOT EXISTS research_memory_entries_session_layer_created_idx
 
 CREATE INDEX IF NOT EXISTS research_memory_entries_user_layer_created_idx
     ON research_memory_entries (user_id, layer, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS research_subagent_definitions (
+    name TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    description TEXT NOT NULL,
+    system_prompt TEXT NOT NULL,
+    skill_refs JSONB NOT NULL DEFAULT '[]'::jsonb,
+    allowed_tools JSONB NOT NULL DEFAULT '[]'::jsonb,
+    input_boundaries JSONB NOT NULL DEFAULT '{}'::jsonb,
+    output_boundary TEXT NOT NULL CHECK (output_boundary IN ('context_only', 'process_trace', 'artifact')),
+    can_answer_user BOOLEAN NOT NULL DEFAULT false,
+    can_write_artifacts BOOLEAN NOT NULL DEFAULT false,
+    enabled BOOLEAN NOT NULL DEFAULT true,
+    version INTEGER NOT NULL DEFAULT 1,
+    validation_status TEXT NOT NULL CHECK (validation_status IN ('valid', 'invalid', 'draft')),
+    citation_evidence BOOLEAN NOT NULL DEFAULT false CHECK (citation_evidence = false),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS research_subagent_definitions_enabled_idx
+    ON research_subagent_definitions (enabled, name);
+
+CREATE TABLE IF NOT EXISTS research_subagent_runs (
+    task_id TEXT PRIMARY KEY,
+    parent_workflow_id TEXT NOT NULL,
+    agent_name TEXT NOT NULL,
+    agent_role TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
+    input_boundary JSONB NOT NULL DEFAULT '{}'::jsonb,
+    output_boundary TEXT NOT NULL CHECK (output_boundary IN ('context_only', 'process_trace', 'artifact')),
+    citation_evidence BOOLEAN NOT NULL DEFAULT false CHECK (citation_evidence = false),
+    evidence_refs JSONB NOT NULL DEFAULT '[]'::jsonb,
+    outputs JSONB NOT NULL DEFAULT '{}'::jsonb,
+    warnings JSONB NOT NULL DEFAULT '[]'::jsonb,
+    errors JSONB NOT NULL DEFAULT '[]'::jsonb,
+    started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    completed_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS research_subagent_runs_parent_workflow_idx
+    ON research_subagent_runs (parent_workflow_id, started_at DESC);
+
+CREATE INDEX IF NOT EXISTS research_subagent_runs_agent_status_idx
+    ON research_subagent_runs (agent_name, status);

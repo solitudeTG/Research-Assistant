@@ -24,6 +24,8 @@ def test_research_store_schema_defines_pgvector_and_evidence_tables():
         "research_audit_results",
         "research_memory_entries",
         "research_session_projects",
+        "research_subagent_definitions",
+        "research_subagent_runs",
     ]:
         assert f"create table if not exists {table_name}" in sql
 
@@ -41,3 +43,19 @@ def test_research_store_schema_defines_pgvector_and_evidence_tables():
     assert "research_papers_project_id_idx" in sql
     assert "research_session_projects_session_id_idx" in sql
     assert "research_session_projects_project_id_idx" in sql
+    assert "name text primary key" in sql
+    assert "system_prompt text not null" in sql
+    assert "skill_refs jsonb not null default '[]'::jsonb" in sql
+    assert "allowed_tools jsonb not null default '[]'::jsonb" in sql
+    assert "input_boundaries jsonb not null default '{}'::jsonb" in sql
+    assert "output_boundary text not null check" in sql
+    assert "can_answer_user boolean not null default false" in sql
+    assert "can_write_artifacts boolean not null default false" in sql
+    assert "validation_status text not null check" in sql
+    assert "task_id text primary key" in sql
+    assert "parent_workflow_id text not null" in sql
+    assert "agent_name text not null" in sql
+    assert "agent_role text not null" in sql
+    assert "citation_evidence boolean not null default false check (citation_evidence = false)" in sql
+    assert "evidence_refs jsonb not null default '[]'::jsonb" in sql
+    assert "research_subagent_runs_parent_workflow_idx" in sql

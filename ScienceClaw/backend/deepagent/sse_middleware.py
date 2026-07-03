@@ -118,15 +118,25 @@ class SSEMonitoringMiddleware(AgentMiddleware):
         if tool_name:
             self.total_tool_calls += 1
             with self._events_lock:
+                event_data = {
+                    "tool_call_id": tool_call_id,
+                    "function": tool_name,
+                    "args": tool_args or {},
+                    "tool_meta": tool_meta,
+                    "timestamp": start_time,
+                }
+                lifecycle = self._subagent_lifecycle_metadata(
+                    tool_name=tool_name,
+                    tool_args=tool_args,
+                    tool_call_id=tool_call_id,
+                    phase="started",
+                    status="running",
+                )
+                if lifecycle:
+                    event_data["subagent_lifecycle"] = lifecycle
                 self.sse_events.append(MiddlewareEvent(
                     event="middleware_tool_start",
-                    data={
-                        "tool_call_id": tool_call_id,
-                        "function": tool_name,
-                        "args": tool_args or {},
-                        "tool_meta": tool_meta,
-                        "timestamp": start_time,
-                    },
+                    data=event_data,
                 ))
             self.tool_calls_log.append({
                 "agent": self.agent_name,
@@ -161,6 +171,15 @@ class SSEMonitoringMiddleware(AgentMiddleware):
                 "result_summary": result_summary,
                 "timestamp": time.time(),
             }
+            lifecycle = self._subagent_lifecycle_metadata(
+                tool_name=tool_name,
+                tool_args=tool_args,
+                tool_call_id=tool_call_id,
+                phase="completed",
+                status="completed",
+            )
+            if lifecycle:
+                event_data["subagent_lifecycle"] = lifecycle
             event_data.update(result_metadata)
             with self._events_lock:
                 self.sse_events.append(MiddlewareEvent(
@@ -300,6 +319,39 @@ class SSEMonitoringMiddleware(AgentMiddleware):
         if tool_pack:
             summary["tool_pack"] = tool_pack
         return summary
+
+    def _subagent_lifecycle_metadata(
+        self,
+        *,
+        tool_name: str | None,
+        tool_args: Optional[Dict[str, Any]],
+        tool_call_id: str,
+        phase: str,
+        status: str,
+    ) -> Dict[str, Any]:
+        if tool_name != "task" or not isinstance(tool_args, dict):
+            return {}
+        agent_name = str(tool_args.get("subagent_type") or "").strip()
+        if not agent_name:
+            return {}
+        role_by_agent = {
+            "paper_reader_worker": "reader",
+            "research_auditor": "auditor",
+        }
+        output_boundary_by_agent = {
+            "paper_reader_worker": "context_only",
+            "research_auditor": "process_trace",
+        }
+        return {
+            "task_id": tool_call_id,
+            "agent_name": agent_name,
+            "agent_role": role_by_agent.get(agent_name, "subagent"),
+            "phase": phase,
+            "status": status,
+            "description": str(tool_args.get("description") or ""),
+            "output_boundary": output_boundary_by_agent.get(agent_name, "process_trace"),
+            "citation_evidence": False,
+        }
 
     def _hash_runtime_result(self, value: Any) -> str:
         try:

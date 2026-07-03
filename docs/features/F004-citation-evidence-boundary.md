@@ -56,7 +56,9 @@ Treating all helpful context as evidence was rejected because it would make repo
 
 ## Current Status
 
-In Progress. Paper/web/database citation boundary has initial implementation evidence aggregated in `F001`.
+Completed for MVP scope.
+
+The current MVP enforces a paper/web/database citation-evidence contract, excludes incomplete external source identities from retrieval, keeps memory/process/model context out of citations, and exposes boundary metadata in answer/report/ActivityPanel surfaces. This does not claim full source-quality scoring or automated web crawling.
 
 ## Links
 
@@ -89,17 +91,19 @@ In Progress. Paper/web/database citation boundary has initial implementation evi
 
 ## Acceptance Criteria
 
-- [ ] Paper/web/database evidence can be represented with source identity.
-- [ ] Incomplete web/database source identity is excluded from citation evidence.
-- [ ] Memory appears only as context-only memory.
-- [ ] UI/report wording avoids uploaded-paper-only claims when the contract is broader.
+- [x] Paper/web/database evidence can be represented with source identity.
+- [x] Incomplete web/database source identity is excluded from citation evidence.
+- [x] Memory appears only as context-only memory.
+- [x] UI/report wording avoids uploaded-paper-only claims when the contract is broader.
 
 ## Acceptance Map
 
 | Claim | Acceptance | Evidence | Status |
 | --- | --- | --- | --- |
-| Citation evidence accepts paper/web/database sources. | Backend and frontend source-type contracts allow paper, web, and database evidence. | Historical tests in `F001`; move focused boundary evidence here on next change. | Partial |
-| Memory is context-only. | Memory is stored and displayed separately from citation evidence. | Historical memory/report evidence in `F001`. | Partial |
+| Citation evidence accepts paper/web/database sources. | Backend, retrieval, audit, report, and frontend contracts allow paper, web, and database evidence with source identity. | Historical F001 web/database evidence tests, source-quality route tests, frontend source-ingestion contracts, and current research backend suite. | MVP done |
+| Incomplete external source identity is excluded. | Retrieval returns web evidence only with URL and database evidence only with database name/query. | Historical retrieval identity-gate red/green verification from 2026-06-21; current research backend suite passed on 2026-06-29. | MVP done |
+| Memory remains context-only. | Memory is stored, recalled, shown, promoted, and deleted as `source_type='memory'` / `context_only=true`, never as citation evidence. | Historical memory-boundary answer/report/route/frontend verification migrated from `F001`; current research backend suite passed on 2026-06-29. | MVP done |
+| UI/report wording reflects the broader contract. | Answer/report routes, trace descriptions, Chat wording, report sidecars, and ActivityPanel context boundaries distinguish citation evidence, context-only memory, process trace, and model reasoning. | Historical generic wording and context-boundary manifest verification from `F001`; F004.1 UI boundary verification. | MVP done |
 
 ## State Timeline
 
@@ -107,6 +111,7 @@ In Progress. Paper/web/database citation boundary has initial implementation evi
 | --- | --- | --- | --- | --- |
 | 2026-06-28 | active | Feature split from F001 | This Feature and `INDEX.md` | Created to own evidence eligibility boundaries. |
 | 2026-06-29 | patched | User clarified that full RAG evidence is process/audit UI, not answer-body UI | Frontend contract tests, type-check, build, browser E2E | F004.1 keeps Chat answer cards focused on final answer while ActivityPanel displays citation evidence. |
+| 2026-06-29 | MVP completed | F001 historical evidence migrated to owning Feature | Current research backend suite and AgentMentor strict check | Source-quality scoring and automated source acquisition remain future scope. |
 
 ## Patch History
 
@@ -116,18 +121,28 @@ In Progress. Paper/web/database citation boundary has initial implementation evi
 
 ## Evidence
 
+Historical citation-boundary evidence migrated from `F001`:
+
+- Web evidence persistence/retrieval/session/UI/source-quality tests passed after adding `evidence_type='web'`, URL identity, retrieval timestamp, and source-quality metadata.
+- Database evidence persistence/session/UI/source-quality tests passed after adding `evidence_type='database'`, database name, query, retrieval timestamp, and source-quality metadata.
+- Retrieval identity-gate verification passed after incomplete web/database source identities were excluded from citation evidence.
+- Generic citation-evidence wording tests passed for no-citation answers, answer/report routes, trace descriptions, mode metadata, tooltips, and report wording.
+- Context-boundary manifest tests passed for answer payloads, report sidecars, route trace metadata, assistant messages, and frontend rendering.
+- Context-only memory tests passed for storage constraints, same-user recall, promotion/revocation, relevance threshold, age decay, conflict marking, report display, and UI actions while preserving `citation_evidence=false` for memory.
+
 - 2026-06-29 UI boundary verification: `pytest ScienceClaw/backend/tests/test_research_frontend_contracts.py -q` -> `35 passed`.
 - 2026-06-29 frontend verification: `npm.cmd run type-check` -> passed; `npm.cmd run build` -> passed with existing Browserslist/CSS/chunk-size warnings.
 - Browser E2E on session `2ifbtVAgF5jS26d9pUq93Z`: the assistant answer card did not contain `Citation evidence`, `引用证据`, `Evidence audit`, or `证据审计`; the right ActivityPanel contained `研究证据`, `引用证据`, and source-type labels.
+- Current document-convergence verification: `$env:PYTHONPATH='E:\Self-Project\Research-Assistant\ScienceClaw'; python -m pytest ScienceClaw\backend\tests -k research -q --basetemp .pytest_tmp\progress-audit` -> `178 passed`; `knowledge_check.py --strict` -> 0 errors, 0 warnings.
 
 ## Recovery Snapshot
 
 - Read first: `AGENTS.md`, this Feature, `ADR-001`.
-- Current capability state: Paper/web/database and context-only memory boundaries exist; Chat answer cards no longer host the full citation evidence panel, and ActivityPanel exposes the inspectable evidence sidecar.
+- Current capability state: MVP citation/context/process/model boundary is complete; Chat answer cards no longer host the full citation evidence panel, and ActivityPanel exposes the inspectable evidence sidecar.
 - Known risks: Wording drift can reintroduce paper-only assumptions or overstate evidence quality.
 - Next safe action: Attribute source-type, citation, memory, or boundary wording changes here.
 - Unblock condition: None.
 
 ## Next Step
 
-Move source-type and memory-boundary evidence from `F001` into this Feature as follow-up cleanup.
+Start a separate source-quality Feature before claiming reliability scoring beyond basic source identity and warnings.

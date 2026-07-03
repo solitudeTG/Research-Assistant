@@ -56,7 +56,9 @@ Decorative or simulated trace was rejected because it undermines evidence audita
 
 ## Current Status
 
-In Progress. Upload/report/tool trace slices have historical evidence recorded in `F001`; ActivityPanel now also hosts the research answer sidecar from real assistant message metadata.
+Completed for MVP scope.
+
+ActivityPanel and trace surfaces now expose real upload, parse, index, retrieval, report, tool validation, runtime-result audit, source-quality, context-boundary, and research sidecar metadata without inventing agent/tool/parallel states. Future multi-agent lifecycle UI remains out of scope until real agent lifecycles exist.
 
 ## Links
 
@@ -89,17 +91,19 @@ In Progress. Upload/report/tool trace slices have historical evidence recorded i
 
 ## Acceptance Criteria
 
-- [ ] Upload/parse/index/retrieval/report steps appear only when emitted by backend flow.
-- [ ] Failed and deferred operations are represented as such.
-- [ ] UI does not invent Agent/tool/parallel states.
-- [ ] Tool validation trace includes real validation result metadata.
+- [x] Upload/parse/index/retrieval/report steps appear only when emitted by backend flow.
+- [x] Failed and deferred operations are represented as such.
+- [x] UI does not invent Agent/tool/parallel states.
+- [x] Tool validation trace includes real validation result metadata.
 
 ## Acceptance Map
 
 | Claim | Acceptance | Evidence | Status |
 | --- | --- | --- | --- |
-| Upload trace exposes real workflow steps. | Upload path emits separate upload, parse, and index step events. | Historical route/UI evidence in `F001`. | Partial |
-| Report and tool traces expose real completion/failure. | Report/tool validation events record pass/fail metadata from actual execution. | Historical report/tool trace evidence in `F001`. | Partial |
+| Upload trace exposes real workflow steps. | Upload path emits separate upload, parse, and index step events, including failed/deferred states. | Historical upload trace evidence from `F001`; current research backend suite passed on 2026-06-29. | MVP done |
+| Answer/report traces are honest. | Retrieval, admission, answer, report, memory lifecycle, and report completion metadata are emitted from actual route/backend flow. | Historical route trace, context-boundary trace, report failure/completion, and F011 skipped-retrieval verification. | MVP done |
+| Tool validation/runtime traces preserve process boundaries. | Tool validation and runtime-result audit expose pass/fail/result metadata as process trace with `citation_evidence=false`. | Historical tool validation, runtime result-contract, audit API/export/UI evidence from `F001`. | MVP done |
+| ActivityPanel does not invent workflow state. | ActivityPanel renders real event metadata and answer-attached research sidecars; future multi-agent states are not shown until real lifecycles exist. | F008.1 frontend/browser verification plus current frontend contracts. | MVP done |
 
 ## State Timeline
 
@@ -107,6 +111,7 @@ In Progress. Upload/report/tool trace slices have historical evidence recorded i
 | --- | --- | --- | --- | --- |
 | 2026-06-28 | active | Feature split from F001 | This Feature and `INDEX.md` | Created to own trace honesty and ActivityPanel recovery. |
 | 2026-06-29 | patched | User clarified that RAG evidence/audit belongs in the right reasoning panel | Frontend contract tests, type-check, build, browser E2E | F008.1 adds an ActivityPanel research sidecar fed by real answer metadata, without inventing backend trace events. |
+| 2026-06-29 | MVP completed | F001 historical evidence migrated to owning Feature | Current research backend suite and AgentMentor strict check | Real multi-agent lifecycle display remains future scope. |
 
 ## Patch History
 
@@ -116,18 +121,27 @@ In Progress. Upload/report/tool trace slices have historical evidence recorded i
 
 ## Evidence
 
+Historical trace/ActivityPanel evidence migrated from `F001`:
+
+- Upload route tests verified separate upload, parse, index, and failure/deferred trace states.
+- Answer/report route tests verified retrieval/admission/answer/report completion and failure events, skipped retrieval wording, context-boundary metadata, and context-only memory lifecycle events.
+- Source-quality tests verified web/database source-quality metadata and non-HTTPS warnings appear in real ingestion trace metadata and ActivityPanel.
+- Tool validation/runtime tests verified sandbox validation pass/fail trace, typed result contracts, runtime result summaries, persisted runtime-result audit, pack filtering, export manifests, and file export actions as process trace only.
+- Browser/UI E2E verified ActivityPanel showed real upload/parse/index/retrieval/report steps and file-panel artifacts for the uploaded-paper pipeline.
+
 - 2026-06-29 ActivityPanel verification: `pytest ScienceClaw/backend/tests/test_research_frontend_contracts.py -q` -> `35 passed`.
 - 2026-06-29 frontend verification: `npm.cmd run type-check` -> passed; `npm.cmd run build` -> passed with existing warnings.
 - Browser E2E on session `2ifbtVAgF5jS26d9pUq93Z`: the right panel at x≈984, width≈600 contained `推理完成`, `任务进度`, `研究证据 5`, `证据审计`, `引用证据`, and `上下文边界`.
+- Current document-convergence verification: `$env:PYTHONPATH='E:\Self-Project\Research-Assistant\ScienceClaw'; python -m pytest ScienceClaw\backend\tests -k research -q --basetemp .pytest_tmp\progress-audit` -> `178 passed`; `knowledge_check.py --strict` -> 0 errors, 0 warnings.
 
 ## Recovery Snapshot
 
 - Read first: this Feature, F002, `AGENTS.md`.
-- Current capability state: Real event traces exist for several P0 workflows; ActivityPanel can also display answer-attached research metadata as a sidecar while preserving trace honesty.
+- Current capability state: MVP trace honesty and ActivityPanel research sidecar contract is complete.
 - Known risks: Future multi-agent UI could drift into simulated workflow state if not tied to backend events.
 - Next safe action: Attribute trace/UI event changes here and verify route plus UI checks.
 - Unblock condition: None.
 
 ## Next Step
 
-Move upload/report/tool trace evidence from `F001` into this Feature during the next trace cleanup.
+Before adding multi-agent UI, create the real backend lifecycle events first and verify ActivityPanel renders only those events.

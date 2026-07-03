@@ -80,6 +80,29 @@ class FakeProjectPaper:
         }
 
 
+class FakeSubagentDefinition:
+    def __init__(self, *, name="research_auditor"):
+        self.name = name
+
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "display_name": "Auditor Agent",
+            "description": "Audit claims.",
+            "system_prompt": "You are the Research Auditor Agent.",
+            "skill_refs": ["research-evidence-audit"],
+            "allowed_tools": ["audit_evidence_claims"],
+            "input_boundaries": {},
+            "output_boundary": "process_trace",
+            "can_answer_user": False,
+            "can_write_artifacts": False,
+            "enabled": True,
+            "version": 1,
+            "validation_status": "valid",
+            "citation_evidence": False,
+        }
+
+
 def test_research_answer_and_report_routes_use_citation_evidence_wording():
     sessions_source = (
         Path(__file__).resolve().parents[1]
@@ -103,6 +126,34 @@ def test_research_answer_and_report_routes_use_citation_evidence_wording():
     assert "using only uploaded paper evidence" not in sessions_source
     assert "Generating Markdown research artifact from uploaded paper evidence" not in sessions_source
     assert '"mode": "paper_evidence"' not in sessions_source
+
+
+def test_tool_call_mapping_preserves_subagent_lifecycle_metadata(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    lifecycle = {
+        "task_id": "call-reader-1",
+        "agent_name": "paper_reader_worker",
+        "agent_role": "reader",
+        "phase": "started",
+        "status": "running",
+        "output_boundary": "context_only",
+        "citation_evidence": False,
+    }
+
+    mapped = sessions._map_science_stream_to_agent_event(
+        {
+            "event": "tool_call",
+            "data": {
+                "tool_call_id": "call-reader-1",
+                "function": "task",
+                "args": {"subagent_type": "paper_reader_worker"},
+                "subagent_lifecycle": lifecycle,
+            },
+        }
+    )
+
+    assert mapped["event"] == "tool"
+    assert mapped["data"]["metadata"]["subagent_lifecycle"] == lifecycle
 
 
 def _load_sessions_module(monkeypatch):
@@ -206,6 +257,32 @@ async def test_list_research_projects_route_returns_user_projects(monkeypatch):
         "user_id": "user-1",
     }
     assert response.data["projects"][0]["project_id"] == "project-1"
+
+
+@pytest.mark.asyncio
+async def test_list_research_agents_route_returns_governed_registry(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    calls = []
+
+    async def fake_ensure_agents(database_url):
+        calls.append(("ensure", database_url))
+
+    async def fake_list_agents(database_url, *, enabled_only):
+        calls.append(("list", database_url, enabled_only))
+        return [FakeSubagentDefinition()]
+
+    monkeypatch.setattr(sessions, "ensure_subagent_definitions_in_database", fake_ensure_agents)
+    monkeypatch.setattr(sessions, "list_subagent_definitions_from_database", fake_list_agents)
+
+    response = await sessions.list_research_agents_for_user(types.SimpleNamespace(id="user-1"))
+
+    assert calls == [
+        ("ensure", sessions.settings.research_database_url),
+        ("list", sessions.settings.research_database_url, True),
+    ]
+    assert response.data["agents"][0]["name"] == "research_auditor"
+    assert response.data["agents"][0]["can_answer_user"] is False
+    assert response.data["agents"][0]["citation_evidence"] is False
 
 
 @pytest.mark.asyncio

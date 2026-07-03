@@ -6,6 +6,7 @@ import json
 import sys
 import types
 
+import pytest
 import Tools
 from backend.deepagent import agent
 from backend.deepagent.sse_middleware import SSEMonitoringMiddleware
@@ -196,6 +197,86 @@ def test_tool_complete_trace_carries_auditable_runtime_result_summary():
         "context_boundary": "process_trace",
         "citation_evidence": False,
     }
+
+
+def test_task_tool_trace_carries_real_subagent_lifecycle_metadata():
+    middleware = SSEMonitoringMiddleware(agent_name="DeepAgent")
+    task_args = {
+        "subagent_type": "paper_reader_worker",
+        "description": "Read three selected papers",
+    }
+
+    _, _, _, start_time, tool_meta = middleware._before_tool(
+        {"name": "task", "args": task_args, "id": "call-reader-1"}
+    )
+    start_event = middleware.drain_events()[0]
+
+    assert start_event["data"]["subagent_lifecycle"] == {
+        "task_id": "call-reader-1",
+        "agent_name": "paper_reader_worker",
+        "agent_role": "reader",
+        "phase": "started",
+        "status": "running",
+        "description": "Read three selected papers",
+        "output_boundary": "context_only",
+        "citation_evidence": False,
+    }
+
+    middleware._after_tool("notes", "task", task_args, "call-reader-1", start_time, tool_meta)
+    complete_event = middleware.drain_events()[0]
+
+    assert complete_event["data"]["subagent_lifecycle"]["phase"] == "completed"
+    assert complete_event["data"]["subagent_lifecycle"]["status"] == "completed"
+    assert complete_event["data"]["subagent_lifecycle"]["agent_role"] == "reader"
+
+
+@pytest.mark.asyncio
+async def test_deep_agent_registers_governed_research_subagents(monkeypatch, tmp_path):
+    captured = {}
+
+    class FakeSandbox:
+        def __init__(self, *, session_id: str, base_dir: str, **kwargs):
+            self.workspace = str(tmp_path / session_id)
+            (tmp_path / session_id).mkdir(parents=True, exist_ok=True)
+
+        async def get_context(self):
+            return {"success": False}
+
+    def fake_create_deep_agent(**kwargs):
+        captured["kwargs"] = kwargs
+        return "compiled-agent"
+
+    monkeypatch.setattr(agent, "FullSandboxBackend", FakeSandbox)
+    monkeypatch.setattr(agent, "get_llm_model", lambda *args, **kwargs: SimpleNamespace(profile={"max_input_tokens": 4096}))
+    monkeypatch.setattr(agent, "_collect_tools", lambda **kwargs: [])
+    monkeypatch.setattr(agent, "_build_backend", lambda *args, **kwargs: "backend")
+    monkeypatch.setattr(agent, "create_deep_agent", fake_create_deep_agent)
+    monkeypatch.setattr(agent, "_WORKSPACE_DIR", str(tmp_path))
+    monkeypatch.setattr(agent, "_BUILTIN_SKILLS_DIR", str(tmp_path / "missing-builtin"))
+    monkeypatch.setattr(agent, "_EXTERNAL_SKILLS_DIR", str(tmp_path / "missing-external"))
+    monkeypatch.setattr(agent._dir_watcher, "has_changed", lambda path: False)
+    monkeypatch.setitem(
+        sys.modules,
+        "backend.task_settings",
+        types.SimpleNamespace(TaskSettings=lambda: None),
+    )
+
+    result, _, context_window, _ = await agent.deep_agent(
+        session_id="session-1",
+        task_settings=SimpleNamespace(
+            max_tokens=2048,
+            sandbox_exec_timeout=30,
+            max_output_chars=8000,
+        ),
+    )
+
+    assert result == "compiled-agent"
+    assert context_window == 4096
+    subagents = captured["kwargs"]["subagents"]
+    subagent_names = {subagent["name"] for subagent in subagents}
+    assert subagent_names == {"research_auditor", "paper_reader_worker"}
+    assert captured["kwargs"]["subagents"][0]["tools"]
+    assert all(subagent["name"] != "general-purpose" for subagent in subagents)
 
 
 def test_chat_active_tool_packs_accept_only_research_packs(monkeypatch):

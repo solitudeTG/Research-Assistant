@@ -1,0 +1,98 @@
+﻿{
+    "session_id":  "8RU57a4VFZk3kTQkiyA36W",
+    "status":  "completed",
+    "event_count":  1419,
+    "tool_event_count":  30,
+    "subagent_events":  [
+                            {
+                                "event":  "tool",
+                                "status":  "calling",
+                                "function":  "task",
+                                "agent":  null,
+                                "phase":  null,
+                                "boundary":  null,
+                                "citation_evidence":  null,
+                                "duration_ms":  null,
+                                "args_subagent_type":  "paper_reader_worker"
+                            },
+                            {
+                                "event":  "tool",
+                                "status":  "calling",
+                                "function":  "task",
+                                "agent":  null,
+                                "phase":  null,
+                                "boundary":  null,
+                                "citation_evidence":  null,
+                                "duration_ms":  null,
+                                "args_subagent_type":  "paper_reader_worker"
+                            },
+                            {
+                                "event":  "tool",
+                                "status":  "called",
+                                "function":  "task",
+                                "agent":  "paper_reader_worker",
+                                "phase":  "completed",
+                                "boundary":  "context_only",
+                                "citation_evidence":  false,
+                                "duration_ms":  7456,
+                                "args_subagent_type":  null
+                            },
+                            {
+                                "event":  "tool",
+                                "status":  "called",
+                                "function":  "task",
+                                "agent":  "paper_reader_worker",
+                                "phase":  "completed",
+                                "boundary":  "context_only",
+                                "citation_evidence":  false,
+                                "duration_ms":  7759,
+                                "args_subagent_type":  null
+                            },
+                            {
+                                "event":  "tool",
+                                "status":  "calling",
+                                "function":  "task",
+                                "agent":  null,
+                                "phase":  null,
+                                "boundary":  null,
+                                "citation_evidence":  null,
+                                "duration_ms":  null,
+                                "args_subagent_type":  "general-purpose"
+                            },
+                            {
+                                "event":  "tool",
+                                "status":  "called",
+                                "function":  "task",
+                                "agent":  "general-purpose",
+                                "phase":  "completed",
+                                "boundary":  "process_trace",
+                                "citation_evidence":  false,
+                                "duration_ms":  18992,
+                                "args_subagent_type":  null
+                            },
+                            {
+                                "event":  "tool",
+                                "status":  "calling",
+                                "function":  "task",
+                                "agent":  null,
+                                "phase":  null,
+                                "boundary":  null,
+                                "citation_evidence":  null,
+                                "duration_ms":  null,
+                                "args_subagent_type":  "research_auditor"
+                            },
+                            {
+                                "event":  "tool",
+                                "status":  "called",
+                                "function":  "task",
+                                "agent":  "research_auditor",
+                                "phase":  "completed",
+                                "boundary":  "process_trace",
+                                "citation_evidence":  false,
+                                "duration_ms":  131884,
+                                "args_subagent_type":  null
+                            }
+                        ],
+    "assistant_count":  1,
+    "done_count":  1
+}

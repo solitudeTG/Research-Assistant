@@ -535,11 +535,13 @@ async def _arun_deep_agent_stream(
                     if mw_type == "middleware_tool_start":
                         _mw_cache.setdefault(call_id, {}).update({
                             "tool_meta": mw_data.get("tool_meta", {}),
+                            "subagent_lifecycle": mw_data.get("subagent_lifecycle"),
                         })
                     elif mw_type == "middleware_tool_complete":
                         _mw_cache.setdefault(call_id, {}).update({
                             "duration_ms": mw_data.get("duration_ms"),
                             "tool_meta": mw_data.get("tool_meta", {}),
+                            "subagent_lifecycle": mw_data.get("subagent_lifecycle"),
                         })
                     elif mw_type == "middleware_todos_update":
                         new_todos = mw_data.get("todos", [])
@@ -635,15 +637,18 @@ async def _arun_deep_agent_stream(
                                 fn_args = tc.get("args", {})
                                 cached = _mw_cache.get(call_id, {})
                                 tool_meta = cached.get("tool_meta") or protocol.get_tool_meta(fn_name)
+                                event_data = {
+                                    "tool_call_id": call_id,
+                                    "function": fn_name,
+                                    "args": fn_args,
+                                    "description": f"{fn_name}: {json.dumps(fn_args, ensure_ascii=False)[:200]}",
+                                    "tool_meta": tool_meta,
+                                }
+                                if isinstance(cached.get("subagent_lifecycle"), dict):
+                                    event_data["subagent_lifecycle"] = cached["subagent_lifecycle"]
                                 yield {
                                     "event": "tool_call",
-                                    "data": {
-                                        "tool_call_id": call_id,
-                                        "function": fn_name,
-                                        "args": fn_args,
-                                        "description": f"{fn_name}: {json.dumps(fn_args, ensure_ascii=False)[:200]}",
-                                        "tool_meta": tool_meta,
-                                    },
+                                    "data": event_data,
                                 }
 
                         elif isinstance(msg, ToolMessage):
@@ -655,15 +660,18 @@ async def _arun_deep_agent_stream(
                             cached = _mw_cache.pop(tool_call_id, {})
                             duration_ms = cached.get("duration_ms")
                             tool_meta = cached.get("tool_meta") or protocol.get_tool_meta(fn_name)
+                            event_data = {
+                                "tool_call_id": tool_call_id,
+                                "function": fn_name,
+                                "content": content,
+                                "duration_ms": duration_ms,
+                                "tool_meta": tool_meta,
+                            }
+                            if isinstance(cached.get("subagent_lifecycle"), dict):
+                                event_data["subagent_lifecycle"] = cached["subagent_lifecycle"]
                             yield {
                                 "event": "tool_result",
-                                "data": {
-                                    "tool_call_id": tool_call_id,
-                                    "function": fn_name,
-                                    "content": content,
-                                    "duration_ms": duration_ms,
-                                    "tool_meta": tool_meta,
-                                },
+                                "data": event_data,
                             }
 
                         # 无 tool_calls 的 AIMessage = 最终回复

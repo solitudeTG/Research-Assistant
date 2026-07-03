@@ -127,6 +127,18 @@ export interface ResearchAnswerMetadata {
   };
 }
 
+export interface SubagentLifecycleMetadata {
+  task_id: string;
+  agent_name: string;
+  agent_role: string;
+  phase: string;
+  status: string;
+  description?: string;
+  output_boundary: 'context_only' | 'process_trace' | 'artifact' | string;
+  citation_evidence: false;
+  evidence_refs?: Array<Record<string, any>>;
+}
+
 export interface ToolContent extends BaseContent {
   tool_call_id: string;
   name: string;
@@ -141,6 +153,10 @@ export interface ToolContent extends BaseContent {
   result_contract?: ToolResultContract;
   tool_pack?: ResearchToolPackMetadata;
   runtime_result_summary?: ToolRuntimeResultSummary;
+  metadata?: {
+    subagent_lifecycle?: SubagentLifecycleMetadata;
+    [key: string]: any;
+  };
 }
 
 export interface StepContent extends BaseContent {

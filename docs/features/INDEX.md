@@ -49,12 +49,12 @@ updated: 2026-06-29
 | [F017 LLM Section Summary to Global Synthesis](F017-llm-section-summary-global-synthesis.md) | long-document RAG, LLM section summary, evidence-preserving synthesis | LLM section summary, global synthesis, evidence-preserving synthesis, hierarchical long-document RAG | `ScienceClaw/backend/research_assistant/answering.py`; `ScienceClaw/backend/tests/test_research_answering.py` | 修改单篇整篇论文 LLM synthesis、section summary 中间态、deterministic fallback 或 evidence-preserving summary 逻辑前。 |
 | [F018 Claim-Level Citation Audit Calibration](F018-claim-level-citation-audit-calibration.md) | evidence audit calibration, claim-level citation contract | partial claim, structural markdown, audit calibration, claim-level evidence, ActivityPanel audit | `ScienceClaw/backend/research_assistant/audit.py`; `ScienceClaw/backend/research_assistant/reports.py`; `ScienceClaw/frontend/src/components/ActivityPanel.vue`; `ScienceClaw/frontend/src/api/agent.ts` | 修改 Evidence Audit claim 提取、partial/unsupported 状态、报告 audit map、研究证据右侧面板或长耗时 research answer API 前。 |
 | [F019 Research Quality Evaluation Harness](F019-research-quality-evaluation-harness.md) | research quality evaluation, citation discipline, answer quality gate | quality gate, eval harness, citation discipline, unsupported ratio, golden eval, answer JSON | `ScienceClaw/backend/research_assistant/evaluation.py`; `ScienceClaw/backend/scripts/research_quality_eval.py`; `ScienceClaw/backend/tests/test_research_evaluation.py` | 修改研究回答质量断言、真实论文 eval、citation discipline gate、unsupported ratio 阈值或 answer JSON 评测 CLI 前。 |
+| [F020 Multi-Agent Research Workflow and Subagent Registry](F020-multi-agent-subagent-registry.md) | multi-agent workflow, subagent registry, auditor, reader workers | multi-agent, subagent, auditor agent, reader worker, research agents, agent registry, lifecycle trace | `ScienceClaw/backend/deepagent/`; `ScienceClaw/backend/research_assistant/`; `ScienceClaw/backend/route/sessions.py`; `ScienceClaw/frontend/src/`; `docs/specs/F020-multi-agent-subagent-registry-spec.md` | 修改 Supervisor 委派、多 Agent 决策、Subagent Registry、Auditor Agent、批量 Reader Worker、subagent lifecycle 或 Research Agents 页面前。 |
 
 ## Planned Feature Candidates
 
 这些候选项来自 `F001` 和 linked spec，但尚不应在没有具体实现入口时全部扩写成 active Feature。
 
-- Multi-agent research workflow: 开始实现 Supervisor、Deep Research Agent、Evidence Audit Agent、Document Composer Agent 的真实生命周期时创建正式 Feature。
 - Three-layer research memory: 开始扩展 L1/L2/L3 memory productization、promotion/revocation/conflict/recall policy 时创建正式 Feature。
 - Tools and Skills governance: 开始扩展 domain tool packs、custom tool sandbox validation、skill registry 或持久化治理时创建正式 Feature。
 

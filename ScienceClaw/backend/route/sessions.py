@@ -60,10 +60,12 @@ from backend.research_assistant.tool_validation import tool_source_sha256, valid
 from backend.research_assistant.storage.database import (
     create_research_project_in_database,
     delete_memory_entry_from_database,
+    ensure_subagent_definitions_in_database,
     get_audit_result_from_database,
     get_evidence_record_from_database,
     get_research_session_status_from_database,
     get_session_research_project_from_database,
+    list_subagent_definitions_from_database,
     list_project_paper_assets_from_database,
     list_memory_entries_from_database,
     list_research_projects_from_database,
@@ -854,7 +856,7 @@ def _map_science_stream_to_agent_event(evt: Dict[str, Any]) -> Optional[Dict[str
         tool_function = str(data.get("function") or "")
         tool_args = _normalize_tool_args(tool_function, data.get("args") or {}, tool_call_id)
         tool_meta = _extract_tool_meta(data)
-        return _wrap_event("tool", {
+        result = {
             "event_id": _new_event_id(), "timestamp": ts,
             "tool_call_id": tool_call_id,
             "name": _infer_tool_name(tool_function),
@@ -862,7 +864,10 @@ def _map_science_stream_to_agent_event(evt: Dict[str, Any]) -> Optional[Dict[str
             "function": tool_function,
             "args": tool_args,
             "tool_meta": tool_meta,
-        })
+        }
+        if isinstance(data.get("subagent_lifecycle"), dict):
+            result["metadata"] = {"subagent_lifecycle": data["subagent_lifecycle"]}
+        return _wrap_event("tool", result)
 
     if event_type == "tool_result":
         tool_call_id = str(data.get("tool_call_id") or "")
@@ -887,6 +892,8 @@ def _map_science_stream_to_agent_event(evt: Dict[str, Any]) -> Optional[Dict[str
         # 只在有实际 args 时才包含，避免覆盖前端 calling 事件中保存的 args
         if tool_args:
             result["args"] = tool_args
+        if isinstance(data.get("subagent_lifecycle"), dict):
+            result["metadata"] = {"subagent_lifecycle": data["subagent_lifecycle"]}
         return _wrap_event("tool", result)
 
     if event_type == "statistics":
@@ -2005,6 +2012,23 @@ async def list_research_projects_for_user(
         return ApiResponse(data={"projects": [project.to_dict() for project in projects]})
     except Exception as exc:
         logger.exception("list_research_projects_for_user failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/research/agents", response_model=ApiResponse)
+async def list_research_agents_for_user(
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """List governed Research Agents available to Supervisor."""
+    try:
+        await ensure_subagent_definitions_in_database(settings.research_database_url)
+        agents = await list_subagent_definitions_from_database(
+            settings.research_database_url,
+            enabled_only=True,
+        )
+        return ApiResponse(data={"agents": [agent.to_dict() for agent in agents]})
+    except Exception as exc:
+        logger.exception("list_research_agents_for_user failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 

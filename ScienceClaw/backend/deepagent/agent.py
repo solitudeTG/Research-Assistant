@@ -1,25 +1,25 @@
-"""
-agent.py — 组装 DeepAgent：系统提示词 + 模型 + 工具（内置 + 外部扩展）+ Skills + 监控中间件。
+﻿"""
+agent.py 鈥?缁勮 DeepAgent锛氱郴缁熸彁绀鸿瘝 + 妯″瀷 + 宸ュ叿锛堝唴缃?+ 澶栭儴鎵╁睍锛? Skills + 鐩戞帶涓棿浠躲€?
 
-架构：
-  - HybridSandboxBackend 作为默认后端：
-    - 文件操作（read_file/write_file/edit_file/ls/glob/grep）→ 本地 /home/scienceclaw/
-    - 命令执行（execute）→ 远程 sandbox 容器
-    - 通过 Docker 共享卷同步文件
-  - CompositeBackend 路由：
-    - /builtin-skills/ → FilesystemBackend（内置 skills，只读，始终加载）
-    - /skills/         → FilteredFilesystemBackend（外置 skills，可屏蔽/删除）
-  - deepagents 内置工具层统一管理所有工具（不再使用 MCP sandbox 工具）
+鏋舵瀯锛?
+  - HybridSandboxBackend 浣滀负榛樿鍚庣锛?
+    - 鏂囦欢鎿嶄綔锛坮ead_file/write_file/edit_file/ls/glob/grep锛夆啋 鏈湴 /home/scienceclaw/
+    - 鍛戒护鎵ц锛坋xecute锛夆啋 杩滅▼ sandbox 瀹瑰櫒
+    - 閫氳繃 Docker 鍏变韩鍗峰悓姝ユ枃浠?
+  - CompositeBackend 璺敱锛?
+    - /builtin-skills/ 鈫?FilesystemBackend锛堝唴缃?skills锛屽彧璇伙紝濮嬬粓鍔犺浇锛?
+    - /skills/         鈫?FilteredFilesystemBackend锛堝缃?skills锛屽彲灞忚斀/鍒犻櫎锛?
+  - deepagents 鍐呯疆宸ュ叿灞傜粺涓€绠＄悊鎵€鏈夊伐鍏凤紙涓嶅啀浣跨敤 MCP sandbox 宸ュ叿锛?
 
-Skills 架构：
-  - 内置 skills（/app/builtin_skills/）：find-skills 等核心能力，
-    COPY 进 Docker 镜像，不依赖宿主机挂载（避免 macOS 大小写不敏感文件系统的冲突）
-  - 外置 skills（/app/Skills/）：用户通过 find-skills 下载或自行安装的 skills，
-    支持屏蔽和删除管理
+Skills 鏋舵瀯锛?
+  - 鍐呯疆 skills锛?app/builtin_skills/锛夛細find-skills 绛夋牳蹇冭兘鍔涳紝
+    COPY 杩?Docker 闀滃儚锛屼笉渚濊禆瀹夸富鏈烘寕杞斤紙閬垮厤 macOS 澶у皬鍐欎笉鏁忔劅鏂囦欢绯荤粺鐨勫啿绐侊級
+  - 澶栫疆 skills锛?app/Skills/锛夛細鐢ㄦ埛閫氳繃 find-skills 涓嬭浇鎴栬嚜琛屽畨瑁呯殑 skills锛?
+    鏀寔灞忚斀鍜屽垹闄ょ鐞?
 
-监控中间件：
-  - SSEMonitoringMiddleware 通过 wrap_tool_call 拦截工具执行前后
-  - 事件存储在 middleware.sse_events，由 runner.py 轮询消费
+鐩戞帶涓棿浠讹細
+  - SSEMonitoringMiddleware 閫氳繃 wrap_tool_call 鎷︽埅宸ュ叿鎵ц鍓嶅悗
+  - 浜嬩欢瀛樺偍鍦?middleware.sse_events锛岀敱 runner.py 杞娑堣垂
 """
 from __future__ import annotations
 
@@ -30,7 +30,6 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from loguru import logger
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, FilesystemBackend
-from deepagents.middleware.subagents import GENERAL_PURPOSE_SUBAGENT, DEFAULT_SUBAGENT_PROMPT
 from backend.deepagent.engine import get_llm_model
 from backend.deepagent.tools import web_search, web_crawl, propose_skill_save, propose_tool_save, eval_skill, grade_eval
 from backend.deepagent.tooluniverse_tools import (
@@ -44,29 +43,35 @@ from backend.deepagent.sse_middleware import SSEMonitoringMiddleware
 from backend.deepagent.offload_middleware import ToolResultOffloadMiddleware
 from backend.deepagent.diagnostic import DIAGNOSTIC_ENABLED, DiagnosticLogger
 from backend.deepagent.dir_watcher import watcher as _dir_watcher
+from backend.research_assistant.subagents import (
+    audit_evidence_claims as research_audit_evidence_claims,
+    build_deepagents_subagent_configs,
+    default_subagent_definitions,
+    read_research_evidence,
+)
 from backend.config import settings
 
-# ───────────────────────────────────────────────────────────────────
-# 外部扩展工具（Tools 目录自动扫描，支持热加载）
-# ───────────────────────────────────────────────────────────────────
+# 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+# 澶栭儴鎵╁睍宸ュ叿锛圱ools 鐩綍鑷姩鎵弿锛屾敮鎸佺儹鍔犺浇锛?
+# 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 try:
     from Tools import reload_external_tools
     _initial = reload_external_tools(force=True)
-    logger.info(f"[Agent] 已加载 {len(_initial)} 个外部扩展工具: "
+    logger.info(f"[Agent] 宸插姞杞?{len(_initial)} 涓閮ㄦ墿灞曞伐鍏? "
                 f"{[t.name for t in _initial]}")
     # Register proxy tools in SSE protocol so tool_meta carries sandbox: true
     from backend.deepagent.sse_protocol import get_protocol_manager as _get_proto
     _proto = _get_proto()
     for _t in _initial:
         _proto.register_sandbox_tool(_t.name, _t.description[:80])
-    logger.info(f"[Agent] 已注册 {len(_initial)} 个沙箱代理工具到 SSE 协议")
+    logger.info(f"[Agent] 宸叉敞鍐?{len(_initial)} 涓矙绠变唬鐞嗗伐鍏峰埌 SSE 鍗忚")
 except ImportError:
     reload_external_tools = None  # type: ignore[assignment]
-    logger.warning("[Agent] 未找到 Tools 包，跳过外部扩展工具加载")
+    logger.warning("[Agent] 鏈壘鍒?Tools 鍖咃紝璺宠繃澶栭儴鎵╁睍宸ュ叿鍔犺浇")
 
-# ───────────────────────────────────────────────────────────────────
-# 路径配置
-# ───────────────────────────────────────────────────────────────────
+# 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+# 璺緞閰嶇疆
+# 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 _BUILTIN_SKILLS_DIR = os.environ.get("BUILTIN_SKILLS_DIR", "/app/builtin_skills")
 _EXTERNAL_SKILLS_DIR = os.environ.get("EXTERNAL_SKILLS_DIR", "/app/Skills")
@@ -74,29 +79,29 @@ _BUILTIN_SKILLS_ROUTE = "/builtin-skills/"
 _EXTERNAL_SKILLS_ROUTE = "/skills/"
 _WORKSPACE_DIR = os.environ.get("WORKSPACE_DIR", "/home/scienceclaw")
 
-# ───────────────────────────────────────────────────────────────────
-# Backend 构建
-# ───────────────────────────────────────────────────────────────────
+# 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+# Backend 鏋勫缓
+# 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 
 def _build_backend(session_id: str, sandbox: FullSandboxBackend, blocked_skills: Set[str] | None = None):
     """
-    构建 CompositeBackend 工厂函数（会话级隔离）：
-      - 默认: 传入的 FullSandboxBackend 实例
-      - /builtin-skills/ 路由: FilesystemBackend（内置 skills，始终加载）
-      - /skills/          路由: FilteredFilesystemBackend（外置 skills，过滤屏蔽项）
+    鏋勫缓 CompositeBackend 宸ュ巶鍑芥暟锛堜細璇濈骇闅旂锛夛細
+      - 榛樿: 浼犲叆鐨?FullSandboxBackend 瀹炰緥
+      - /builtin-skills/ 璺敱: FilesystemBackend锛堝唴缃?skills锛屽缁堝姞杞斤級
+      - /skills/          璺敱: FilteredFilesystemBackend锛堝缃?skills锛岃繃婊ゅ睆钄介」锛?
     """
     routes = {}
 
     if os.path.isdir(_BUILTIN_SKILLS_DIR):
-        logger.info(f"[Skills] 内置 skills: {_BUILTIN_SKILLS_DIR} → {_BUILTIN_SKILLS_ROUTE}")
+        logger.info(f"[Skills] 鍐呯疆 skills: {_BUILTIN_SKILLS_DIR} 鈫?{_BUILTIN_SKILLS_ROUTE}")
         routes[_BUILTIN_SKILLS_ROUTE] = FilesystemBackend(
             root_dir=_BUILTIN_SKILLS_DIR,
             virtual_mode=True,
         )
 
     if os.path.isdir(_EXTERNAL_SKILLS_DIR):
-        logger.info(f"[Skills] 外置 skills: {_EXTERNAL_SKILLS_DIR} → {_EXTERNAL_SKILLS_ROUTE}"
+        logger.info(f"[Skills] 澶栫疆 skills: {_EXTERNAL_SKILLS_DIR} 鈫?{_EXTERNAL_SKILLS_ROUTE}"
                      f" (blocked: {blocked_skills or set()})")
         routes[_EXTERNAL_SKILLS_ROUTE] = FilteredFilesystemBackend(
             root_dir=_EXTERNAL_SKILLS_DIR,
@@ -105,15 +110,15 @@ def _build_backend(session_id: str, sandbox: FullSandboxBackend, blocked_skills:
         )
 
     if routes:
-        # 返回工厂函数以确保路由生效
+        # 杩斿洖宸ュ巶鍑芥暟浠ョ‘淇濊矾鐢辩敓鏁?
         return lambda rt: CompositeBackend(default=sandbox, routes=routes)
     else:
         return sandbox
 
 
-# ───────────────────────────────────────────────────────────────────
-# 系统提示词
-# ───────────────────────────────────────────────────────────────────
+# 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+# 绯荤粺鎻愮ず璇?
+# 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 _SYSTEM_PROMPT_TEMPLATE = """You are ScienceClaw, a proactive personal AI assistant designed to help users solve problems, conduct research, and complete tasks efficiently.
 
@@ -125,12 +130,12 @@ Always respond in {language_instruction}.
 ## Core Principles
 - Adapt to the conversation. Chat naturally for casual topics, but take concrete actions when the user asks for tasks or problem-solving.
 - Prefer execution over explanation. If a task can be solved through code or tools, implement and execute the solution instead of only describing it.
-- **Real-time information**: For any question involving current or up-to-date information, you MUST use `web_search` — NEVER answer from training data alone.
-- **Write files, not chat**: When the user asks to write, create, or generate code/scripts/files, ALWAYS use `write_file` to create real files — never just paste code in chat.
-- **Write → Execute → Fix loop**: After writing ANY executable script, you MUST immediately run it via `execute` to verify correctness. If it fails, fix and re-run.
+- **Real-time information**: For any question involving current or up-to-date information, you MUST use `web_search` 鈥?NEVER answer from training data alone.
+- **Write files, not chat**: When the user asks to write, create, or generate code/scripts/files, ALWAYS use `write_file` to create real files 鈥?never just paste code in chat.
+- **Write 鈫?Execute 鈫?Fix loop**: After writing ANY executable script, you MUST immediately run it via `execute` to verify correctness. If it fails, fix and re-run.
 - **Skill-first approach**: ALWAYS check available skills (`/builtin-skills/` and `/skills/`) before starting any task. If a skill matches, `read_file` its SKILL.md and follow the workflow. Do NOT reinvent what a skill already provides.
 - **Research tasks**: When the user's request involves research, reports, reviews, surveys, literature analysis, discoveries, or any deep investigation topic, ALWAYS check and consider `/skills/deep-research/SKILL.md` first.
-- **SKILL.md files are instruction documents** — use `read_file` to read them, NEVER `execute` them as scripts.
+- **SKILL.md files are instruction documents** 鈥?use `read_file` to read them, NEVER `execute` them as scripts.
 - Solve problems proactively. Only ask questions when the intent or requirements are truly unclear.
 
 ## Workspace
@@ -141,9 +146,9 @@ Your workspace directory is {workspace_dir}/.
 ## Sandbox Boundary
 The sandbox is an isolated execution environment. Scripts running in the sandbox CANNOT import or call your tools directly (`from functions import ...` will FAIL with `ModuleNotFoundError`).
 
-**Data flow**: Use YOUR tools (web_search, web_crawl, tooluniverse_run, etc.) to gather data → save results to workspace files via `write_file` → write sandbox scripts that READ those files. NEVER call your tools from within sandbox scripts.
+**Data flow**: Use YOUR tools (web_search, web_crawl, tooluniverse_run, etc.) to gather data 鈫?save results to workspace files via `write_file` 鈫?write sandbox scripts that READ those files. NEVER call your tools from within sandbox scripts.
 
-**Large tool results** are automatically saved to `research_data/` files (raw format). To use them in sandbox scripts: `read_file` the data → write a clean JSON file via a Python script with `json.dump()` → sandbox scripts read that clean file.
+**Large tool results** are automatically saved to `research_data/` files (raw format). To use them in sandbox scripts: `read_file` the data 鈫?write a clean JSON file via a Python script with `json.dump()` 鈫?sandbox scripts read that clean file.
 
 ## Task Completion Strategy
 
@@ -151,25 +156,25 @@ The sandbox is an isolated execution environment. Scripts running in the sandbox
 - Identify ALL deliverables, requirements, and output format.
 - For any task involving 2+ steps, call `write_todos` BEFORE starting.
 - Check Memory: **AGENTS.md** and **CONTEXT.md**.
-- **Check Available Skills (MANDATORY)** — review the skills catalog. If ANY skill matches the task, `read_file` that SKILL.md and follow its workflow. Do NOT skip this step.
+- **Check Available Skills (MANDATORY)** 鈥?review the skills catalog. If ANY skill matches the task, `read_file` that SKILL.md and follow its workflow. Do NOT skip this step.
 
 ### Step 2: Execute
-- If a skill matched → follow the skill's workflow completely.
+- If a skill matched 鈫?follow the skill's workflow completely.
 - Otherwise, use tools directly. Priority: existing skills > built-in tools > ToolUniverse > web_search.
 - **Before `propose_tool_save`**: read `/builtin-skills/tool-creator/SKILL.md` first.
 - **Before `propose_skill_save`**: read `/builtin-skills/skill-creator/SKILL.md` first.
-- Build incrementally — one component per tool call. Test via `execute` after writing.
+- Build incrementally 鈥?one component per tool call. Test via `execute` after writing.
 
 ### Step 3: Verify & Deliver
 - Re-read the user's original request. Check all deliverables are produced.
-- If a script fails, fix the specific error — do NOT rewrite from scratch. If it fails 2+ times, simplify.
+- If a script fails, fix the specific error 鈥?do NOT rewrite from scratch. If it fails 2+ times, simplify.
 
 ### Step 4: Reflect & Capture
 After completing a non-trivial task:
-- **Reusable workflow** → Suggest saving as a **skill** via skill-creator.
-- **Reusable function** → Suggest saving as a **tool** via tool-creator.
-- **User preference learned** → Update **AGENTS.md** via `edit_file`.
-- **Project context learned** → Update **CONTEXT.md** via `edit_file`.
+- **Reusable workflow** 鈫?Suggest saving as a **skill** via skill-creator.
+- **Reusable function** 鈫?Suggest saving as a **tool** via tool-creator.
+- **User preference learned** 鈫?Update **AGENTS.md** via `edit_file`.
+- **Project context learned** 鈫?Update **CONTEXT.md** via `edit_file`.
 """
 
 
@@ -191,7 +196,10 @@ Your workspace directory is {workspace_dir}/.
 
 
 _LANGUAGE_MAP = {
-    "zh": ("Chinese (Simplified)", "你必须使用简体中文回复所有内容。所有生成的报告、文档标题和正文也必须使用简体中文。"),
+    "zh": (
+        "Chinese (Simplified)",
+        "You must respond in Simplified Chinese. Generated reports, document titles, and body text must also use Simplified Chinese.",
+    ),
     "en": ("English", "You must respond in English. All generated reports, document titles and body text must also be in English."),
 }
 
@@ -230,15 +238,20 @@ def _get_eval_system_prompt(workspace_dir: str, sandbox_env: str | None = None) 
     return prompt
 
 
-# ───────────────────────────────────────────────────────────────────
-# 工具列表（内置 + 外部扩展，不再包含 MCP sandbox 工具）
-# ───────────────────────────────────────────────────────────────────
+# 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+# 宸ュ叿鍒楄〃锛堝唴缃?+ 澶栭儴鎵╁睍锛屼笉鍐嶅寘鍚?MCP sandbox 宸ュ叿锛?
+# 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 _STATIC_TOOLS = [
     web_search, web_crawl, propose_skill_save, propose_tool_save,
     eval_skill, grade_eval,
     tooluniverse_search, tooluniverse_info, tooluniverse_run,
 ]
+
+_RESEARCH_SUBAGENT_TOOLS = {
+    "audit_evidence_claims": research_audit_evidence_claims,
+    "read_research_evidence": read_research_evidence,
+}
 
 
 def _tool_pack_id(tool: Any) -> str | None:
@@ -258,10 +271,8 @@ def _collect_tools(
     blocked_tools: Set[str] | None = None,
     active_tool_packs: Set[str] | None = None,
 ) -> List:
-    """合并内置工具与外部扩展工具，去重并过滤屏蔽项。
-
-    通过 DirWatcher 检测 Tools/ 目录变更，仅在变更时才重新 import 模块。
-    """
+    """鍚堝苟鍐呯疆宸ュ叿涓庡閮ㄦ墿灞曞伐鍏凤紝鍘婚噸骞惰繃婊ゅ睆钄介」銆?
+    閫氳繃 DirWatcher 妫€娴?Tools/ 鐩綍鍙樻洿锛屼粎鍦ㄥ彉鏇存椂鎵嶉噸鏂?import 妯″潡銆?    """
     blocked = blocked_tools or set()
     active_packs = {pack.strip() for pack in (active_tool_packs or set()) if pack.strip()}
     seen_names: set[str] = set()
@@ -272,41 +283,41 @@ def _collect_tools(
         try:
             ext_tools = reload_external_tools()
         except Exception:
-            logger.warning("[Agent] 动态加载外部工具失败", exc_info=True)
+            logger.warning("[Agent] failed to reload external tools", exc_info=True)
 
     for t in _STATIC_TOOLS:
         if t.name in blocked:
-            logger.info(f"[Agent] 工具已屏蔽，跳过: {t.name}")
+            logger.info(f"[Agent] 宸ュ叿宸插睆钄斤紝璺宠繃: {t.name}")
             continue
         if t.name not in seen_names:
             all_tools.append(t)
             seen_names.add(t.name)
         else:
-            logger.warning(f"[Agent] 工具名称重复，跳过: {t.name}")
+            logger.warning(f"[Agent] 宸ュ叿鍚嶇О閲嶅锛岃烦杩? {t.name}")
 
     for t in ext_tools:
         if t.name in blocked:
-            logger.info(f"[Agent] 工具已屏蔽，跳过: {t.name}")
+            logger.info(f"[Agent] 宸ュ叿宸插睆钄斤紝璺宠繃: {t.name}")
             continue
         pack_id = _tool_pack_id(t)
         if pack_id not in active_packs:
-            logger.info(f"[Agent] 外部工具未激活，跳过: {t.name} (tool_pack={pack_id or 'missing'})")
+            logger.info(f"[Agent] 澶栭儴宸ュ叿鏈縺娲伙紝璺宠繃: {t.name} (tool_pack={pack_id or 'missing'})")
             continue
         if t.name not in seen_names:
             all_tools.append(t)
             seen_names.add(t.name)
         else:
-            logger.warning(f"[Agent] 工具名称重复，跳过: {t.name}")
-    logger.info(f"[Agent] 自定义工具列表({len(all_tools)}): {[t.name for t in all_tools]}")
+            logger.warning(f"[Agent] 宸ュ叿鍚嶇О閲嶅锛岃烦杩? {t.name}")
+    logger.info(f"[Agent] 鑷畾涔夊伐鍏峰垪琛?{len(all_tools)}): {[t.name for t in all_tools]}")
     return all_tools
 
 
-# ───────────────────────────────────────────────────────────────────
-# 屏蔽查询（MongoDB）
-# ───────────────────────────────────────────────────────────────────
+# 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+# 灞忚斀鏌ヨ锛圡ongoDB锛?
+# 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 async def get_blocked_skills(user_id: str) -> Set[str]:
-    """从 MongoDB 查询用户屏蔽的 skills 列表。"""
+    """Read blocked skills for the user from MongoDB."""
     try:
         from backend.mongodb.db import db
         col = db.get_collection("blocked_skills")
@@ -318,12 +329,12 @@ async def get_blocked_skills(user_id: str) -> Set[str]:
                 blocked.add(name)
         return blocked
     except Exception as exc:
-        logger.warning(f"[Skills] 查询屏蔽列表失败: {exc}")
+        logger.warning(f"[Skills] 鏌ヨ灞忚斀鍒楄〃澶辫触: {exc}")
         return set()
 
 
 async def get_blocked_tools(user_id: str) -> Set[str]:
-    """从 MongoDB 查询用户屏蔽的 tools 列表。"""
+    """Read blocked tools for the user from MongoDB."""
     try:
         from backend.mongodb.db import db
         col = db.get_collection("blocked_tools")
@@ -335,13 +346,13 @@ async def get_blocked_tools(user_id: str) -> Set[str]:
                 blocked.add(name)
         return blocked
     except Exception as exc:
-        logger.warning(f"[Tools] 查询屏蔽列表失败: {exc}")
+        logger.warning(f"[Tools] 鏌ヨ灞忚斀鍒楄〃澶辫触: {exc}")
         return set()
 
 
-# ───────────────────────────────────────────────────────────────────
-# 创建 Agent
-# ───────────────────────────────────────────────────────────────────
+# 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+# 鍒涘缓 Agent
+# 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 async def deep_agent(
     session_id: str,
@@ -353,14 +364,14 @@ async def deep_agent(
     active_tool_packs: Optional[Set[str]] = None,
 ) -> Tuple[Any, SSEMonitoringMiddleware, int, Optional[DiagnosticLogger]]:
     """
-    创建一个完整的 DeepAgent 实例（会话级隔离），并注入 SSE 监控中间件。
+    鍒涘缓涓€涓畬鏁寸殑 DeepAgent 瀹炰緥锛堜細璇濈骇闅旂锛夛紝骞舵敞鍏?SSE 鐩戞帶涓棿浠躲€?
 
     Returns:
         (agent, sse_middleware, context_window, diagnostic_logger)
 
-    Skills 架构：
-      - 内置 skills（/app/builtin_skills/）：COPY 进镜像，始终加载
-      - 外置 skills（/app/Skills/）：用户自管理，支持屏蔽过滤
+    Skills 鏋舵瀯锛?
+      - 鍐呯疆 skills锛?app/builtin_skills/锛夛細COPY 杩涢暅鍍忥紝濮嬬粓鍔犺浇
+      - 澶栫疆 skills锛?app/Skills/锛夛細鐢ㄦ埛鑷鐞嗭紝鏀寔灞忚斀杩囨护
     """
     from backend.task_settings import TaskSettings as _TS
     ts: _TS = task_settings or _TS()
@@ -373,7 +384,7 @@ async def deep_agent(
         blocked_skills = await get_blocked_skills(user_id)
         blocked_tools = await get_blocked_tools(user_id)
 
-    # ── 检测 Tools/Skills 目录变更并按需重新加载 ──
+    # 鈹€鈹€ 妫€娴?Tools/Skills 鐩綍鍙樻洿骞舵寜闇€閲嶆柊鍔犺浇 鈹€鈹€
     _dir_watcher.has_changed(_EXTERNAL_SKILLS_DIR)
 
     tools = _collect_tools(blocked_tools=blocked_tools, active_tool_packs=active_tool_packs)
@@ -384,7 +395,7 @@ async def deep_agent(
         verbose=False,
     )
 
-    # 1. 实例化 FullSandboxBackend 并获取环境上下文
+    # 1. 瀹炰緥鍖?FullSandboxBackend 骞惰幏鍙栫幆澧冧笂涓嬫枃
     sandbox = FullSandboxBackend(
         session_id=session_id,
         user_id=user_id or "default_user",
@@ -394,36 +405,36 @@ async def deep_agent(
     )
     
     sandbox_info = None
-    actual_workspace = sandbox.workspace  # /home/scienceclaw/{session_id}（与后端共享卷）
+    actual_workspace = sandbox.workspace  # /home/scienceclaw/{session_id}锛堜笌鍚庣鍏变韩鍗凤級
     
     ctx = await sandbox.get_context()
     if ctx.get("success"):
         sandbox_info = ctx.get("data")
 
-    # 2. 构建复合后端（可能包含 Skills 路由）
+    # 2. 鏋勫缓澶嶅悎鍚庣锛堝彲鑳藉寘鍚?Skills 璺敱锛?
     backend = _build_backend(session_id, sandbox, blocked_skills=blocked_skills)
 
-    # 工具结果自动落盘中间件：大型工具结果写入文件，Agent 按需 read_file 读取
+    # 宸ュ叿缁撴灉鑷姩钀界洏涓棿浠讹細澶у瀷宸ュ叿缁撴灉鍐欏叆鏂囦欢锛孉gent 鎸夐渶 read_file 璇诲彇
     offload_middleware = ToolResultOffloadMiddleware(
         workspace_dir=actual_workspace,
         backend=sandbox,
     )
 
-    # ── 诊断模式：记录 LLM 每步看到的完整上下文 ──
+    # 鈹€鈹€ 璇婃柇妯″紡锛氳褰?LLM 姣忔鐪嬪埌鐨勫畬鏁翠笂涓嬫枃 鈹€鈹€
     diag: Optional[DiagnosticLogger] = None
     if diagnostic_enabled:
         diag = DiagnosticLogger(actual_workspace, session_id)
         offload_middleware._diagnostic = diag
 
-    # 中间件执行顺序：offload（修改结果）→ SSE（监控记录）
-    # create_deep_agent 还会自动注入 SummarizationMiddleware（基于 model profile）
+    # 涓棿浠舵墽琛岄『搴忥細offload锛堜慨鏀圭粨鏋滐級鈫?SSE锛堢洃鎺ц褰曪級
+    # create_deep_agent 杩樹細鑷姩娉ㄥ叆 SummarizationMiddleware锛堝熀浜?model profile锛?
     agent_kwargs: Dict[str, Any] = {
         "model": model,
         "tools": tools,
         "middleware": [offload_middleware, sse_middleware],
     }
 
-    # 4. 注入系统提示词
+    # 4. 娉ㄥ叆绯荤粺鎻愮ず璇?
     system_prompt = get_system_prompt(actual_workspace, sandbox_info, language=language)
     agent_kwargs["system_prompt"] = system_prompt
 
@@ -440,11 +451,11 @@ async def deep_agent(
 
     if skills_sources:
         agent_kwargs["skills"] = skills_sources
-        logger.info(f"[Agent] 已启用 Skills（sources: {skills_sources}, blocked: {blocked_skills}）")
+        logger.info(f"[Agent] skills enabled: sources={skills_sources}, blocked={blocked_skills}")
 
-    # 4. 启用跨会话记忆（两层隔离）
-    #    - 全局 AGENTS.md：用户偏好 + 通用模式（跨所有会话，体量小）
-    #    - 会话级 CONTEXT.md：当前项目/任务上下文（会话删除时自动清理）
+    # 4. 鍚敤璺ㄤ細璇濊蹇嗭紙涓ゅ眰闅旂锛?
+    #    - 鍏ㄥ眬 AGENTS.md锛氱敤鎴峰亸濂?+ 閫氱敤妯″紡锛堣法鎵€鏈変細璇濓紝浣撻噺灏忥級
+    #    - 浼氳瘽绾?CONTEXT.md锛氬綋鍓嶉」鐩?浠诲姟涓婁笅鏂囷紙浼氳瘽鍒犻櫎鏃惰嚜鍔ㄦ竻鐞嗭級
     _mem_user = user_id or "default_user"
     _mem_dir = os.path.join(_WORKSPACE_DIR, "_memory", _mem_user)
     os.makedirs(_mem_dir, exist_ok=True)
@@ -456,7 +467,7 @@ async def deep_agent(
                     "## User Preferences\n\n"
                     "## General Patterns\n\n"
                     "## Notes\n")
-        logger.info(f"[Memory] 初始化全局 Memory: {_global_mem}")
+        logger.info(f"[Memory] 鍒濆鍖栧叏灞€ Memory: {_global_mem}")
 
     _session_mem = os.path.join(actual_workspace, "CONTEXT.md")
     if not os.path.isfile(_session_mem):
@@ -464,7 +475,7 @@ async def deep_agent(
             f.write("# Session Context (this session only)\n\n"
                     "## Project Context\n\n"
                     "## Task Notes\n")
-        logger.info(f"[Memory] 初始化会话 Context: {_session_mem}")
+        logger.info(f"[Memory] 鍒濆鍖栦細璇?Context: {_session_mem}")
 
     _MAX_MEMORY_CHARS = 4000
     _mem_files_to_use = []
@@ -477,7 +488,7 @@ async def deep_agent(
                 _truncated = _full[:_MAX_MEMORY_CHARS].rsplit("\n", 1)[0]
                 _tmp_path = _mf + ".truncated"
                 with open(_tmp_path, "w", encoding="utf-8") as f:
-                    f.write(_truncated + "\n\n(Memory truncated — keep entries concise to stay under limit)\n")
+                    f.write(_truncated + "\n\n(Memory truncated 鈥?keep entries concise to stay under limit)\n")
                 _mem_files_to_use.append(_tmp_path)
                 logger.warning(
                     f"[Memory] {os.path.basename(_mf)} too large ({_mf_size:,} chars), "
@@ -489,35 +500,15 @@ async def deep_agent(
             _mem_files_to_use.append(_mf)
 
     agent_kwargs["memory"] = _mem_files_to_use
-    logger.info(f"[Memory] 已启用记忆: {[os.path.basename(f) for f in _mem_files_to_use]}")
+    logger.info(f"[Memory] 宸插惎鐢ㄨ蹇? {[os.path.basename(f) for f in _mem_files_to_use]}")
 
-    # 将主 agent 的关键策略注入到 general-purpose 子 agent 的 system_prompt，
-    # 使子 agent 在处理 skill/tool 相关任务时遵循相同的工作流。
-    _subagent_policy = f"""\n
-## Workspace
-Your workspace directory is {actual_workspace}/.
-All files should be created under this directory using absolute paths.
-SKILL.md files are instruction documents — use `read_file` to read them, NEVER `execute` them.
-
-## Skills CLI (CRITICAL)
-NEVER use `npx skills`. Use `skills` directly. When installing: `HOME={actual_workspace} skills add <package> -g -y --agent '*'`. ALL flags are mandatory — omitting any will hang on interactive prompts.
-
-## Task Resources
-- **Existing skill?** → `read_file` the SKILL.md and follow it. Check `/skills/` for local installs first.
-- **Research / reports / reviews / surveys / discoveries?** → `read_file("/skills/deep-research/SKILL.md")` and follow its workflow.
-- **Need a capability?** → Check built-in tools, then `read_file("/builtin-skills/tooluniverse/SKILL.md")`.
-- **PDF processing?** → `read_file("/builtin-skills/pdf/SKILL.md")`. For form filling, also read FORMS.md.
-- **Need external info?** → `web_search` / `web_crawl`.
-- **Create a tool** → `read_file("/builtin-skills/tool-creator/SKILL.md")`. NEVER write to /app/Tools/ directly.
-- **Create a skill** → `read_file("/builtin-skills/skill-creator/SKILL.md")`. NEVER write to `/skills/` directly.
-- **Find ecosystem skill** → `read_file("/builtin-skills/find-skills/SKILL.md")`. After 2-3 failures, create from scratch.
-Always use `write_file` to workspace then `propose_skill_save` / `propose_tool_save`.
-"""
-    GENERAL_PURPOSE_SUBAGENT["system_prompt"] = DEFAULT_SUBAGENT_PROMPT + _subagent_policy
+    agent_kwargs["subagents"] = build_deepagents_subagent_configs(
+        definitions=default_subagent_definitions(),
+        available_tools=_RESEARCH_SUBAGENT_TOOLS,
+    )
 
     agent = create_deep_agent(**agent_kwargs)
 
-    GENERAL_PURPOSE_SUBAGENT["system_prompt"] = DEFAULT_SUBAGENT_PROMPT
 
     logger.info(
         f"[Agent] session={session_id}, workspace={actual_workspace}, "
@@ -527,9 +518,9 @@ Always use `write_file` to workspace then `propose_skill_save` / `propose_tool_s
     return agent, sse_middleware, context_window, diag
 
 
-# ───────────────────────────────────────────────────────────────────
-# Eval 模式 Agent（精简版，用于 skill 测试）
-# ───────────────────────────────────────────────────────────────────
+# 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
+# Eval 妯″紡 Agent锛堢簿绠€鐗堬紝鐢ㄤ簬 skill 娴嬭瘯锛?
+# 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
 async def deep_agent_eval(
     session_id: str,
@@ -537,13 +528,13 @@ async def deep_agent_eval(
     skill_sources: Optional[List[str]] = None,
 ) -> Tuple[Any, SSEMonitoringMiddleware]:
     """
-    创建用于 eval 测试的精简 Agent — 不含元工具，只加载目标 skill。
+    鍒涘缓鐢ㄤ簬 eval 娴嬭瘯鐨勭簿绠€ Agent 鈥?涓嶅惈鍏冨伐鍏凤紝鍙姞杞界洰鏍?skill銆?
 
-    与 deep_agent() 的关键差异：
-      - 精简 system prompt（无 skill-creator/tool-creator 指令）
-      - 不包含 propose_skill_save / propose_tool_save 等元工具
-      - 不加载外部扩展工具（Tools/）
-      - 可指定只加载特定 skill sources
+    涓?deep_agent() 鐨勫叧閿樊寮傦細
+      - 绮剧畝 system prompt锛堟棤 skill-creator/tool-creator 鎸囦护锛?
+      - 涓嶅寘鍚?propose_skill_save / propose_tool_save 绛夊厓宸ュ叿
+      - 涓嶅姞杞藉閮ㄦ墿灞曞伐鍏凤紙Tools/锛?
+      - 鍙寚瀹氬彧鍔犺浇鐗瑰畾 skill sources
     """
     from backend.task_settings import TaskSettings as _TS
     ts = _TS()
@@ -580,7 +571,7 @@ async def deep_agent_eval(
         "system_prompt": system_prompt,
     }
 
-    # 构建后端（含 skill 路由）
+    # 鏋勫缓鍚庣锛堝惈 skill 璺敱锛?
     routes = {}
     resolved_sources: List[str] = []
 

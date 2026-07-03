@@ -439,6 +439,10 @@
                       <LoadingSpinnerIcon v-if="item.tool.status === 'calling' && item.tool.tool_meta?.icon" class="w-3 h-3 animate-spin text-blue-500 flex-shrink-0" />
                       <div class="flex items-center gap-1.5 min-w-0 flex-1 text-[11px] font-mono">
                         <span class="text-[var(--text-secondary)] font-semibold flex-shrink-0">{{ item.tool.function || item.tool.name }}</span>
+                        <span v-if="item.tool.metadata?.subagent_lifecycle && !expandedToolIds.has(item.id)"
+                          class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 dark:bg-indigo-950/30 dark:text-indigo-300 border border-indigo-100 dark:border-indigo-900/40">
+                          {{ item.tool.metadata.subagent_lifecycle.agent_name }}
+                        </span>
                         <span v-if="getToolArg(item.tool) && !expandedToolIds.has(item.id)" class="text-[var(--text-tertiary)] truncate max-w-[180px]">{{ getToolArg(item.tool) }}</span>
                       </div>
                       <span v-if="item.tool.duration_ms != null && item.tool.status === 'called'"
@@ -450,6 +454,22 @@
                     <!-- Expanded detail (input & output) -->
                     <div v-if="expandedToolIds.has(item.id)"
                       class="tool-detail-enter mt-1 ml-4 mr-1 flex flex-col gap-2 px-3 py-2.5 rounded-lg bg-[var(--background-menu-white)] border border-[var(--border-light)]">
+                      <!-- Subagent lifecycle -->
+                      <div v-if="item.tool.metadata?.subagent_lifecycle">
+                        <div class="text-[10px] text-[var(--text-tertiary)] mb-1 uppercase tracking-wider font-semibold">Subagent</div>
+                        <div class="text-[11px] leading-[1.5] text-[var(--text-secondary)] bg-[var(--fill-tsp-gray-main)] rounded-md px-2.5 py-2 border border-[var(--border-light)]">
+                          <div class="flex flex-wrap gap-x-3 gap-y-1 font-mono text-[10px] text-[var(--text-tertiary)]">
+                            <span>agent={{ item.tool.metadata.subagent_lifecycle.agent_name }}</span>
+                            <span>role={{ item.tool.metadata.subagent_lifecycle.agent_role }}</span>
+                            <span>phase={{ item.tool.metadata.subagent_lifecycle.phase }}</span>
+                            <span>boundary={{ item.tool.metadata.subagent_lifecycle.output_boundary }}</span>
+                            <span>citation_evidence={{ item.tool.metadata.subagent_lifecycle.citation_evidence }}</span>
+                          </div>
+                          <div v-if="item.tool.metadata.subagent_lifecycle.description" class="mt-1 text-[11px] text-[var(--text-secondary)]">
+                            {{ item.tool.metadata.subagent_lifecycle.description }}
+                          </div>
+                        </div>
+                      </div>
                       <!-- Input -->
                       <div v-if="item.tool.args && Object.keys(item.tool.args).length > 0">
                         <div class="text-[10px] text-[var(--text-tertiary)] mb-1 uppercase tracking-wider font-semibold">Input</div>

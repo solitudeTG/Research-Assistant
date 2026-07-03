@@ -7,6 +7,10 @@ from pathlib import Path
 from backend.research_assistant.audit import EvidenceAudit
 from backend.research_assistant.models import IngestionResult
 from backend.research_assistant.retrieval import EvidenceHit, hybrid_search_evidence
+from backend.research_assistant.subagents import (
+    SubagentDefinition,
+    default_subagent_definitions,
+)
 from backend.research_assistant.storage.repository import (
     PersistSummary,
     ResearchAuditResult,
@@ -16,9 +20,11 @@ from backend.research_assistant.storage.repository import (
     ResearchProjectPaperAsset,
     create_research_project,
     delete_memory_entry,
+    ensure_subagent_definitions,
     get_audit_result,
     get_evidence_record,
     get_session_research_project,
+    list_subagent_definitions,
     list_project_paper_assets,
     list_memory_entries,
     list_research_projects,
@@ -29,6 +35,7 @@ from backend.research_assistant.storage.repository import (
     persist_ingestion_result,
     persist_memory_entry,
     persist_report_evidence_map,
+    persist_subagent_run,
     upsert_session_research_project,
 )
 
@@ -112,6 +119,74 @@ async def list_research_projects_from_database(
     connection = await asyncpg.connect(database_url)
     try:
         return await list_research_projects(connection, user_id=user_id)
+    finally:
+        await connection.close()
+
+
+async def ensure_subagent_definitions_in_database(
+    database_url: str,
+    *,
+    definitions: list[SubagentDefinition] | None = None,
+) -> None:
+    import asyncpg
+
+    connection = await asyncpg.connect(database_url)
+    try:
+        await ensure_subagent_definitions(
+            connection,
+            definitions=definitions or default_subagent_definitions(),
+        )
+    finally:
+        await connection.close()
+
+
+async def list_subagent_definitions_from_database(
+    database_url: str,
+    *,
+    enabled_only: bool = False,
+) -> list[SubagentDefinition]:
+    import asyncpg
+
+    connection = await asyncpg.connect(database_url)
+    try:
+        return await list_subagent_definitions(connection, enabled_only=enabled_only)
+    finally:
+        await connection.close()
+
+
+async def persist_subagent_run_to_database(
+    database_url: str,
+    *,
+    task_id: str,
+    parent_workflow_id: str,
+    agent_name: str,
+    agent_role: str,
+    status: str,
+    input_boundary: dict,
+    output_boundary: str,
+    evidence_refs: list[dict] | None = None,
+    outputs: dict | None = None,
+    warnings: list[dict] | None = None,
+    errors: list[dict] | None = None,
+) -> None:
+    import asyncpg
+
+    connection = await asyncpg.connect(database_url)
+    try:
+        await persist_subagent_run(
+            connection,
+            task_id=task_id,
+            parent_workflow_id=parent_workflow_id,
+            agent_name=agent_name,
+            agent_role=agent_role,
+            status=status,
+            input_boundary=input_boundary,
+            output_boundary=output_boundary,
+            evidence_refs=evidence_refs,
+            outputs=outputs,
+            warnings=warnings,
+            errors=errors,
+        )
     finally:
         await connection.close()
 

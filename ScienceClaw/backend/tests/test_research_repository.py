@@ -11,12 +11,16 @@ from backend.research_assistant.models import (
     IngestionResult,
     PaperChunk,
 )
+from backend.research_assistant.subagents import default_subagent_definitions
 from backend.research_assistant.storage import repository
 from backend.research_assistant.storage.repository import (
     create_research_project,
+    ensure_subagent_definitions,
     get_session_research_project,
+    list_subagent_definitions,
     list_project_paper_assets,
     list_research_projects,
+    persist_subagent_run,
     persist_chunk_embeddings,
     persist_database_evidence_source,
     persist_web_evidence_source,
@@ -96,6 +100,89 @@ async def test_create_research_project_inserts_and_returns_project():
         "created_at": None,
         "updated_at": None,
     }
+
+
+@pytest.mark.asyncio
+async def test_ensure_subagent_definitions_upserts_governed_defaults():
+    connection = RecordingConnection()
+
+    await ensure_subagent_definitions(
+        connection,
+        definitions=default_subagent_definitions(),
+    )
+
+    sql, rows = connection.executemany_calls[0]
+    assert "insert into research_subagent_definitions" in sql.lower()
+    assert "on conflict (name) do update" in sql.lower()
+    assert len(rows) == 2
+    first_row = rows[0]
+    assert first_row[0] == "research_auditor"
+    assert first_row[1] == "Auditor Agent"
+    assert first_row[7] == "process_trace"
+    assert first_row[8] is False
+    assert first_row[9] is False
+    assert first_row[13] is False
+
+
+@pytest.mark.asyncio
+async def test_list_subagent_definitions_returns_enabled_registry_rows():
+    connection = RecordingConnection()
+    connection.fetch_result = [
+        {
+            "name": "paper_reader_worker",
+            "display_name": "Reader Worker",
+            "description": "Read scoped papers.",
+            "system_prompt": "You are a scoped Reader Worker.",
+            "skill_refs": '["research-paper-reading"]',
+            "allowed_tools": '["read_research_evidence"]',
+            "input_boundaries": '{"requires":["material_package"]}',
+            "output_boundary": "context_only",
+            "can_answer_user": False,
+            "can_write_artifacts": False,
+            "enabled": True,
+            "version": 1,
+            "validation_status": "valid",
+            "citation_evidence": False,
+        }
+    ]
+
+    definitions = await list_subagent_definitions(connection, enabled_only=True)
+
+    sql, args = connection.fetch_calls[0]
+    assert "from research_subagent_definitions" in sql.lower()
+    assert "where enabled = true" in sql.lower()
+    assert args == ()
+    assert len(definitions) == 1
+    assert definitions[0].name == "paper_reader_worker"
+    assert definitions[0].allowed_tools == ["read_research_evidence"]
+    assert definitions[0].input_boundaries == {"requires": ["material_package"]}
+
+
+@pytest.mark.asyncio
+async def test_persist_subagent_run_records_context_only_boundary():
+    connection = RecordingConnection()
+
+    await persist_subagent_run(
+        connection,
+        task_id="task-1",
+        parent_workflow_id="workflow-1",
+        agent_name="paper_reader_worker",
+        agent_role="reader",
+        status="completed",
+        input_boundary={"scope": "selected_evidence"},
+        output_boundary="context_only",
+        evidence_refs=[{"evidence_id": 9, "source_type": "paper"}],
+        outputs={"notes": ["finding"]},
+    )
+
+    sql, args = connection.executed[0]
+    assert "insert into research_subagent_runs" in sql.lower()
+    assert "on conflict (task_id) do update" in sql.lower()
+    assert args[0] == "task-1"
+    assert args[1] == "workflow-1"
+    assert args[2] == "paper_reader_worker"
+    assert args[6] == "context_only"
+    assert args[7] is False
 
 
 @pytest.mark.asyncio

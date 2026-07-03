@@ -4,7 +4,7 @@ doc_kind: feature
 status: active
 owner: solitudeTG
 created: 2026-06-28
-updated: 2026-06-28
+updated: 2026-06-29
 ---
 
 # F007: Research Artifact Generation
@@ -56,7 +56,9 @@ DOCX/PDF export was deferred because formatting complexity would not improve the
 
 ## Current Status
 
-In Progress. Markdown report generation has substantial historical verification recorded in `F001`.
+Completed for MVP scope.
+
+Markdown report generation now writes auditable research artifacts with evidence maps, sidecar JSON, Trust Summary, Reader Summary, Claim Checks, Citation Evidence, Context-Only Memory, Evidence Gaps, limitations, and file-panel visibility. This does not claim DOCX/PDF export, fully autonomous report composition, or online LLM-backed report E2E.
 
 ## Links
 
@@ -89,23 +91,26 @@ In Progress. Markdown report generation has substantial historical verification 
 
 ## Acceptance Criteria
 
-- [ ] Markdown report includes evidence-grounded findings.
-- [ ] Report sidecar/evidence map preserves citation and audit traceability.
-- [ ] Unsupported or invalid-source claims appear as gaps, not approved findings.
-- [ ] Generated report files are visible through existing artifact/file surfaces.
+- [x] Markdown report includes evidence-grounded findings.
+- [x] Report sidecar/evidence map preserves citation and audit traceability.
+- [x] Unsupported or invalid-source claims appear as gaps, not approved findings.
+- [x] Generated report files are visible through existing artifact/file surfaces.
 
 ## Acceptance Map
 
 | Claim | Acceptance | Evidence | Status |
 | --- | --- | --- | --- |
-| Markdown research artifacts can be generated. | `/research/report` creates Markdown and sidecar/evidence data. | Historical report evidence in `F001`. | Partial |
-| Reports preserve audit and boundary information. | Reports include Trust Summary, Claim Checks, citation evidence, context-only memory, gaps, and limitations. | Historical report follow-up evidence in `F001`. | Partial |
+| Markdown research artifacts can be generated. | `/research/report` creates Markdown files, sidecar/evidence JSON, report-to-evidence map rows, and round file entries. | Historical report tests and UI/file-panel E2E from `F001`; current research backend suite passed on 2026-06-29. | MVP done |
+| Reports preserve audit and boundary information. | Reports include Trust Summary, Reader Summary, Claim Checks, Citation Evidence, Context-Only Memory, Evidence Gaps, limitations, and context boundaries. | Historical report follow-up evidence from `F001`; current research backend suite passed on 2026-06-29. | MVP done |
+| Unsupported claims remain gaps. | Unsupported/invalid-source claims are excluded from approved findings and surfaced as Evidence Gaps with limitations/next steps. | Historical report gaps and limitations red-green verification from `F001`. | MVP done |
+| Report citations expose source identity. | Report Citation Evidence entries render inspectable identity such as URL, database name, query, file path, and retrieval timestamp when present. | Historical report citation-identity and actual-source-scope tests from `F001`. | MVP done |
 
 ## State Timeline
 
 | Date | State | Trigger | Evidence | Note |
 | --- | --- | --- | --- | --- |
 | 2026-06-28 | active | Feature split from F001 | This Feature and `INDEX.md` | Created to own report/artifact recovery. |
+| 2026-06-29 | MVP completed | F001 historical evidence migrated to owning Feature | Current research backend suite and AgentMentor strict check | Export formats and online LLM-backed report E2E remain future scope. |
 
 ## Patch History
 
@@ -113,16 +118,22 @@ None yet.
 
 ## Evidence
 
-Move report-specific evidence from `F001` here during the next report-generation change.
+Historical report-generation evidence migrated from `F001`:
+
+- `/research/report` writes Markdown artifacts, sidecar/evidence JSON, report-to-evidence rows, and real report step/done events.
+- Report tests verified Trust Summary, sidecar Trust Summary, Claim Checks, approved findings gating, clean reader-facing claim text, generic no-citation wording, same-user context-memory recall, Evidence Gaps, limitations, source identity, actual source-scope wording, context-boundary manifests, and Reader Summary.
+- Route/frontend tests verified report completion messages, report response metadata, recovered report summaries, and file/artifact surface integration.
+- Browser/UI E2E verified Markdown plus evidence-map files appear in the file panel.
+- Current document-convergence verification: `$env:PYTHONPATH='E:\Self-Project\Research-Assistant\ScienceClaw'; python -m pytest ScienceClaw\backend\tests -k research -q --basetemp .pytest_tmp\progress-audit` -> `178 passed`; `knowledge_check.py --strict` -> 0 errors, 0 warnings.
 
 ## Recovery Snapshot
 
 - Read first: this Feature, F006, F004, `ADR-001`.
-- Current capability state: Markdown report path exists with historical verification in `F001`.
+- Current capability state: MVP Markdown research artifact path is complete and owned here.
 - Known risks: LLM-backed report E2E is not verified without provider configuration.
 - Next safe action: Attribute report output, sidecar, or artifact-panel changes here.
 - Unblock condition: Provider key/model is needed for online LLM-backed report E2E.
 
 ## Next Step
 
-Move report-generation Acceptance Map rows from `F001` into this Feature in a focused follow-up.
+Start a separate exporter or composition-quality Feature before claiming DOCX/PDF export, richer preview workflows, or online LLM-backed report quality.

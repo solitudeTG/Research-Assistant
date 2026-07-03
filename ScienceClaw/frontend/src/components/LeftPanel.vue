@@ -29,6 +29,18 @@
         <div v-if="isResearchLibraryActive" class="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-gradient-to-b from-emerald-400 to-cyan-500 rounded-r-full"></div>
       </button>
 
+      <!-- Research Agents Tab -->
+      <button @click="handleResearchAgentsTabClick"
+        class="nav-btn size-10 rounded-xl flex items-center justify-center transition-all duration-250 group relative"
+        :class="isResearchAgentsActive
+          ? 'bg-gradient-to-br from-slate-600 to-blue-600 text-white shadow-md shadow-blue-500/25'
+          : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-600 dark:hover:text-gray-300'"
+        title="研究智能体"
+      >
+        <Network :size="19" :stroke-width="isResearchAgentsActive ? 2.5 : 1.8" />
+        <div v-if="isResearchAgentsActive" class="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-gradient-to-b from-slate-400 to-blue-500 rounded-r-full"></div>
+      </button>
+
       <!-- Skills Tab -->
       <button @click="handleSkillsTabClick"
         class="nav-btn size-10 rounded-xl flex items-center justify-center transition-all duration-250 group relative"
@@ -283,7 +295,7 @@
 import {
   Plus, Command, MessageSquareDashed, Blocks, MessageSquare,
   Wrench, CalendarClock, Settings2, Search, X, ChevronRight, Pin,
-  Play, BookOpen
+  Play, BookOpen, Network
 } from 'lucide-vue-next';
 import SessionItem from './SessionItem.vue';
 import UserMenu from './UserMenu.vue';
@@ -366,12 +378,13 @@ const filterTabs = computed(() => [
 
 // Navigation State
 const isResearchLibraryActive = computed(() => route.path.startsWith('/chat/research-library'))
-const isChatActive = computed(() => route.path === '/' || route.path.startsWith('/chat/session') || (route.path.startsWith('/chat') && !route.path.includes('skills') && !route.path.includes('tools') && !route.path.startsWith('/chat/tasks') && !isResearchLibraryActive.value))
+const isResearchAgentsActive = computed(() => route.path.startsWith('/chat/research-agents'))
+const isChatActive = computed(() => route.path === '/' || route.path.startsWith('/chat/session') || (route.path.startsWith('/chat') && !route.path.includes('skills') && !route.path.includes('tools') && !route.path.startsWith('/chat/tasks') && !isResearchLibraryActive.value && !isResearchAgentsActive.value))
 const isSkillsActive = computed(() => route.path.includes('/chat/skills'))
 const isToolsActive = computed(() => route.path.includes('/chat/tools') && !route.path.startsWith('/chat/tasks'))
 const isTasksActive = computed(() => route.path.startsWith('/chat/tasks'))
-const shouldShowSessionDrawer = computed(() => !isResearchLibraryActive.value)
-const leftPanelWidth = computed(() => isResearchLibraryActive.value ? '60px' : (isLeftPanelShow.value ? '320px' : '60px'))
+const shouldShowSessionDrawer = computed(() => !isResearchLibraryActive.value && !isResearchAgentsActive.value)
+const leftPanelWidth = computed(() => (isResearchLibraryActive.value || isResearchAgentsActive.value) ? '60px' : (isLeftPanelShow.value ? '320px' : '60px'))
 
 const handleChatTabClick = () => {
   if (isChatActive.value && isLeftPanelShow.value) {
@@ -397,6 +410,10 @@ const handleSkillsTabClick = () => {
 
 const handleResearchLibraryTabClick = () => {
   router.push('/chat/research-library')
+}
+
+const handleResearchAgentsTabClick = () => {
+  router.push('/chat/research-agents')
 }
 
 const handleToolsTabClick = () => {
@@ -514,8 +531,8 @@ onUnmounted(() => {
 })
 
 watch(() => route.path, async (newPath, oldPath) => {
-  const wasChatSession = oldPath?.startsWith('/chat/') && !oldPath.includes('skills') && !oldPath.includes('tools') && !oldPath.startsWith('/chat/tasks') && !oldPath.startsWith('/chat/research-library')
-  const isChatSession = newPath?.startsWith('/chat/') && !newPath.includes('skills') && !newPath.includes('tools') && !newPath.startsWith('/chat/tasks') && !newPath.startsWith('/chat/research-library')
+  const wasChatSession = oldPath?.startsWith('/chat/') && !oldPath.includes('skills') && !oldPath.includes('tools') && !oldPath.startsWith('/chat/tasks') && !oldPath.startsWith('/chat/research-library') && !oldPath.startsWith('/chat/research-agents')
+  const isChatSession = newPath?.startsWith('/chat/') && !newPath.includes('skills') && !newPath.includes('tools') && !newPath.startsWith('/chat/tasks') && !newPath.startsWith('/chat/research-library') && !newPath.startsWith('/chat/research-agents')
   if (!(wasChatSession && isChatSession)) {
     await updateSessions()
   }

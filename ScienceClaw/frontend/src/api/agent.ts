@@ -293,6 +293,23 @@ export interface RuntimeResultAuditExport extends RuntimeResultAudit {
   round_files: RoundFileInfo[];
 }
 
+export interface ResearchAgentDefinition {
+  name: string;
+  display_name: string;
+  description: string;
+  system_prompt: string;
+  skill_refs: string[];
+  allowed_tools: string[];
+  input_boundaries: Record<string, unknown>;
+  output_boundary: 'context_only' | 'process_trace' | 'artifact' | string;
+  can_answer_user: boolean;
+  can_write_artifacts: boolean;
+  enabled: boolean;
+  version: number;
+  validation_status: 'valid' | 'invalid' | 'draft' | string;
+  citation_evidence: boolean;
+}
+
 export async function createSession(data: CreateSessionRequest): Promise<Session> {
   const response = await apiClient.put<ApiResponse<Session>>('/sessions', data);
   return response.data.data;
@@ -501,6 +518,13 @@ export async function exportRuntimeResultAudit(
     filters ?? {},
   );
   return response.data.data;
+}
+
+export async function listResearchAgents(): Promise<ResearchAgentDefinition[]> {
+  const response = await apiClient.get<ApiResponse<{ agents: ResearchAgentDefinition[] }>>(
+    `/sessions/research/agents`,
+  );
+  return response.data.data.agents;
 }
 
 export async function promoteResearchMemory(
