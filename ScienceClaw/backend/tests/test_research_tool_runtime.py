@@ -45,6 +45,20 @@ def test_collect_tools_exposes_only_active_research_tool_pack(monkeypatch):
     assert [tool.name for tool in tools] == ["paper_lookup"]
 
 
+def test_supervisor_prompt_guides_autonomous_research_subagent_delegation():
+    prompt = agent.get_system_prompt("/workspace")
+
+    assert "## Research Subagent Delegation" in prompt
+    assert "simple factual Q&A or casual chat" in prompt
+    assert "Stay single-agent" in prompt
+    assert "paper_reader_worker" in prompt
+    assert "research_auditor" in prompt
+    assert "Choose autonomously" in prompt
+    assert "Do not ask the user to choose an Agent" in prompt
+    assert "context_only or process_trace" in prompt
+    assert "citation evidence" in prompt
+
+
 def test_external_tool_proxy_carries_research_tool_pack_metadata(monkeypatch, tmp_path):
     tools_dir = tmp_path / "Tools"
     tools_dir.mkdir()
