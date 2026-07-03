@@ -348,8 +348,38 @@ class SSEMonitoringMiddleware(AgentMiddleware):
             "phase": phase,
             "status": status,
             "description": str(tool_args.get("description") or ""),
+            "delegation_decision": self._subagent_delegation_decision(agent_name, identity),
             "output_boundary": identity["output_boundary"],
             "citation_evidence": False,
+        }
+
+    def _subagent_delegation_decision(self, agent_name: str, identity: Dict[str, str]) -> Dict[str, str]:
+        triggers = {
+            "paper_reader_worker": (
+                "two_or_more_material_synthesis",
+                "Reader Worker handles scoped reading before Supervisor synthesis.",
+            ),
+            "research_auditor": (
+                "boundary_audit_or_trust_check",
+                "Auditor independently checks drafted claims, evidence boundaries, and citation consistency.",
+            ),
+            "general-purpose": (
+                "general_runtime_task",
+                "DeepAgents runtime delegated a general-purpose task.",
+            ),
+        }
+        trigger, reason = triggers.get(
+            agent_name,
+            (
+                f"{identity.get('agent_role', 'subagent')}_delegation",
+                "Supervisor delegated a scoped subagent task through the task tool.",
+            ),
+        )
+        return {
+            "decision_source": "supervisor_task_tool",
+            "decision": "delegate",
+            "trigger": trigger,
+            "reason": reason,
         }
 
     def _hash_runtime_result(self, value: Any) -> str:

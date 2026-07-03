@@ -500,8 +500,9 @@ def _map_plan_to_steps(plan: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             return "failed"
         return "pending"
 
-    return [
-        {
+    steps = []
+    for step in plan:
+        mapped = {
             "event_id": _new_event_id(),
             "timestamp": _now_ts(),
             "status": _map_status(str(step.get("status") or "pending")),
@@ -509,8 +510,10 @@ def _map_plan_to_steps(plan: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "description": str(step.get("content") or ""),
             "tools": step.get("tools") if isinstance(step.get("tools"), list) else [],
         }
-        for step in plan
-    ]
+        if isinstance(step.get("metadata"), dict):
+            mapped["metadata"] = step["metadata"]
+        steps.append(mapped)
+    return steps
 
 
 def _infer_tool_name(tool_function: str) -> str:

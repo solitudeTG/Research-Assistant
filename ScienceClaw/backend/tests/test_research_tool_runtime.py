@@ -51,8 +51,13 @@ def test_supervisor_prompt_guides_autonomous_research_subagent_delegation():
 
     assert "## Research Subagent Delegation" in prompt
     assert "## Required Research Delegation" in prompt
+    assert "## Research Delegation Trigger Matrix" in prompt
     assert "simple factual Q&A or casual chat" in prompt
     assert "Stay single-agent" in prompt
+    assert "Simple factual Q&A or casual chat: stay single-agent" in prompt
+    assert "Two-or-more-material synthesis: call Reader Worker first" in prompt
+    assert "Boundary/audit/trust check: call Auditor after drafting" in prompt
+    assert "Both synthesis and audit: Reader first, draft, then Auditor" in prompt
     assert "must delegate at least one scoped read" in prompt
     assert "must delegate an independent audit" in prompt
     assert "web_search`, `web_crawl`, reading files yourself, or writing todos do not satisfy" in prompt
@@ -246,6 +251,12 @@ def test_task_tool_trace_carries_real_subagent_lifecycle_metadata():
         "phase": "started",
         "status": "running",
         "description": "Read three selected papers",
+        "delegation_decision": {
+            "decision_source": "supervisor_task_tool",
+            "decision": "delegate",
+            "trigger": "two_or_more_material_synthesis",
+            "reason": "Reader Worker handles scoped reading before Supervisor synthesis.",
+        },
         "output_boundary": "context_only",
         "citation_evidence": False,
     }
@@ -280,6 +291,12 @@ def test_task_tool_trace_labels_deepagents_builtin_subagent_metadata():
         "phase": "started",
         "status": "running",
         "description": "Handle a generic runtime task",
+        "delegation_decision": {
+            "decision_source": "supervisor_task_tool",
+            "decision": "delegate",
+            "trigger": "general_runtime_task",
+            "reason": "DeepAgents runtime delegated a general-purpose task.",
+        },
         "output_boundary": "process_trace",
         "citation_evidence": False,
     }
@@ -335,6 +352,73 @@ async def test_runner_persists_real_subagent_lifecycle_runs(monkeypatch):
     assert kwargs["output_boundary"] == "context_only"
     assert kwargs["evidence_refs"] == [{"evidence_id": 9, "source_type": "paper"}]
     assert kwargs["outputs"] == {"result_summary": "notes"}
+
+
+def test_supervisor_guard_lifecycle_uses_explicit_decision_source(monkeypatch):
+    async def unused_get_task_settings(*args, **kwargs):
+        return SimpleNamespace()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "backend.deepagent.sessions",
+        types.SimpleNamespace(ScienceSession=object),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "backend.task_settings",
+        types.SimpleNamespace(get_task_settings=unused_get_task_settings, TaskSettings=object),
+    )
+    sys.modules.pop("backend.deepagent.runner", None)
+    runner = importlib.import_module("backend.deepagent.runner")
+
+    lifecycle = runner._subagent_guard_lifecycle(
+        agent_name="research_auditor",
+        task_id="guard-audit-1",
+        phase="started",
+        status="running",
+        description="Audit draft",
+        decision={
+            "trigger": "boundary_audit_or_trust_check",
+            "reason": "audit required",
+        },
+    )
+
+    assert lifecycle["agent_name"] == "research_auditor"
+    assert lifecycle["delegation_decision"]["decision_source"] == "supervisor_delegation_guard"
+    assert lifecycle["delegation_decision"]["trigger"] == "boundary_audit_or_trust_check"
+
+
+def test_runner_task_calling_lifecycle_fallback_labels_deepagents_task(monkeypatch):
+    async def unused_get_task_settings(*args, **kwargs):
+        return SimpleNamespace()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "backend.deepagent.sessions",
+        types.SimpleNamespace(ScienceSession=object),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "backend.task_settings",
+        types.SimpleNamespace(get_task_settings=unused_get_task_settings, TaskSettings=object),
+    )
+    sys.modules.pop("backend.deepagent.runner", None)
+    runner = importlib.import_module("backend.deepagent.runner")
+
+    lifecycle = runner._task_tool_lifecycle_from_args(
+        tool_args={
+            "subagent_type": "research_auditor",
+            "description": "Audit draft",
+        },
+        tool_call_id="call-auditor-1",
+        phase="started",
+        status="running",
+    )
+
+    assert lifecycle["task_id"] == "call-auditor-1"
+    assert lifecycle["agent_name"] == "research_auditor"
+    assert lifecycle["phase"] == "started"
+    assert lifecycle["delegation_decision"]["decision_source"] == "supervisor_task_tool"
 
 
 @pytest.mark.asyncio

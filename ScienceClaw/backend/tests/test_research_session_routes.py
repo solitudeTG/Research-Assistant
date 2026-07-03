@@ -177,6 +177,44 @@ def test_tool_call_mapping_preserves_subagent_lifecycle_metadata(monkeypatch):
     assert mapped["data"]["metadata"]["subagent_lifecycle"] == lifecycle
 
 
+def test_plan_mapping_preserves_multi_agent_decision_metadata(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+
+    mapped = sessions._map_science_stream_to_agent_event(
+        {
+            "event": "plan_update",
+            "data": {
+                "plan": [
+                    {
+                        "id": "S1",
+                        "content": "Compare materials",
+                        "status": "in_progress",
+                        "metadata": {
+                            "multi_agent_decision": {
+                                "enabled": True,
+                                "decision_source": "supervisor_delegation_guard",
+                                "reason": "multi-material synthesis",
+                                "selected_agents": ["paper_reader_worker", "research_auditor"],
+                                "skipped_agents": [],
+                                "trigger": "two_or_more_material_synthesis_with_boundary_audit",
+                                "available_agent_types": ["system_builtin", "custom"],
+                                "requires_reader": True,
+                                "requires_auditor": True,
+                                "confidence": 0.86,
+                            }
+                        },
+                    }
+                ]
+            },
+        }
+    )
+
+    assert mapped["event"] == "plan"
+    decision = mapped["data"]["steps"][0]["metadata"]["multi_agent_decision"]
+    assert decision["decision_source"] == "supervisor_delegation_guard"
+    assert decision["selected_agents"] == ["paper_reader_worker", "research_auditor"]
+
+
 def _load_sessions_module(monkeypatch):
     async def unused_async(*args, **kwargs):
         raise AssertionError("unexpected ScienceClaw session dependency call")

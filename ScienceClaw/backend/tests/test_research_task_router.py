@@ -1,4 +1,4 @@
-from backend.research_assistant.task_router import classify_research_task
+from backend.research_assistant.task_router import classify_research_task, decide_research_multi_agent
 
 
 def test_research_task_router_skips_obvious_non_evidence_turns():
@@ -34,3 +34,26 @@ def test_research_task_router_defaults_local_questions_to_evidence_qa():
     assert route.decision_source == "rule_fallback"
     assert route.needs_retrieval is True
     assert route.scope == "project_or_session"
+
+
+def test_multi_agent_decision_keeps_simple_question_single_agent():
+    decision = decide_research_multi_agent("What is DNA? Answer in one sentence.")
+
+    assert decision.enabled is False
+    assert decision.selected_agents == []
+    assert decision.skipped_agents == ["paper_reader_worker", "research_auditor"]
+    assert decision.trigger in {"single_agent_simple_turn", "single_agent_default"}
+
+
+def test_multi_agent_decision_selects_reader_then_auditor_for_complex_boundary_task():
+    decision = decide_research_multi_agent(
+        "Material A: Alpha uses retrieval. Material B: Beta uses reranking. "
+        "Please synthesize the two materials and audit the evidence boundary."
+    )
+
+    assert decision.enabled is True
+    assert decision.decision_source == "supervisor_delegation_guard"
+    assert decision.requires_reader is True
+    assert decision.requires_auditor is True
+    assert decision.selected_agents == ["paper_reader_worker", "research_auditor"]
+    assert decision.trigger == "two_or_more_material_synthesis_with_boundary_audit"
