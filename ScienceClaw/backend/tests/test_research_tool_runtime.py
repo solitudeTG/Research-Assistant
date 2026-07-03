@@ -226,9 +226,13 @@ def test_task_tool_trace_carries_real_subagent_lifecycle_metadata():
     start_event = middleware.drain_events()[0]
 
     assert start_event["data"]["subagent_lifecycle"] == {
+        "workflow_id": "call-reader-1",
         "task_id": "call-reader-1",
+        "parent_agent": "DeepAgent",
         "agent_name": "paper_reader_worker",
         "agent_role": "reader",
+        "agent_type": "custom",
+        "source": "registry",
         "phase": "started",
         "status": "running",
         "description": "Read three selected papers",
@@ -242,6 +246,33 @@ def test_task_tool_trace_carries_real_subagent_lifecycle_metadata():
     assert complete_event["data"]["subagent_lifecycle"]["phase"] == "completed"
     assert complete_event["data"]["subagent_lifecycle"]["status"] == "completed"
     assert complete_event["data"]["subagent_lifecycle"]["agent_role"] == "reader"
+    assert complete_event["data"]["subagent_lifecycle"]["parent_agent"] == "DeepAgent"
+
+
+def test_task_tool_trace_labels_deepagents_builtin_subagent_metadata():
+    middleware = SSEMonitoringMiddleware(agent_name="DeepAgent")
+    task_args = {
+        "subagent_type": "general-purpose",
+        "description": "Handle a generic runtime task",
+    }
+
+    middleware._before_tool({"name": "task", "args": task_args, "id": "call-general-1"})
+    start_event = middleware.drain_events()[0]
+
+    assert start_event["data"]["subagent_lifecycle"] == {
+        "workflow_id": "call-general-1",
+        "task_id": "call-general-1",
+        "parent_agent": "DeepAgent",
+        "agent_name": "general-purpose",
+        "agent_role": "general",
+        "agent_type": "system_builtin",
+        "source": "deepagents_builtin",
+        "phase": "started",
+        "status": "running",
+        "description": "Handle a generic runtime task",
+        "output_boundary": "process_trace",
+        "citation_evidence": False,
+    }
 
 
 @pytest.mark.asyncio

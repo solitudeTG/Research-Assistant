@@ -145,8 +145,11 @@ def test_subagent_lifecycle_event_is_a_real_step_with_boundary_metadata():
     assert data["metadata"]["subagent_lifecycle"] == {
         "workflow_id": "wf-1",
         "task_id": "task-1",
+        "parent_agent": "DeepAgent",
         "agent_name": "paper_reader_worker",
         "agent_role": "reader",
+        "agent_type": "custom",
+        "source": "registry",
         "phase": "started",
         "status": "running",
         "output_boundary": "context_only",

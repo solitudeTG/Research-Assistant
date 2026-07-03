@@ -139,6 +139,38 @@ def registry_subagent_definitions() -> list[SubagentDefinition]:
     return [*system_builtin_subagent_definitions(), *default_subagent_definitions()]
 
 
+def subagent_lifecycle_identity(agent_name: str) -> dict[str, str]:
+    identities = {
+        "paper_reader_worker": {
+            "agent_role": "reader",
+            "agent_type": "custom",
+            "source": "registry",
+            "output_boundary": "context_only",
+        },
+        "research_auditor": {
+            "agent_role": "auditor",
+            "agent_type": "custom",
+            "source": "registry",
+            "output_boundary": "process_trace",
+        },
+        "general-purpose": {
+            "agent_role": "general",
+            "agent_type": "system_builtin",
+            "source": "deepagents_builtin",
+            "output_boundary": "process_trace",
+        },
+    }
+    return identities.get(
+        agent_name,
+        {
+            "agent_role": "subagent",
+            "agent_type": "custom",
+            "source": "runtime",
+            "output_boundary": "process_trace",
+        },
+    )
+
+
 def validate_subagent_definition(definition: SubagentDefinition) -> None:
     if not definition.name.strip():
         raise ValueError("subagent name is required")
@@ -210,15 +242,20 @@ def build_subagent_lifecycle_step_event(
     description: str,
     output_boundary: str,
     evidence_refs: list[dict[str, Any]] | None = None,
+    parent_agent: str = "DeepAgent",
 ) -> dict[str, Any]:
     if output_boundary not in OUTPUT_BOUNDARIES:
         raise ValueError("output_boundary is invalid")
+    identity = subagent_lifecycle_identity(agent_name)
     metadata = {
         "subagent_lifecycle": {
             "workflow_id": workflow_id,
             "task_id": task_id,
+            "parent_agent": parent_agent,
             "agent_name": agent_name,
             "agent_role": agent_role,
+            "agent_type": identity["agent_type"],
+            "source": identity["source"],
             "phase": phase,
             "status": status,
             "output_boundary": output_boundary,

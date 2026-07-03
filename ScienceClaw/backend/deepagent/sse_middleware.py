@@ -22,6 +22,7 @@ from loguru import logger
 from langchain.agents.middleware import AgentMiddleware
 
 from backend.deepagent.sse_protocol import get_protocol_manager
+from backend.research_assistant.subagents import subagent_lifecycle_identity
 
 
 # ───────────────────────────────────────────────────────────────────
@@ -334,22 +335,20 @@ class SSEMonitoringMiddleware(AgentMiddleware):
         agent_name = str(tool_args.get("subagent_type") or "").strip()
         if not agent_name:
             return {}
-        role_by_agent = {
-            "paper_reader_worker": "reader",
-            "research_auditor": "auditor",
-        }
-        output_boundary_by_agent = {
-            "paper_reader_worker": "context_only",
-            "research_auditor": "process_trace",
-        }
+        identity = subagent_lifecycle_identity(agent_name)
+        workflow_id = str(tool_args.get("workflow_id") or tool_call_id)
         return {
+            "workflow_id": workflow_id,
             "task_id": tool_call_id,
+            "parent_agent": self.agent_name,
             "agent_name": agent_name,
-            "agent_role": role_by_agent.get(agent_name, "subagent"),
+            "agent_role": identity["agent_role"],
+            "agent_type": identity["agent_type"],
+            "source": identity["source"],
             "phase": phase,
             "status": status,
             "description": str(tool_args.get("description") or ""),
-            "output_boundary": output_boundary_by_agent.get(agent_name, "process_trace"),
+            "output_boundary": identity["output_boundary"],
             "citation_evidence": False,
         }
 
