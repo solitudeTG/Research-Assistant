@@ -16,6 +16,7 @@ class PlanStep(TypedDict):
     priority: str
     inputs: NotRequired[dict]
     outputs: NotRequired[dict]
+    metadata: NotRequired[dict]
     created_at: int
 
 
@@ -34,5 +35,6 @@ def normalize_plan_steps(plan: list[PlanStep]) -> list[PlanStep]:
             "created_at": step.get("created_at") or now,
             "inputs": step.get("inputs") or {},
             "outputs": step.get("outputs") or {},
+            "metadata": step.get("metadata") or {},
         })
     return normalized

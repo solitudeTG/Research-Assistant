@@ -56,7 +56,9 @@ Raw text extraction alone was rejected because it loses scholarly structure, pag
 
 ## Current Status
 
-In Progress. Initial ingestion/parser/indexing slices have verification evidence recorded in `F001`.
+Completed for MVP scope.
+
+Uploaded paper-like documents can enter the canonical paper model, PDF ingestion has a GROBID-first path, chunks preserve source identity/section/page/chunk boundaries, and parser/index failures are represented as real workflow states. This completion claim is limited to the current paper-ingestion MVP; Docling packaging, complex PDF/OCR fallback quality, and richer parser selection remain follow-ups.
 
 ## Links
 
@@ -88,17 +90,19 @@ In Progress. Initial ingestion/parser/indexing slices have verification evidence
 
 ## Acceptance Criteria
 
-- [ ] Uploaded research documents produce canonical paper artifacts.
-- [ ] PDF ingestion uses GROBID-first behavior with documented fallback.
-- [ ] Chunks preserve source identity, section, page, and chunk id.
-- [ ] Parser/index failures are visible as real workflow states, not fake success.
+- [x] Uploaded research documents produce canonical paper artifacts.
+- [x] PDF ingestion uses GROBID-first behavior with documented fallback.
+- [x] Chunks preserve source identity, section, page, and chunk id.
+- [x] Parser/index failures are visible as real workflow states, not fake success.
 
 ## Acceptance Map
 
 | Claim | Acceptance | Evidence | Status |
 | --- | --- | --- | --- |
-| Uploaded text/Markdown documents can become canonical paper artifacts. | Upload ingestion creates a canonical manifest and source-linked chunks. | Historical test evidence in `F001`; move focused evidence here on next ingestion change. | Partial |
-| Uploaded PDFs have a GROBID-first path. | PDF ingestion attempts GROBID TEI before fallback parsers. | Historical parser/smoke evidence in `F001`; `ADR-001`. | Partial |
+| Uploaded text/Markdown documents can become canonical paper artifacts. | Upload ingestion creates a canonical manifest, source-linked chunks, and an evidence preview artifact. | `test_research_ingestion.py` historical green verification recorded in `F001`; current research backend suite passed on 2026-06-29. | MVP done |
+| Uploaded PDFs have a GROBID-first path. | PDF ingestion attempts GROBID TEI before fallback parsers and preserves title, section, page, chunk, and source identity where available. | `test_research_parsers.py`, `test_research_ingestion.py`, default `research_smoke.py` historical green verification; F003.1 real PDF E2E verified `parser=grobid-tei`. | MVP done |
+| Indexed paper chunks are citation-ready. | Ingestion persists chunks, bounded evidence quotes, evidence records, embeddings, and citation-readiness metadata. | F003.1 real PDF E2E returned `chunk_count=19`, `evidence_record_count=19`, `embedding_count=19`, `status=indexed`, `citation_ready=true`. | MVP done |
+| Parser/index failures remain honest workflow states. | Upload/index errors are exposed as failed/deferred steps instead of fake completion. | Session route tests cover upload completion/failure traces; current research backend suite passed on 2026-06-29. | MVP done |
 
 ## State Timeline
 
@@ -106,6 +110,7 @@ In Progress. Initial ingestion/parser/indexing slices have verification evidence
 | --- | --- | --- | --- | --- |
 | 2026-06-28 | active | Feature split from F001 | This Feature and `INDEX.md` | Created to own ingestion/parser recovery. |
 | 2026-06-29 | patched | Real Research Library PDF upload E2E exposed storage-text failures | API E2E, browser UI verification, focused repository/session tests | F003.1 added PostgreSQL-safe text and bounded citation quote handling at the storage boundary. |
+| 2026-06-29 | MVP completed | F001 historical evidence migrated to owning Feature | Current research backend suite and AgentMentor strict check | Parser/OCR richness remains future scope, but the MVP ingestion contract is satisfied. |
 
 ## Patch History
 
@@ -115,7 +120,12 @@ In Progress. Initial ingestion/parser/indexing slices have verification evidence
 
 ## Evidence
 
-Focused ingestion evidence should be moved here the next time ingestion/parser behavior changes. Current historical evidence remains in `F001`.
+Historical ingestion/parser evidence migrated from `F001`:
+
+- `test_research_ingestion.py` verified canonical manifests, source-linked chunks, and evidence previews for uploaded text/Markdown research documents.
+- `test_research_parsers.py` and `test_research_ingestion.py` verified the PDF parser path and page identity behavior.
+- Default `research_smoke.py` passed against healthy Docker GROBID and PostgreSQL with `parser=grobid-tei`.
+- Indexing tests verified deterministic P0 embeddings under an explicit model name.
 
 Verification evidence from 2026-06-29:
 
@@ -125,15 +135,16 @@ Verification evidence from 2026-06-29:
 - Passing E2E after fix: upload returned `parser=grobid-tei`, `chunk_count=19`, `evidence_record_count=19`, `embedding_count=19`, `status=indexed`, `citation_ready=true`.
 - Browser UI verification: Research Library project `E2E 论文上传验证 0629-1034` showed `1 篇论文`, `19 条证据`, paper title `Space-Time Beamforming for LEO Satellite Communications: Enabling Extremely Narrow Beams`, parser `grobid-tei`, and status `已索引`.
 - `$env:PYTHONPATH='E:\Self-Project\Research-Assistant\ScienceClaw'; pytest ScienceClaw/backend/tests/test_research_repository.py ScienceClaw/backend/tests/test_research_database.py ScienceClaw/backend/tests/test_research_session_routes.py -q --basetemp=.pytest_tmp\e2e-upload-related` -> `83 passed`.
+- Current document-convergence verification: `$env:PYTHONPATH='E:\Self-Project\Research-Assistant\ScienceClaw'; python -m pytest ScienceClaw\backend\tests -k research -q --basetemp .pytest_tmp\progress-audit` -> `178 passed`; `knowledge_check.py --strict` -> 0 errors, 0 warnings.
 
 ## Recovery Snapshot
 
 - Read first: `ADR-001`, this Feature, `F001` historical Acceptance Map.
-- Current capability state: Initial ingestion and parser slices exist, with evidence still aggregated in `F001`.
+- Current capability state: MVP ingestion/parser/indexing contract is complete and evidence now lives in this owning Feature.
 - Known risks: Parser fallback behavior and Docling packaging are not fully productized.
-- Next safe action: Before changing parser or chunk identity, add/move focused tests and update this Feature.
+- Next safe action: Before changing parser fallback, OCR, or chunk identity, add focused tests and update this Feature.
 - Unblock condition: None.
 
 ## Next Step
 
-Move ingestion/parser-specific evidence from `F001` into this Feature when the next ingestion work starts.
+Define the next parser-quality slice only after deciding whether Docling/OCR fallback quality is part of the next verified capability increment.

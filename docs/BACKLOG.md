@@ -6,11 +6,16 @@
 
 ### F014: Multi-paper Research Synthesis + Multi-Agent Workflow
 
+- Status: refined into active Feature
+- Superseded by: [F020 Multi-Agent Research Workflow and Subagent Registry](features/F020-multi-agent-subagent-registry.md)
+- Original goal: 支持多论文对比、研究综述、跨文献观点综合和报告生成，并在确实受益的复杂研究任务中启用真实多 Agent 协作。
+- Refined first-version boundary: 第一版不做完整六角色多 Agent 平台，而是落地 `Supervisor + Auditor Agent + Reader Workers`；Auditor 与 Reader 都是第一版必做能力，但运行时由 Supervisor 按需启用。
+- Non-goals retained: 不为了展示效果伪造并行、协作、证据或状态；不做 Planner Agent；不做常驻 Reader；不做 group chat；不做开放式 Agent 角色市场。
+- Rationale: 多 Agent 的核心难点是边界划分。F020 将 F014 的宽泛方向收敛为可治理 subagent 注册、Supervisor 委派、独立 Auditor、批量 Reader Worker、真实 lifecycle trace 和 Harness 验收。
+
+### Future: Full Multi-Paper Synthesis Report Workflow
+
 - Status: deferred
-- Priority: later
-- Trigger: 当单篇论文可信工作流、Research Library、Project-scoped RAG、Chat 上传边界、whole-paper summary、citation audit 和 trace 体验稳定后再启动。
-- Goal: 支持多论文对比、研究综述、跨文献观点综合和报告生成，并在确实受益的复杂研究任务中启用真实多 Agent 协作。
-- Intended agents: Planner, Retriever, Reader, Synthesizer, Auditor, Reporter.
-- Non-goals for now: 不在当前阶段实现多 Agent；不为了展示效果伪造并行、协作、证据或状态；不替代当前 F013 单篇论文路由与摘要主线。
-- Rationale: Multi-Agent Research Synthesis 是后期亮点和放大器，不是当前可信科研工作台的地基。当前优先级仍是稳定论文摄取、Project 边界、RAG 路由、整篇总结、证据审计和真实 trace。
-- Start condition: F013 至少完成 LLM structured router 或整篇摘要质量增强后，再评估是否创建 active `F014` Feature。
+- Depends on: F020 first-version subagent registry and lifecycle trace.
+- Goal: 在 F020 的受治理 subagent 基础上，扩展完整多论文综述、evidence matrix、跨论文 synthesis、报告生成和更丰富的 source-quality/evidence-gap 工作流。
+- Non-goals for now: 不阻塞 F020 第一版落地；不提前引入大型 graph runtime；不把 Reader notes 变成 citation evidence。

@@ -7,6 +7,10 @@ from typing import Any
 
 from backend.research_assistant.audit import EvidenceAudit
 from backend.research_assistant.models import IngestionResult
+from backend.research_assistant.subagents import (
+    SubagentDefinition,
+    validate_subagent_definition,
+)
 
 MAX_EVIDENCE_QUOTE_BYTES = 1200
 
@@ -218,6 +222,291 @@ async def create_research_project(
         description,
     )
     return _project_from_row(row)
+
+
+async def ensure_subagent_definitions(
+    connection: Any,
+    *,
+    definitions: list[SubagentDefinition],
+) -> None:
+    rows = []
+    for definition in definitions:
+        validate_subagent_definition(definition)
+        rows.append(
+            (
+                definition.name,
+                definition.display_name,
+                definition.agent_type,
+                definition.source,
+                definition.editable,
+                definition.description,
+                definition.system_prompt,
+                _json(definition.skill_refs),
+                _json(definition.allowed_tools),
+                _json(definition.input_boundaries),
+                definition.output_boundary,
+                definition.can_answer_user,
+                definition.can_write_artifacts,
+                definition.enabled,
+                definition.version,
+                definition.validation_status,
+                definition.citation_evidence,
+                _json(definition.metadata or {}),
+            )
+        )
+
+    await connection.executemany(
+        """
+        INSERT INTO research_subagent_definitions (
+            name,
+            display_name,
+            agent_type,
+            source,
+            editable,
+            description,
+            system_prompt,
+            skill_refs,
+            allowed_tools,
+            input_boundaries,
+            output_boundary,
+            can_answer_user,
+            can_write_artifacts,
+            enabled,
+            version,
+            validation_status,
+            citation_evidence,
+            metadata,
+            updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, $11, $12, $13, $14, $15, $16, $17, $18::jsonb, now())
+        ON CONFLICT (name) DO NOTHING
+        """,
+        rows,
+    )
+
+
+async def list_subagent_definitions(
+    connection: Any,
+    *,
+    enabled_only: bool = False,
+) -> list[SubagentDefinition]:
+    where = "WHERE enabled = true" if enabled_only else ""
+    rows = await connection.fetch(
+        f"""
+        SELECT
+            name,
+            display_name,
+            agent_type,
+            source,
+            editable,
+            description,
+            system_prompt,
+            skill_refs,
+            allowed_tools,
+            input_boundaries,
+            output_boundary,
+            can_answer_user,
+            can_write_artifacts,
+            enabled,
+            version,
+            validation_status,
+            citation_evidence,
+            metadata
+        FROM research_subagent_definitions
+        {where}
+        ORDER BY name
+        """
+    )
+    definitions = [_subagent_definition_from_row(row) for row in rows]
+    for definition in definitions:
+        validate_subagent_definition(definition)
+    return definitions
+
+
+async def update_subagent_definition(
+    connection: Any,
+    *,
+    name: str,
+    updates: dict[str, Any],
+) -> SubagentDefinition:
+    candidate = SubagentDefinition(
+        name=name,
+        display_name=str(updates["display_name"]),
+        agent_type="custom",
+        source="registry",
+        editable=True,
+        description=str(updates["description"]),
+        system_prompt=str(updates["system_prompt"]),
+        skill_refs=list(updates["skill_refs"]),
+        allowed_tools=list(updates["allowed_tools"]),
+        input_boundaries=dict(updates["input_boundaries"]),
+        output_boundary=str(updates["output_boundary"]),
+        can_answer_user=False,
+        can_write_artifacts=False,
+        enabled=bool(updates["enabled"]),
+        version=1,
+        validation_status="draft",
+        citation_evidence=False,
+        metadata=dict(updates.get("metadata") or {}),
+    )
+    validate_subagent_definition(candidate)
+
+    row = await connection.fetchrow(
+        """
+        UPDATE research_subagent_definitions
+        SET
+            display_name = $1,
+            description = $2,
+            system_prompt = $3,
+            skill_refs = $4::jsonb,
+            allowed_tools = $5::jsonb,
+            input_boundaries = $6::jsonb,
+            output_boundary = $7,
+            enabled = $8,
+            validation_status = $9,
+            metadata = $10::jsonb,
+            citation_evidence = $11,
+            version = version + 1,
+            updated_at = now()
+        WHERE name = $12
+          AND agent_type = 'custom'
+          AND editable = true
+        RETURNING
+            name,
+            display_name,
+            agent_type,
+            source,
+            editable,
+            description,
+            system_prompt,
+            skill_refs,
+            allowed_tools,
+            input_boundaries,
+            output_boundary,
+            can_answer_user,
+            can_write_artifacts,
+            enabled,
+            version,
+            validation_status,
+            citation_evidence,
+            metadata
+        """,
+        candidate.display_name,
+        candidate.description,
+        candidate.system_prompt,
+        _json(candidate.skill_refs),
+        _json(candidate.allowed_tools),
+        _json(candidate.input_boundaries),
+        candidate.output_boundary,
+        candidate.enabled,
+        candidate.validation_status,
+        _json(candidate.metadata or {}),
+        False,
+        name,
+    )
+    if row is None:
+        raise ValueError("editable custom Research Agent not found")
+    definition = _subagent_definition_from_row(row)
+    validate_subagent_definition(definition)
+    return definition
+
+
+async def persist_subagent_run(
+    connection: Any,
+    *,
+    task_id: str,
+    parent_workflow_id: str,
+    agent_name: str,
+    agent_role: str,
+    status: str,
+    input_boundary: dict[str, Any],
+    output_boundary: str,
+    evidence_refs: list[dict[str, Any]] | None = None,
+    outputs: dict[str, Any] | None = None,
+    warnings: list[dict[str, Any]] | None = None,
+    errors: list[dict[str, Any]] | None = None,
+) -> None:
+    await connection.execute(
+        """
+        INSERT INTO research_subagent_runs (
+            task_id,
+            parent_workflow_id,
+            agent_name,
+            agent_role,
+            status,
+            input_boundary,
+            output_boundary,
+            citation_evidence,
+            evidence_refs,
+            outputs,
+            warnings,
+            errors,
+            completed_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9::jsonb, $10::jsonb, $11::jsonb, $12::jsonb,
+            CASE WHEN $5 IN ('completed', 'failed', 'cancelled') THEN now() ELSE NULL END)
+        ON CONFLICT (task_id) DO UPDATE SET
+            parent_workflow_id = EXCLUDED.parent_workflow_id,
+            agent_name = EXCLUDED.agent_name,
+            agent_role = EXCLUDED.agent_role,
+            status = EXCLUDED.status,
+            input_boundary = EXCLUDED.input_boundary,
+            output_boundary = EXCLUDED.output_boundary,
+            citation_evidence = false,
+            evidence_refs = EXCLUDED.evidence_refs,
+            outputs = EXCLUDED.outputs,
+            warnings = EXCLUDED.warnings,
+            errors = EXCLUDED.errors,
+            completed_at = EXCLUDED.completed_at
+        """,
+        task_id,
+        parent_workflow_id,
+        agent_name,
+        agent_role,
+        status,
+        _json(input_boundary),
+        output_boundary,
+        False,
+        _json(evidence_refs or []),
+        _json(outputs or {}),
+        _json(warnings or []),
+        _json(errors or []),
+    )
+
+
+async def list_recent_subagent_runs(
+    connection: Any,
+    *,
+    agent_name: str,
+    limit: int = 5,
+) -> list[dict[str, Any]]:
+    bounded_limit = max(1, min(int(limit), 20))
+    rows = await connection.fetch(
+        """
+        SELECT
+            task_id,
+            parent_workflow_id,
+            agent_name,
+            agent_role,
+            status,
+            input_boundary,
+            output_boundary,
+            citation_evidence,
+            evidence_refs,
+            outputs,
+            warnings,
+            errors,
+            started_at,
+            completed_at
+        FROM research_subagent_runs
+        WHERE agent_name = $1
+        ORDER BY COALESCE(completed_at, started_at) DESC
+        LIMIT $2
+        """,
+        agent_name,
+        bounded_limit,
+    )
+    return [_subagent_run_from_row(row) for row in rows]
 
 
 async def list_research_projects(
@@ -1250,6 +1539,54 @@ def _project_from_row(row: Any) -> ResearchProject:
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )
+
+
+def _subagent_definition_from_row(row: Any) -> SubagentDefinition:
+    return SubagentDefinition(
+        name=str(row["name"]),
+        display_name=str(row["display_name"]),
+        agent_type=str(_row_get(row, "agent_type", "custom")),
+        source=str(_row_get(row, "source", "registry")),
+        editable=bool(_row_get(row, "editable", True)),
+        description=str(row["description"]),
+        system_prompt=str(row["system_prompt"]),
+        skill_refs=_json_value(row["skill_refs"], default=[]),
+        allowed_tools=_json_value(row["allowed_tools"], default=[]),
+        input_boundaries=_json_value(row["input_boundaries"], default={}),
+        output_boundary=str(row["output_boundary"]),
+        can_answer_user=bool(row["can_answer_user"]),
+        can_write_artifacts=bool(row["can_write_artifacts"]),
+        enabled=bool(row["enabled"]),
+        version=int(row["version"] or 1),
+        validation_status=str(row["validation_status"]),
+        citation_evidence=bool(row["citation_evidence"]),
+        metadata=_json_value(_row_get(row, "metadata", None), default={}),
+    )
+
+
+def _iso_datetime(value: Any) -> Any:
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return value
+
+
+def _subagent_run_from_row(row: Any) -> dict[str, Any]:
+    return {
+        "task_id": str(row["task_id"]),
+        "parent_workflow_id": str(row["parent_workflow_id"]),
+        "agent_name": str(row["agent_name"]),
+        "agent_role": str(row["agent_role"]),
+        "status": str(row["status"]),
+        "input_boundary": _json_value(row["input_boundary"], default={}),
+        "output_boundary": str(row["output_boundary"]),
+        "citation_evidence": bool(row["citation_evidence"]),
+        "evidence_refs": _json_value(row["evidence_refs"], default=[]),
+        "outputs": _json_value(row["outputs"], default={}),
+        "warnings": _json_value(row["warnings"], default=[]),
+        "errors": _json_value(row["errors"], default=[]),
+        "started_at": _iso_datetime(row["started_at"]),
+        "completed_at": _iso_datetime(row["completed_at"]),
+    }
 
 
 def _project_paper_asset_from_row(row: Any) -> ResearchProjectPaperAsset:

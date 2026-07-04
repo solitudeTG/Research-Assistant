@@ -42,6 +42,27 @@ export interface ToolRuntimeResultSummary {
   citation_evidence: false;
 }
 
+export interface SubagentDelegationDecisionMetadata {
+  decision_source: string;
+  decision: string;
+  trigger: string;
+  reason: string;
+}
+
+export interface SubagentLifecycleMetadata {
+  task_id: string;
+  agent_name: string;
+  agent_role: string;
+  phase: string;
+  status: string;
+  description?: string;
+  delegation_decision?: SubagentDelegationDecisionMetadata;
+  output_boundary: 'context_only' | 'process_trace' | 'artifact' | string;
+  citation_evidence: false;
+  evidence_refs?: Array<Record<string, any>>;
+  [key: string]: any;
+}
+
 export interface SourceQualityMetadata {
   status: 'citation_grade' | 'identity_incomplete' | string;
   source_type: 'paper' | 'web' | 'database' | string;
@@ -70,6 +91,19 @@ export interface ResearchTaskRouteMetadata {
   reason: string;
 }
 
+export interface ResearchMultiAgentDecisionMetadata {
+  enabled: boolean;
+  decision_source: string;
+  reason: string;
+  selected_agents: string[];
+  skipped_agents: string[];
+  trigger: string;
+  available_agent_types: string[];
+  requires_reader: boolean;
+  requires_auditor: boolean;
+  confidence: number;
+}
+
 export interface ToolEventData extends BaseEventData {
   tool_call_id: string;
   name: string;
@@ -84,6 +118,10 @@ export interface ToolEventData extends BaseEventData {
   result_contract?: ToolResultContract;
   tool_pack?: ResearchToolPackMetadata;
   runtime_result_summary?: ToolRuntimeResultSummary;
+  metadata?: {
+    subagent_lifecycle?: SubagentLifecycleMetadata;
+    [key: string]: any;
+  };
 }
 
 export interface StepEventData extends BaseEventData {
@@ -95,6 +133,7 @@ export interface StepEventData extends BaseEventData {
     source_quality?: SourceQualityMetadata;
     evidence_admission?: EvidenceAdmissionMetadata;
     task_route?: ResearchTaskRouteMetadata;
+    multi_agent_decision?: ResearchMultiAgentDecisionMetadata;
     [key: string]: any;
   }
 }

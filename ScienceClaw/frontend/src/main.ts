@@ -21,6 +21,7 @@ import TasksPage from './pages/TasksPage.vue'
 import LoginPage from './pages/LoginPage.vue'
 import MainLayout from './pages/MainLayout.vue'
 import ResearchLibraryPage from './pages/ResearchLibraryPage.vue'
+import ResearchAgentsPage from './pages/ResearchAgentsPage.vue'
 import { configure } from "vue-gtag";
 import SharePage from './pages/SharePage.vue';
 import ShareLayout from './pages/ShareLayout.vue';
@@ -72,6 +73,11 @@ export const router = createRouter({
         {
           path: 'research-library',
           component: ResearchLibraryPage,
+          meta: { requiresAuth: true }
+        },
+        {
+          path: 'research-agents',
+          component: ResearchAgentsPage,
           meta: { requiresAuth: true }
         },
         {

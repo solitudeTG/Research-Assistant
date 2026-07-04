@@ -22,6 +22,7 @@ from loguru import logger
 from langchain.agents.middleware import AgentMiddleware
 
 from backend.deepagent.sse_protocol import get_protocol_manager
+from backend.research_assistant.subagents import subagent_lifecycle_identity
 
 
 # ───────────────────────────────────────────────────────────────────
@@ -118,15 +119,25 @@ class SSEMonitoringMiddleware(AgentMiddleware):
         if tool_name:
             self.total_tool_calls += 1
             with self._events_lock:
+                event_data = {
+                    "tool_call_id": tool_call_id,
+                    "function": tool_name,
+                    "args": tool_args or {},
+                    "tool_meta": tool_meta,
+                    "timestamp": start_time,
+                }
+                lifecycle = self._subagent_lifecycle_metadata(
+                    tool_name=tool_name,
+                    tool_args=tool_args,
+                    tool_call_id=tool_call_id,
+                    phase="started",
+                    status="running",
+                )
+                if lifecycle:
+                    event_data["subagent_lifecycle"] = lifecycle
                 self.sse_events.append(MiddlewareEvent(
                     event="middleware_tool_start",
-                    data={
-                        "tool_call_id": tool_call_id,
-                        "function": tool_name,
-                        "args": tool_args or {},
-                        "tool_meta": tool_meta,
-                        "timestamp": start_time,
-                    },
+                    data=event_data,
                 ))
             self.tool_calls_log.append({
                 "agent": self.agent_name,
@@ -161,6 +172,15 @@ class SSEMonitoringMiddleware(AgentMiddleware):
                 "result_summary": result_summary,
                 "timestamp": time.time(),
             }
+            lifecycle = self._subagent_lifecycle_metadata(
+                tool_name=tool_name,
+                tool_args=tool_args,
+                tool_call_id=tool_call_id,
+                phase="completed",
+                status="completed",
+            )
+            if lifecycle:
+                event_data["subagent_lifecycle"] = lifecycle
             event_data.update(result_metadata)
             with self._events_lock:
                 self.sse_events.append(MiddlewareEvent(
@@ -300,6 +320,67 @@ class SSEMonitoringMiddleware(AgentMiddleware):
         if tool_pack:
             summary["tool_pack"] = tool_pack
         return summary
+
+    def _subagent_lifecycle_metadata(
+        self,
+        *,
+        tool_name: str | None,
+        tool_args: Optional[Dict[str, Any]],
+        tool_call_id: str,
+        phase: str,
+        status: str,
+    ) -> Dict[str, Any]:
+        if tool_name != "task" or not isinstance(tool_args, dict):
+            return {}
+        agent_name = str(tool_args.get("subagent_type") or "").strip()
+        if not agent_name:
+            return {}
+        identity = subagent_lifecycle_identity(agent_name)
+        workflow_id = str(tool_args.get("workflow_id") or tool_call_id)
+        return {
+            "workflow_id": workflow_id,
+            "task_id": tool_call_id,
+            "parent_agent": self.agent_name,
+            "agent_name": agent_name,
+            "agent_role": identity["agent_role"],
+            "agent_type": identity["agent_type"],
+            "source": identity["source"],
+            "phase": phase,
+            "status": status,
+            "description": str(tool_args.get("description") or ""),
+            "delegation_decision": self._subagent_delegation_decision(agent_name, identity),
+            "output_boundary": identity["output_boundary"],
+            "citation_evidence": False,
+        }
+
+    def _subagent_delegation_decision(self, agent_name: str, identity: Dict[str, str]) -> Dict[str, str]:
+        triggers = {
+            "paper_reader_worker": (
+                "two_or_more_material_synthesis",
+                "Reader Worker handles scoped reading before Supervisor synthesis.",
+            ),
+            "research_auditor": (
+                "boundary_audit_or_trust_check",
+                "Auditor independently checks drafted claims, evidence boundaries, and citation consistency.",
+            ),
+            "general-purpose": (
+                "general_runtime_task",
+                "DeepAgents runtime delegated a general-purpose task.",
+            ),
+        }
+        trigger, reason = triggers.get(
+            agent_name,
+            (
+                f"{identity.get('agent_role', 'subagent')}_delegation",
+                "Supervisor delegated a scoped subagent task through the task tool.",
+            ),
+        )
+        return {
+            "decision_source": "supervisor_task_tool",
+            "decision": "delegate",
+            "trigger": trigger,
+            "reason": reason,
+        }
 
     def _hash_runtime_result(self, value: Any) -> str:
         try:

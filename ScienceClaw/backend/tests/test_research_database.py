@@ -7,11 +7,14 @@ from backend.research_assistant.audit import EvidenceAudit, EvidenceAuditClaim
 from backend.research_assistant.storage import database
 from backend.research_assistant.storage.database import (
     ensure_research_schema_in_database,
+    ensure_subagent_definitions_in_database,
     get_research_session_status_from_database,
     hybrid_search_evidence_in_database,
+    list_subagent_definitions_from_database,
     list_whole_paper_evidence_in_database,
     persist_chunk_embeddings_to_database,
     persist_database_evidence_source_to_database,
+    persist_subagent_run_to_database,
     persist_web_evidence_source_to_database,
     persist_report_evidence_map_to_database,
 )
@@ -84,6 +87,54 @@ async def test_ensure_research_schema_in_database_executes_schema_and_closes_con
     assert len(fake_connection.executed) == 1
     assert "create table if not exists research_projects" in fake_connection.executed[0][0].lower()
     assert "create table if not exists research_session_projects" in fake_connection.executed[0][0].lower()
+    assert fake_connection.closed is True
+
+
+@pytest.mark.asyncio
+async def test_subagent_registry_database_wrappers_close_asyncpg_connection(monkeypatch):
+    fake_connection = FakeConnection()
+    fake_connection.fetch_result = [
+        {
+            "name": "research_auditor",
+            "display_name": "Auditor Agent",
+            "description": "Audit claims.",
+            "system_prompt": "You are the Research Auditor Agent.",
+            "skill_refs": '["research-evidence-audit"]',
+            "allowed_tools": '["audit_evidence_claims"]',
+            "input_boundaries": "{}",
+            "output_boundary": "process_trace",
+            "can_answer_user": False,
+            "can_write_artifacts": False,
+            "enabled": True,
+            "version": 1,
+            "validation_status": "valid",
+            "citation_evidence": False,
+        }
+    ]
+
+    async def connect(database_url):
+        assert database_url == "postgresql://test"
+        return fake_connection
+
+    monkeypatch.setitem(sys.modules, "asyncpg", types.SimpleNamespace(connect=connect))
+
+    await ensure_subagent_definitions_in_database("postgresql://test")
+    definitions = await list_subagent_definitions_from_database("postgresql://test", enabled_only=True)
+    await persist_subagent_run_to_database(
+        "postgresql://test",
+        task_id="task-1",
+        parent_workflow_id="workflow-1",
+        agent_name="research_auditor",
+        agent_role="auditor",
+        status="completed",
+        input_boundary={"answer_id": "answer-1"},
+        output_boundary="process_trace",
+        outputs={"status": "approved"},
+    )
+
+    assert definitions[0].name == "research_auditor"
+    assert fake_connection.executemany_calls
+    assert fake_connection.executed
     assert fake_connection.closed is True
 
 

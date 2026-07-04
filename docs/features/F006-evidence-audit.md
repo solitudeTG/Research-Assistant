@@ -56,7 +56,9 @@ Hiding unsupported claims was rejected because research users need to see eviden
 
 ## Current Status
 
-In Progress. Evidence Audit has multiple verified slices recorded in `F001`; answer-level audit visibility now lives in ActivityPanel rather than below the Chat answer card.
+Completed for MVP scope.
+
+Evidence Audit can classify answer/report claims against eligible citation evidence, persist and recover audit results, expose unsupported/invalid-source gaps, and surface audit state in ActivityPanel and Markdown reports without placing process detail in the Chat answer body. This does not claim full semantic entailment or peer-review-grade truth verification.
 
 ## Links
 
@@ -88,17 +90,19 @@ In Progress. Evidence Audit has multiple verified slices recorded in `F001`; ans
 
 ## Acceptance Criteria
 
-- [ ] Audit approves only claims supported by eligible citation evidence.
-- [ ] Unsupported and invalid-source claims remain visible as gaps.
-- [ ] Audit results can be persisted and recovered for answer/report subjects.
-- [ ] Chat and Markdown reports expose audit state without overstating trust.
+- [x] Audit approves only claims supported by eligible citation evidence.
+- [x] Unsupported and invalid-source claims remain visible as gaps.
+- [x] Audit results can be persisted and recovered for answer/report subjects.
+- [x] Chat and Markdown reports expose audit state without overstating trust.
 
 ## Acceptance Map
 
 | Claim | Acceptance | Evidence | Status |
 | --- | --- | --- | --- |
-| Evidence Audit checks claim support. | Claims receive approved/unsupported/invalid-source status. | Historical audit evidence in `F001`. | Partial |
-| Audit state is visible in outputs. | Chat answer audit now appears in ActivityPanel; Markdown reports still carry report audit sections. | Frontend contract and browser E2E from 2026-06-29. | Partial |
+| Evidence Audit checks claim support. | Claims receive approved, unsupported, or invalid-source status against eligible paper/web/database citation evidence. | Historical audit red-green verification from `F001`; current research backend suite passed on 2026-06-29. | MVP done |
+| Audit handles known overclaim and label failure modes. | Audit rejects context-only citations, no-citation answers, unlabeled evidence claims, invalid-source claims, and overclaims beyond quoted support; it can approve jointly supported claims. | Historical explicit-label, invalid-source, overclaim, multi-citation, and support-score tests from `F001`. | MVP done |
+| Audit state is persisted and recoverable. | Answer/report audit results are stored under stable subjects and can be fetched through session-scoped APIs. | Historical audit persistence/retrieval route tests from `F001`; current research backend suite passed on 2026-06-29. | MVP done |
+| Audit state is visible without overstating trust. | ActivityPanel shows answer audit sidecars with progressive disclosure; Markdown reports include Claim Checks, Evidence Gaps, Trust Summary, and limitations. | F006.1/F006.2 frontend verification plus report/audit historical tests from `F001`. | MVP done |
 
 ## State Timeline
 
@@ -107,6 +111,7 @@ In Progress. Evidence Audit has multiple verified slices recorded in `F001`; ans
 | 2026-06-28 | active | Feature split from F001 | This Feature and `INDEX.md` | Created to own audit behavior and recovery. |
 | 2026-06-29 | patched | User identified Evidence Audit as process-state data that belongs in the right reasoning panel | Frontend contract tests, type-check, build, browser E2E | F006.1 moved answer audit summary and claim checks out of ChatMessage and into ActivityPanel. |
 | 2026-06-29 | patched | User clarified that audit detail should not flood the ActivityPanel by default | Frontend contract tests, type-check, build | F006.2 keeps approved claims visible and collapses unsupported/invalid audit claims behind an explicit disclosure. |
+| 2026-06-29 | MVP completed | F001 historical evidence migrated to owning Feature | Current research backend suite and AgentMentor strict check | Stronger semantic entailment and source-quality scoring remain future scope. |
 
 ## Patch History
 
@@ -117,19 +122,27 @@ In Progress. Evidence Audit has multiple verified slices recorded in `F001`; ans
 
 ## Evidence
 
+Historical Evidence Audit evidence migrated from `F001`:
+
+- `test_research_audit.py` verified approved/unsupported/invalid-source classification, context-only source rejection, web/database citation eligibility, explicit citation-label requirements, support scores, overclaim rejection, and jointly supported claims.
+- Answer/report/route tests verified no-citation answers are unsupported and answer/report audit results persist under stable subjects.
+- Report tests verified Claim Checks, Evidence Gaps, Trust Summary, limitations, approved findings gating, and sidecar audit metadata.
+- Frontend tests verified audit recovery, ActivityPanel rendering, and collapsed unsupported/invalid claim disclosure.
+
 - 2026-06-29 audit UI verification: `pytest ScienceClaw/backend/tests/test_research_frontend_contracts.py -q` -> `35 passed`.
 - 2026-06-29 frontend verification: `npm.cmd run type-check` -> passed; `npm.cmd run build` -> passed with existing warnings.
 - Browser E2E on project `E2E UI链路验证 06290349`: right ActivityPanel showed `证据审计 partial` and claim status rows; the Chat answer card did not render the audit block.
 - 2026-06-29 audit density verification: `pytest ScienceClaw/backend/tests/test_research_frontend_contracts.py -q` -> `36 passed`; `npm.cmd run type-check` -> passed; `npm.cmd run build` -> passed with existing Browserslist/CSS/chunk-size warnings. Browser automation reached the authenticated chat shell, but historical-session panel inspection timed out before a stable ActivityPanel DOM assertion.
+- Current document-convergence verification: `$env:PYTHONPATH='E:\Self-Project\Research-Assistant\ScienceClaw'; python -m pytest ScienceClaw\backend\tests -k research -q --basetemp .pytest_tmp\progress-audit` -> `178 passed`; `knowledge_check.py --strict` -> 0 errors, 0 warnings.
 
 ## Recovery Snapshot
 
 - Read first: this Feature, F004, F007 if report output is involved.
-- Current capability state: Evidence Audit exists with historical verification in `F001`; answer audit sidecar is visible in ActivityPanel.
+- Current capability state: MVP Evidence Audit is complete; answer audit sidecar is visible in ActivityPanel and report audit state is durable.
 - Known risks: Lexical support scoring may not cover all semantic entailment cases.
 - Next safe action: Attribute audit changes here and verify focused audit plus affected output tests.
 - Unblock condition: None.
 
 ## Next Step
 
-Migrate audit-specific Acceptance Map rows from `F001` into this Feature as the next document cleanup slice.
+Create a new audit-quality slice before claiming stronger semantic entailment, contradiction detection, or source-quality scoring.

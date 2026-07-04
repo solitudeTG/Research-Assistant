@@ -6,9 +6,11 @@ import json
 import sys
 import types
 
+import pytest
 import Tools
 from backend.deepagent import agent
 from backend.deepagent.sse_middleware import SSEMonitoringMiddleware
+from backend.research_assistant.subagents import SubagentDefinition
 
 
 def _tool(name: str, pack_id: str | None = None):
@@ -42,6 +44,34 @@ def test_collect_tools_exposes_only_active_research_tool_pack(monkeypatch):
     tools = agent._collect_tools(blocked_tools=set(), active_tool_packs={"literature"})
 
     assert [tool.name for tool in tools] == ["paper_lookup"]
+
+
+def test_supervisor_prompt_guides_autonomous_research_subagent_delegation():
+    prompt = agent.get_system_prompt("/workspace")
+
+    assert "## Research Subagent Delegation" in prompt
+    assert "## Required Research Delegation" in prompt
+    assert "## Research Delegation Trigger Matrix" in prompt
+    assert "simple factual Q&A or casual chat" in prompt
+    assert "Stay single-agent" in prompt
+    assert "Simple factual Q&A or casual chat: stay single-agent" in prompt
+    assert "Two-or-more-material synthesis: call Reader Worker first" in prompt
+    assert "Boundary/audit/trust check: call Auditor after drafting" in prompt
+    assert "Both synthesis and audit: Reader first, draft, then Auditor" in prompt
+    assert "must delegate at least one scoped read" in prompt
+    assert "must delegate an independent audit" in prompt
+    assert "web_search`, `web_crawl`, reading files yourself, or writing todos do not satisfy" in prompt
+    assert "Before finalizing a matching task" in prompt
+    assert "When both reader and auditor criteria match" in prompt
+    assert "Reader first, then draft, then Auditor" in prompt
+    assert "Do not call Auditor before Reader for two-or-more-material synthesis" in prompt
+    assert "Do not replace required delegation with repeated write_todos" in prompt
+    assert "paper_reader_worker" in prompt
+    assert "research_auditor" in prompt
+    assert "Choose autonomously" in prompt
+    assert "Do not ask the user to choose an Agent" in prompt
+    assert "context_only or process_trace" in prompt
+    assert "citation evidence" in prompt
 
 
 def test_external_tool_proxy_carries_research_tool_pack_metadata(monkeypatch, tmp_path):
@@ -196,6 +226,313 @@ def test_tool_complete_trace_carries_auditable_runtime_result_summary():
         "context_boundary": "process_trace",
         "citation_evidence": False,
     }
+
+
+def test_task_tool_trace_carries_real_subagent_lifecycle_metadata():
+    middleware = SSEMonitoringMiddleware(agent_name="DeepAgent")
+    task_args = {
+        "subagent_type": "paper_reader_worker",
+        "description": "Read three selected papers",
+    }
+
+    _, _, _, start_time, tool_meta = middleware._before_tool(
+        {"name": "task", "args": task_args, "id": "call-reader-1"}
+    )
+    start_event = middleware.drain_events()[0]
+
+    assert start_event["data"]["subagent_lifecycle"] == {
+        "workflow_id": "call-reader-1",
+        "task_id": "call-reader-1",
+        "parent_agent": "DeepAgent",
+        "agent_name": "paper_reader_worker",
+        "agent_role": "reader",
+        "agent_type": "custom",
+        "source": "registry",
+        "phase": "started",
+        "status": "running",
+        "description": "Read three selected papers",
+        "delegation_decision": {
+            "decision_source": "supervisor_task_tool",
+            "decision": "delegate",
+            "trigger": "two_or_more_material_synthesis",
+            "reason": "Reader Worker handles scoped reading before Supervisor synthesis.",
+        },
+        "output_boundary": "context_only",
+        "citation_evidence": False,
+    }
+
+    middleware._after_tool("notes", "task", task_args, "call-reader-1", start_time, tool_meta)
+    complete_event = middleware.drain_events()[0]
+
+    assert complete_event["data"]["subagent_lifecycle"]["phase"] == "completed"
+    assert complete_event["data"]["subagent_lifecycle"]["status"] == "completed"
+    assert complete_event["data"]["subagent_lifecycle"]["agent_role"] == "reader"
+    assert complete_event["data"]["subagent_lifecycle"]["parent_agent"] == "DeepAgent"
+
+
+def test_task_tool_trace_labels_deepagents_builtin_subagent_metadata():
+    middleware = SSEMonitoringMiddleware(agent_name="DeepAgent")
+    task_args = {
+        "subagent_type": "general-purpose",
+        "description": "Handle a generic runtime task",
+    }
+
+    middleware._before_tool({"name": "task", "args": task_args, "id": "call-general-1"})
+    start_event = middleware.drain_events()[0]
+
+    assert start_event["data"]["subagent_lifecycle"] == {
+        "workflow_id": "call-general-1",
+        "task_id": "call-general-1",
+        "parent_agent": "DeepAgent",
+        "agent_name": "general-purpose",
+        "agent_role": "general",
+        "agent_type": "system_builtin",
+        "source": "deepagents_builtin",
+        "phase": "started",
+        "status": "running",
+        "description": "Handle a generic runtime task",
+        "delegation_decision": {
+            "decision_source": "supervisor_task_tool",
+            "decision": "delegate",
+            "trigger": "general_runtime_task",
+            "reason": "DeepAgents runtime delegated a general-purpose task.",
+        },
+        "output_boundary": "process_trace",
+        "citation_evidence": False,
+    }
+
+
+@pytest.mark.asyncio
+async def test_runner_persists_real_subagent_lifecycle_runs(monkeypatch):
+    async def unused_get_task_settings(*args, **kwargs):
+        return SimpleNamespace()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "backend.deepagent.sessions",
+        types.SimpleNamespace(ScienceSession=object),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "backend.task_settings",
+        types.SimpleNamespace(get_task_settings=unused_get_task_settings, TaskSettings=object),
+    )
+    sys.modules.pop("backend.deepagent.runner", None)
+    runner = importlib.import_module("backend.deepagent.runner")
+    calls = []
+
+    async def fake_persist(database_url, **kwargs):
+        calls.append((database_url, kwargs))
+
+    monkeypatch.setattr(runner, "persist_subagent_run_to_database", fake_persist)
+
+    await runner._persist_subagent_lifecycle_run(
+        {
+            "workflow_id": "workflow-1",
+            "task_id": "task-1",
+            "agent_name": "paper_reader_worker",
+            "agent_role": "reader",
+            "status": "completed",
+            "output_boundary": "context_only",
+            "citation_evidence": False,
+            "evidence_refs": [{"evidence_id": 9, "source_type": "paper"}],
+        },
+        input_boundary={"description": "Read selected paper"},
+        outputs={"result_summary": "notes"},
+    )
+
+    assert len(calls) == 1
+    _, kwargs = calls[0]
+    assert kwargs["task_id"] == "task-1"
+    assert kwargs["parent_workflow_id"] == "workflow-1"
+    assert kwargs["agent_name"] == "paper_reader_worker"
+    assert kwargs["agent_role"] == "reader"
+    assert kwargs["status"] == "completed"
+    assert kwargs["input_boundary"] == {"description": "Read selected paper"}
+    assert kwargs["output_boundary"] == "context_only"
+    assert kwargs["evidence_refs"] == [{"evidence_id": 9, "source_type": "paper"}]
+    assert kwargs["outputs"] == {"result_summary": "notes"}
+
+
+def test_supervisor_guard_lifecycle_uses_explicit_decision_source(monkeypatch):
+    async def unused_get_task_settings(*args, **kwargs):
+        return SimpleNamespace()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "backend.deepagent.sessions",
+        types.SimpleNamespace(ScienceSession=object),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "backend.task_settings",
+        types.SimpleNamespace(get_task_settings=unused_get_task_settings, TaskSettings=object),
+    )
+    sys.modules.pop("backend.deepagent.runner", None)
+    runner = importlib.import_module("backend.deepagent.runner")
+
+    lifecycle = runner._subagent_guard_lifecycle(
+        agent_name="research_auditor",
+        task_id="guard-audit-1",
+        phase="started",
+        status="running",
+        description="Audit draft",
+        decision={
+            "trigger": "boundary_audit_or_trust_check",
+            "reason": "audit required",
+        },
+    )
+
+    assert lifecycle["agent_name"] == "research_auditor"
+    assert lifecycle["delegation_decision"]["decision_source"] == "supervisor_delegation_guard"
+    assert lifecycle["delegation_decision"]["trigger"] == "boundary_audit_or_trust_check"
+
+
+def test_runner_task_calling_lifecycle_fallback_labels_deepagents_task(monkeypatch):
+    async def unused_get_task_settings(*args, **kwargs):
+        return SimpleNamespace()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "backend.deepagent.sessions",
+        types.SimpleNamespace(ScienceSession=object),
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "backend.task_settings",
+        types.SimpleNamespace(get_task_settings=unused_get_task_settings, TaskSettings=object),
+    )
+    sys.modules.pop("backend.deepagent.runner", None)
+    runner = importlib.import_module("backend.deepagent.runner")
+
+    lifecycle = runner._task_tool_lifecycle_from_args(
+        tool_args={
+            "subagent_type": "research_auditor",
+            "description": "Audit draft",
+        },
+        tool_call_id="call-auditor-1",
+        phase="started",
+        status="running",
+    )
+
+    assert lifecycle["task_id"] == "call-auditor-1"
+    assert lifecycle["agent_name"] == "research_auditor"
+    assert lifecycle["phase"] == "started"
+    assert lifecycle["delegation_decision"]["decision_source"] == "supervisor_task_tool"
+
+
+@pytest.mark.asyncio
+async def test_deep_agent_registers_governed_research_subagents(monkeypatch, tmp_path):
+    captured = {}
+
+    class FakeSandbox:
+        def __init__(self, *, session_id: str, base_dir: str, **kwargs):
+            self.workspace = str(tmp_path / session_id)
+            (tmp_path / session_id).mkdir(parents=True, exist_ok=True)
+
+        async def get_context(self):
+            return {"success": False}
+
+    def fake_create_deep_agent(**kwargs):
+        captured["kwargs"] = kwargs
+        return "compiled-agent"
+
+    monkeypatch.setattr(agent, "FullSandboxBackend", FakeSandbox)
+    monkeypatch.setattr(agent, "get_llm_model", lambda *args, **kwargs: SimpleNamespace(profile={"max_input_tokens": 4096}))
+    monkeypatch.setattr(agent, "_collect_tools", lambda **kwargs: [])
+    monkeypatch.setattr(agent, "_build_backend", lambda *args, **kwargs: "backend")
+    monkeypatch.setattr(agent, "create_deep_agent", fake_create_deep_agent)
+    monkeypatch.setattr(agent, "_WORKSPACE_DIR", str(tmp_path))
+    monkeypatch.setattr(agent, "_BUILTIN_SKILLS_DIR", str(tmp_path / "missing-builtin"))
+    monkeypatch.setattr(agent, "_EXTERNAL_SKILLS_DIR", str(tmp_path / "missing-external"))
+    monkeypatch.setattr(agent._dir_watcher, "has_changed", lambda path: False)
+    monkeypatch.setitem(
+        sys.modules,
+        "backend.task_settings",
+        types.SimpleNamespace(TaskSettings=lambda: None),
+    )
+
+    result, _, context_window, _ = await agent.deep_agent(
+        session_id="session-1",
+        task_settings=SimpleNamespace(
+            max_tokens=2048,
+            sandbox_exec_timeout=30,
+            max_output_chars=8000,
+        ),
+    )
+
+    assert result == "compiled-agent"
+    assert context_window == 4096
+    subagents = captured["kwargs"]["subagents"]
+    subagent_names = {subagent["name"] for subagent in subagents}
+    assert subagent_names == {"research_auditor", "paper_reader_worker"}
+    assert captured["kwargs"]["subagents"][0]["tools"]
+    assert all(subagent["name"] != "general-purpose" for subagent in subagents)
+
+
+@pytest.mark.asyncio
+async def test_deep_agent_uses_enabled_registry_subagent_definitions(monkeypatch, tmp_path):
+    captured = {}
+
+    class FakeSandbox:
+        def __init__(self, *, session_id: str, base_dir: str, **kwargs):
+            self.workspace = str(tmp_path / session_id)
+            (tmp_path / session_id).mkdir(parents=True, exist_ok=True)
+
+        async def get_context(self):
+            return {"success": False}
+
+    async def fake_list_subagents(database_url, *, enabled_only):
+        assert enabled_only is True
+        return [
+            SubagentDefinition(
+                name="research_auditor",
+                display_name="Auditor Agent",
+                description="Edited auditor description from registry.",
+                system_prompt="You are the edited Research Auditor Agent.",
+                skill_refs=["research-evidence-audit"],
+                allowed_tools=["audit_evidence_claims"],
+                input_boundaries={"requires": ["answer_content", "citations"]},
+                output_boundary="process_trace",
+                can_answer_user=False,
+                can_write_artifacts=False,
+                enabled=True,
+            )
+        ]
+
+    monkeypatch.setattr(agent, "FullSandboxBackend", FakeSandbox)
+    monkeypatch.setattr(agent, "get_llm_model", lambda *args, **kwargs: SimpleNamespace(profile={"max_input_tokens": 4096}))
+    monkeypatch.setattr(agent, "_collect_tools", lambda **kwargs: [])
+    monkeypatch.setattr(agent, "_build_backend", lambda *args, **kwargs: "backend")
+    def fake_create_deep_agent(**kwargs):
+        captured["kwargs"] = kwargs
+        return "compiled-agent"
+
+    monkeypatch.setattr(agent, "create_deep_agent", fake_create_deep_agent)
+    monkeypatch.setattr(agent, "ensure_subagent_definitions_in_database", lambda database_url: None)
+    monkeypatch.setattr(agent, "list_subagent_definitions_from_database", fake_list_subagents)
+    monkeypatch.setattr(agent, "_WORKSPACE_DIR", str(tmp_path))
+    monkeypatch.setattr(agent, "_BUILTIN_SKILLS_DIR", str(tmp_path / "missing-builtin"))
+    monkeypatch.setattr(agent, "_EXTERNAL_SKILLS_DIR", str(tmp_path / "missing-external"))
+    monkeypatch.setattr(agent._dir_watcher, "has_changed", lambda path: False)
+    monkeypatch.setitem(
+        sys.modules,
+        "backend.task_settings",
+        types.SimpleNamespace(TaskSettings=lambda: None),
+    )
+
+    await agent.deep_agent(
+        session_id="session-1",
+        task_settings=SimpleNamespace(
+            max_tokens=2048,
+            sandbox_exec_timeout=30,
+            max_output_chars=8000,
+        ),
+    )
+
+    subagents = captured["kwargs"]["subagents"]
+    assert [subagent["name"] for subagent in subagents] == ["research_auditor"]
+    assert subagents[0]["description"] == "Edited auditor description from registry."
 
 
 def test_chat_active_tool_packs_accept_only_research_packs(monkeypatch):

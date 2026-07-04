@@ -293,6 +293,66 @@ export interface RuntimeResultAuditExport extends RuntimeResultAudit {
   round_files: RoundFileInfo[];
 }
 
+export interface ResearchAgentDefinition {
+  name: string;
+  display_name: string;
+  agent_type: 'system_builtin' | 'custom' | string;
+  source: string;
+  editable: boolean;
+  description: string;
+  system_prompt: string;
+  skill_refs: string[];
+  allowed_tools: string[];
+  input_boundaries: Record<string, unknown>;
+  output_boundary: 'context_only' | 'process_trace' | 'artifact' | string;
+  can_answer_user: boolean;
+  can_write_artifacts: boolean;
+  enabled: boolean;
+  version: number;
+  validation_status: 'valid' | 'invalid' | 'draft' | string;
+  citation_evidence: boolean;
+  metadata: Record<string, unknown>;
+}
+
+export interface ResearchAgentRun {
+  task_id: string;
+  parent_workflow_id?: string;
+  agent_name: string;
+  agent_role?: string;
+  status: string;
+  input_boundary?: Record<string, unknown>;
+  output_boundary: 'context_only' | 'process_trace' | 'artifact' | string;
+  citation_evidence: boolean;
+  evidence_refs?: Record<string, unknown>[];
+  outputs?: Record<string, unknown>;
+  warnings?: Record<string, unknown>[];
+  errors?: Record<string, unknown>[];
+  started_at?: string | null;
+  completed_at?: string | null;
+}
+
+export interface ResearchAgentValidationResult {
+  agent_name: string;
+  status: 'passed' | 'failed' | 'system_managed' | string;
+  editable: boolean;
+  checks: string[];
+  example_result?: unknown;
+  validated_at: string;
+  errors: string[];
+}
+
+export interface ResearchAgentUpdateRequest {
+  display_name?: string;
+  description?: string;
+  system_prompt?: string;
+  skill_refs?: string[];
+  allowed_tools?: string[];
+  input_boundaries?: Record<string, unknown>;
+  output_boundary?: 'context_only' | 'process_trace' | 'artifact' | string;
+  enabled?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
 export async function createSession(data: CreateSessionRequest): Promise<Session> {
   const response = await apiClient.put<ApiResponse<Session>>('/sessions', data);
   return response.data.data;
@@ -501,6 +561,39 @@ export async function exportRuntimeResultAudit(
     filters ?? {},
   );
   return response.data.data;
+}
+
+export async function listResearchAgents(): Promise<ResearchAgentDefinition[]> {
+  const response = await apiClient.get<ApiResponse<{ agents: ResearchAgentDefinition[] }>>(
+    `/sessions/research/agents`,
+  );
+  return response.data.data.agents;
+}
+
+export async function listResearchAgentRuns(agentName: string, limit: number = 5): Promise<ResearchAgentRun[]> {
+  const response = await apiClient.get<ApiResponse<{ agent_name: string; runs: ResearchAgentRun[] }>>(
+    `/sessions/research/agents/${encodeURIComponent(agentName)}/runs`,
+    { params: { limit } },
+  );
+  return response.data.data.runs;
+}
+
+export async function validateResearchAgent(agentName: string): Promise<ResearchAgentValidationResult> {
+  const response = await apiClient.post<ApiResponse<ResearchAgentValidationResult>>(
+    `/sessions/research/agents/${encodeURIComponent(agentName)}/validate`,
+  );
+  return response.data.data;
+}
+
+export async function updateResearchAgent(
+  agentName: string,
+  payload: ResearchAgentUpdateRequest,
+): Promise<ResearchAgentDefinition> {
+  const response = await apiClient.patch<ApiResponse<{ agent: ResearchAgentDefinition }>>(
+    `/sessions/research/agents/${encodeURIComponent(agentName)}`,
+    payload,
+  );
+  return response.data.data.agent;
 }
 
 export async function promoteResearchMemory(

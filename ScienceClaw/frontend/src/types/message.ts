@@ -1,5 +1,5 @@
 import type { FileInfo } from '../api/file';
-import type { EvidenceAdmissionMetadata, ResearchTaskRouteMetadata, ToolMetaData, StatisticsData, RoundFileInfo, ResearchToolPackMetadata, ToolResultContract, ToolRuntimeResultSummary } from './event';
+import type { EvidenceAdmissionMetadata, ResearchTaskRouteMetadata, ToolMetaData, StatisticsData, RoundFileInfo, ResearchToolPackMetadata, ToolResultContract, ToolRuntimeResultSummary, SubagentLifecycleMetadata } from './event';
 
 export type MessageType = "user" | "assistant" | "tool" | "step" | "attachments" | "thinking";
 
@@ -141,6 +141,10 @@ export interface ToolContent extends BaseContent {
   result_contract?: ToolResultContract;
   tool_pack?: ResearchToolPackMetadata;
   runtime_result_summary?: ToolRuntimeResultSummary;
+  metadata?: {
+    subagent_lifecycle?: SubagentLifecycleMetadata;
+    [key: string]: any;
+  };
 }
 
 export interface StepContent extends BaseContent {

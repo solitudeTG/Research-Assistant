@@ -33,7 +33,15 @@ from backend.deepagent.diagnostic import DIAGNOSTIC_ENABLED
 from backend.deepagent.plan_types import PlanStep, normalize_plan_steps
 from backend.deepagent.sessions import ScienceSession
 from backend.deepagent.sse_middleware import SSEMonitoringMiddleware
+from backend.research_assistant.subagents import (
+    audit_evidence_claims as research_audit_evidence_claims,
+    read_research_evidence,
+    subagent_lifecycle_identity,
+)
+from backend.research_assistant.storage.database import persist_subagent_run_to_database
+from backend.research_assistant.task_router import decide_research_multi_agent
 from backend.task_settings import get_task_settings, TaskSettings
+from backend.config import settings
 
 
 # ───────────────────────────────────────────────────────────────────
@@ -42,6 +50,33 @@ from backend.task_settings import get_task_settings, TaskSettings
 
 _THINK_TAG_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 _THINK_CONTENT_RE = re.compile(r"<think>(.*?)</think>", re.DOTALL)
+
+
+async def _persist_subagent_lifecycle_run(
+    lifecycle: dict[str, Any],
+    *,
+    input_boundary: dict[str, Any] | None = None,
+    outputs: dict[str, Any] | None = None,
+) -> None:
+    if not lifecycle:
+        return
+    try:
+        await persist_subagent_run_to_database(
+            settings.research_database_url,
+            task_id=str(lifecycle["task_id"]),
+            parent_workflow_id=str(lifecycle.get("workflow_id") or lifecycle["task_id"]),
+            agent_name=str(lifecycle["agent_name"]),
+            agent_role=str(lifecycle.get("agent_role") or "subagent"),
+            status=str(lifecycle.get("status") or "running"),
+            input_boundary=input_boundary or {},
+            output_boundary=str(lifecycle.get("output_boundary") or "process_trace"),
+            evidence_refs=lifecycle.get("evidence_refs") if isinstance(lifecycle.get("evidence_refs"), list) else [],
+            outputs=outputs or {},
+            warnings=[],
+            errors=[],
+        )
+    except Exception:
+        logger.warning("[DeepAgent] failed to persist subagent lifecycle run", exc_info=True)
 
 
 def _extract_thinking(msg: "AIMessage") -> tuple[str, str]:
@@ -350,6 +385,249 @@ def _plan_for_frontend(plan: List[PlanStep]) -> List[dict]:
     return [{**step, "description": step["content"], "tools": []} for step in plan]
 
 
+def _attach_plan_metadata(plan: List[PlanStep], metadata: dict[str, Any]) -> List[PlanStep]:
+    if not plan:
+        return plan
+    current = dict(plan[0].get("metadata") or {})
+    current.update(metadata)
+    plan[0]["metadata"] = current
+    return plan
+
+
+def _material_records_from_query(query: str) -> list[dict[str, Any]]:
+    matches = list(
+        re.finditer(
+            r"(?:^|\n)\s*(?:material|材料)\s*([A-Da-d])\s*[:：]\s*(.*?)(?=\n\s*(?:material|材料)\s*[A-Da-d]\s*[:：]|\Z)",
+            query,
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+    )
+    records: list[dict[str, Any]] = []
+    for index, match in enumerate(matches, start=1):
+        label = match.group(1).upper()
+        content = match.group(2).strip()
+        if content:
+            records.append(
+                {
+                    "title": f"Material {label}",
+                    "source_type": "context",
+                    "content": content,
+                    "metadata": {"material_label": label, "record_index": index},
+                }
+            )
+    if records:
+        return records
+    return [
+        {
+            "title": "User-provided research materials",
+            "source_type": "context",
+            "content": query,
+            "metadata": {"fallback_package": True},
+        }
+    ]
+
+
+def _guard_delegation_decision(agent_name: str, decision: dict[str, Any]) -> dict[str, Any]:
+    trigger = str(decision.get("trigger") or "supervisor_guard")
+    reasons = {
+        "paper_reader_worker": "Supervisor delegation guard ran a bounded Reader Worker because the task matched the multi-material synthesis contract.",
+        "research_auditor": "Supervisor delegation guard ran an Auditor Agent because the task matched the evidence-boundary audit contract.",
+    }
+    return {
+        "decision_source": "supervisor_delegation_guard",
+        "decision": "delegate",
+        "trigger": trigger,
+        "reason": reasons.get(agent_name, str(decision.get("reason") or "Supervisor delegation guard ran a scoped subagent.")),
+    }
+
+
+def _subagent_guard_lifecycle(
+    *,
+    agent_name: str,
+    task_id: str,
+    phase: str,
+    status: str,
+    description: str,
+    decision: dict[str, Any],
+    evidence_refs: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    identity = subagent_lifecycle_identity(agent_name)
+    return {
+        "workflow_id": task_id,
+        "task_id": task_id,
+        "parent_agent": "DeepAgent",
+        "agent_name": agent_name,
+        "agent_role": identity["agent_role"],
+        "agent_type": identity["agent_type"],
+        "source": identity["source"],
+        "phase": phase,
+        "status": status,
+        "description": description,
+        "delegation_decision": _guard_delegation_decision(agent_name, decision),
+        "output_boundary": identity["output_boundary"],
+        "citation_evidence": False,
+        "evidence_refs": evidence_refs or [],
+    }
+
+
+def _task_tool_lifecycle_from_args(
+    *,
+    tool_args: dict[str, Any],
+    tool_call_id: str,
+    phase: str,
+    status: str,
+) -> dict[str, Any]:
+    agent_name = str(tool_args.get("subagent_type") or "").strip()
+    if not agent_name:
+        return {}
+    identity = subagent_lifecycle_identity(agent_name)
+    triggers = {
+        "paper_reader_worker": (
+            "two_or_more_material_synthesis",
+            "Reader Worker handles scoped reading before Supervisor synthesis.",
+        ),
+        "research_auditor": (
+            "boundary_audit_or_trust_check",
+            "Auditor independently checks drafted claims, evidence boundaries, and citation consistency.",
+        ),
+        "general-purpose": (
+            "general_runtime_task",
+            "DeepAgents runtime delegated a general-purpose task.",
+        ),
+    }
+    trigger, reason = triggers.get(
+        agent_name,
+        (
+            f"{identity.get('agent_role', 'subagent')}_delegation",
+            "Supervisor delegated a scoped subagent task through the task tool.",
+        ),
+    )
+    return {
+        "workflow_id": str(tool_args.get("workflow_id") or tool_call_id),
+        "task_id": tool_call_id,
+        "parent_agent": "DeepAgent",
+        "agent_name": agent_name,
+        "agent_role": identity["agent_role"],
+        "agent_type": identity["agent_type"],
+        "source": identity["source"],
+        "phase": phase,
+        "status": status,
+        "description": str(tool_args.get("description") or ""),
+        "delegation_decision": {
+            "decision_source": "supervisor_task_tool",
+            "decision": "delegate",
+            "trigger": trigger,
+            "reason": reason,
+        },
+        "output_boundary": identity["output_boundary"],
+        "citation_evidence": False,
+    }
+
+
+async def _run_supervisor_guard_worker(
+    *,
+    agent_name: str,
+    tool_name: str,
+    tool_args: dict[str, Any],
+    description: str,
+    decision: dict[str, Any],
+    tool_meta: dict[str, Any],
+) -> tuple[list[dict[str, Any]], Any, dict[str, Any]]:
+    task_id = f"guard-{agent_name}-{uuid.uuid4().hex[:8]}"
+    start = time.time()
+    start_lifecycle = _subagent_guard_lifecycle(
+        agent_name=agent_name,
+        task_id=task_id,
+        phase="started",
+        status="running",
+        description=description,
+        decision=decision,
+    )
+    await _persist_subagent_lifecycle_run(
+        start_lifecycle,
+        input_boundary={"args": tool_args, "description": description},
+    )
+    events = [
+        {
+            "event": "tool_call",
+            "data": {
+                "tool_call_id": task_id,
+                "function": tool_name,
+                "args": tool_args,
+                "description": description,
+                "tool_meta": tool_meta,
+                "subagent_lifecycle": start_lifecycle,
+            },
+        }
+    ]
+    tool = read_research_evidence if agent_name == "paper_reader_worker" else research_audit_evidence_claims
+    try:
+        result = tool.invoke(tool_args)
+        evidence_refs = []
+        if isinstance(result, dict):
+            metadata = result.get("metadata")
+            if isinstance(metadata, dict) and isinstance(metadata.get("evidence_refs"), list):
+                evidence_refs = metadata["evidence_refs"]
+        complete_lifecycle = _subagent_guard_lifecycle(
+            agent_name=agent_name,
+            task_id=task_id,
+            phase="completed",
+            status="completed",
+            description=description,
+            decision=decision,
+            evidence_refs=evidence_refs,
+        )
+        await _persist_subagent_lifecycle_run(
+            complete_lifecycle,
+            input_boundary={"description": description},
+            outputs={"result_summary": json.dumps(result, ensure_ascii=False)[:1000]},
+        )
+        events.append(
+            {
+                "event": "tool_result",
+                "data": {
+                    "tool_call_id": task_id,
+                    "function": tool_name,
+                    "args": tool_args,
+                    "content": result,
+                    "duration_ms": int((time.time() - start) * 1000),
+                    "tool_meta": tool_meta,
+                    "subagent_lifecycle": complete_lifecycle,
+                },
+            }
+        )
+        return events, result, complete_lifecycle
+    except Exception as exc:
+        failed_lifecycle = _subagent_guard_lifecycle(
+            agent_name=agent_name,
+            task_id=task_id,
+            phase="failed",
+            status="failed",
+            description=description,
+            decision=decision,
+        )
+        await _persist_subagent_lifecycle_run(
+            failed_lifecycle,
+            input_boundary={"description": description},
+            outputs={"error": f"{type(exc).__name__}: {exc}"},
+        )
+        events.append(
+            {
+                "event": "tool_result",
+                "data": {
+                    "tool_call_id": task_id,
+                    "function": tool_name,
+                    "args": tool_args,
+                    "content": {"status": "failed", "agent": agent_name, "error": f"{type(exc).__name__}: {exc}"},
+                    "duration_ms": int((time.time() - start) * 1000),
+                    "tool_meta": tool_meta,
+                    "subagent_lifecycle": failed_lifecycle,
+                },
+            }
+        )
+        return events, None, failed_lifecycle
+
+
 def _todos_to_plan_steps(todos: List[Dict]) -> List[dict]:
     """
     将 agent 的 write_todos 输出转为前端 plan 步骤格式。
@@ -420,7 +698,9 @@ async def _arun_deep_agent_stream(
     }
 
     # ---- 初始化 plan 变量（仅作为无 todos 时的兜底，不发送占位 plan 给前端） ----
+    multi_agent_decision = decide_research_multi_agent(query).to_dict()
     plan = _build_plan(query[:200])
+    plan = _attach_plan_metadata(plan, {"multi_agent_decision": multi_agent_decision})
 
     # ---- step_start（用于前端 process 分组，不影响 To-dos 显示） ----
     step = plan[0]
@@ -467,6 +747,32 @@ async def _arun_deep_agent_stream(
                 f"You can read them directly using their absolute paths:\n{file_list}]"
             )
 
+        from backend.deepagent.sse_protocol import get_protocol_manager
+        protocol = get_protocol_manager()
+
+        _guard_subagents_completed: set[str] = set()
+        if multi_agent_decision.get("requires_reader"):
+            material_package = {"records": _material_records_from_query(query)}
+            reader_args = {"material_package_json": json.dumps(material_package, ensure_ascii=False)}
+            guard_events, reader_result, _ = await _run_supervisor_guard_worker(
+                agent_name="paper_reader_worker",
+                tool_name="read_research_evidence",
+                tool_args=reader_args,
+                description="Supervisor guard pre-read for multi-material synthesis.",
+                decision=multi_agent_decision,
+                tool_meta=protocol.get_tool_meta("read_research_evidence"),
+            )
+            for guard_event in guard_events:
+                yield guard_event
+            _guard_subagents_completed.add("paper_reader_worker")
+            if reader_result is not None:
+                enriched_query = (
+                    f"{enriched_query}\n\n"
+                    "[Supervisor delegation guard completed a Reader Worker pre-read. "
+                    "Use this as context_only process input, not citation evidence, and do not duplicate the Reader Worker unless a focused re-read is necessary.]\n"
+                    f"{json.dumps(reader_result, ensure_ascii=False)[:3000]}"
+                )
+
         input_messages = {"messages": history_messages + [HumanMessage(content=enriched_query)]}
 
         if diagnostic:
@@ -475,11 +781,9 @@ async def _arun_deep_agent_stream(
         # 中间件数据缓存
         _mw_cache: Dict[str, Dict] = {}
 
-        from backend.deepagent.sse_protocol import get_protocol_manager
-        protocol = get_protocol_manager()
-
         # Todos 追踪（中间件捕获的 write_todos → 转为 plan 步骤）
         _current_todos: List[Dict] = []
+        _subagents_seen: set[str] = set(_guard_subagents_completed)
 
         import asyncio
         STREAM_TIMEOUT = task_cfg.agent_stream_timeout
@@ -535,17 +839,39 @@ async def _arun_deep_agent_stream(
                     if mw_type == "middleware_tool_start":
                         _mw_cache.setdefault(call_id, {}).update({
                             "tool_meta": mw_data.get("tool_meta", {}),
+                            "subagent_lifecycle": mw_data.get("subagent_lifecycle"),
                         })
+                        if isinstance(mw_data.get("subagent_lifecycle"), dict):
+                            _subagents_seen.add(str(mw_data["subagent_lifecycle"].get("agent_name") or ""))
+                            await _persist_subagent_lifecycle_run(
+                                mw_data["subagent_lifecycle"],
+                                input_boundary={
+                                    "args": mw_data.get("args", {}),
+                                    "description": mw_data["subagent_lifecycle"].get("description", ""),
+                                },
+                            )
                     elif mw_type == "middleware_tool_complete":
                         _mw_cache.setdefault(call_id, {}).update({
                             "duration_ms": mw_data.get("duration_ms"),
                             "tool_meta": mw_data.get("tool_meta", {}),
+                            "subagent_lifecycle": mw_data.get("subagent_lifecycle"),
                         })
+                        if isinstance(mw_data.get("subagent_lifecycle"), dict):
+                            _subagents_seen.add(str(mw_data["subagent_lifecycle"].get("agent_name") or ""))
+                            await _persist_subagent_lifecycle_run(
+                                mw_data["subagent_lifecycle"],
+                                input_boundary={
+                                    "description": mw_data["subagent_lifecycle"].get("description", ""),
+                                },
+                                outputs={"result_summary": mw_data.get("result_summary", "")},
+                            )
                     elif mw_type == "middleware_todos_update":
                         new_todos = mw_data.get("todos", [])
                         if new_todos and new_todos != _current_todos:
                             _current_todos = new_todos
                             plan_steps = _todos_to_plan_steps(new_todos)
+                            if plan_steps:
+                                plan_steps[0]["metadata"] = {"multi_agent_decision": multi_agent_decision}
                             yield {"event": "plan_update", "data": {"plan": plan_steps}}
 
                 # ──── messages 模式：逐 token 流式输出 ────
@@ -635,15 +961,27 @@ async def _arun_deep_agent_stream(
                                 fn_args = tc.get("args", {})
                                 cached = _mw_cache.get(call_id, {})
                                 tool_meta = cached.get("tool_meta") or protocol.get_tool_meta(fn_name)
+                                event_data = {
+                                    "tool_call_id": call_id,
+                                    "function": fn_name,
+                                    "args": fn_args,
+                                    "description": f"{fn_name}: {json.dumps(fn_args, ensure_ascii=False)[:200]}",
+                                    "tool_meta": tool_meta,
+                                }
+                                if isinstance(cached.get("subagent_lifecycle"), dict):
+                                    event_data["subagent_lifecycle"] = cached["subagent_lifecycle"]
+                                elif fn_name == "task" and isinstance(fn_args, dict):
+                                    lifecycle = _task_tool_lifecycle_from_args(
+                                        tool_args=fn_args,
+                                        tool_call_id=call_id,
+                                        phase="started",
+                                        status="running",
+                                    )
+                                    if lifecycle:
+                                        event_data["subagent_lifecycle"] = lifecycle
                                 yield {
                                     "event": "tool_call",
-                                    "data": {
-                                        "tool_call_id": call_id,
-                                        "function": fn_name,
-                                        "args": fn_args,
-                                        "description": f"{fn_name}: {json.dumps(fn_args, ensure_ascii=False)[:200]}",
-                                        "tool_meta": tool_meta,
-                                    },
+                                    "data": event_data,
                                 }
 
                         elif isinstance(msg, ToolMessage):
@@ -655,15 +993,18 @@ async def _arun_deep_agent_stream(
                             cached = _mw_cache.pop(tool_call_id, {})
                             duration_ms = cached.get("duration_ms")
                             tool_meta = cached.get("tool_meta") or protocol.get_tool_meta(fn_name)
+                            event_data = {
+                                "tool_call_id": tool_call_id,
+                                "function": fn_name,
+                                "content": content,
+                                "duration_ms": duration_ms,
+                                "tool_meta": tool_meta,
+                            }
+                            if isinstance(cached.get("subagent_lifecycle"), dict):
+                                event_data["subagent_lifecycle"] = cached["subagent_lifecycle"]
                             yield {
                                 "event": "tool_result",
-                                "data": {
-                                    "tool_call_id": tool_call_id,
-                                    "function": fn_name,
-                                    "content": content,
-                                    "duration_ms": duration_ms,
-                                    "tool_meta": tool_meta,
-                                },
+                                "data": event_data,
                             }
 
                         # 无 tool_calls 的 AIMessage = 最终回复
@@ -682,11 +1023,45 @@ async def _arun_deep_agent_stream(
             logger.warning(f"[DeepAgent] Stream timed out after {STREAM_TIMEOUT}s")
             yield {"event": "error", "data": {"message": f"Agent execution timed out after {STREAM_TIMEOUT}s"}}
 
+        if (
+            _stream_ok
+            and multi_agent_decision.get("requires_auditor")
+            and "research_auditor" not in _subagents_seen
+            and (final_content or _last_thinking).strip()
+        ):
+            draft_content = final_content or _last_thinking
+            auditor_args = {"answer_content": draft_content, "citations_json": "[]"}
+            guard_events, auditor_result, _ = await _run_supervisor_guard_worker(
+                agent_name="research_auditor",
+                tool_name="audit_evidence_claims",
+                tool_args=auditor_args,
+                description="Supervisor guard audit for drafted answer before final delivery.",
+                decision=multi_agent_decision,
+                tool_meta=protocol.get_tool_meta("audit_evidence_claims"),
+            )
+            for guard_event in guard_events:
+                yield guard_event
+            _subagents_seen.add("research_auditor")
+            if isinstance(auditor_result, dict):
+                audit_status = (
+                    auditor_result.get("metadata", {}).get("audit_status")
+                    if isinstance(auditor_result.get("metadata"), dict)
+                    else None
+                )
+                if audit_status:
+                    final_content = (
+                        f"{draft_content}\n\n"
+                        f"边界审计：Auditor Agent 已执行，状态为 {audit_status}。"
+                        "本轮没有可升级为 citation evidence 的外部论文、网页或数据库证据时，相关 Reader/Auditor 产物仅作为 process trace/context-only 使用。"
+                    )
+
         # ---- stream 结束后的收尾 ----
         # 只有 stream 正常结束才将未完成步骤标记为 completed；
         # 超时/取消时保留实际状态（pending/in_progress → failed）。
         if _current_todos:
             final_plan_steps = _todos_to_plan_steps(_current_todos)
+            if final_plan_steps:
+                final_plan_steps[0]["metadata"] = {"multi_agent_decision": multi_agent_decision}
             if _stream_ok:
                 for step in final_plan_steps:
                     if step["status"] != "completed":

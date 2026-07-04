@@ -57,13 +57,21 @@ from backend.research_assistant.ingestion import ingest_uploaded_paper, is_resea
 from backend.research_assistant.parsers import PaperParseError
 from backend.research_assistant.reports import generate_markdown_research_report
 from backend.research_assistant.tool_validation import tool_source_sha256, validate_staged_tool
+from backend.research_assistant.subagents import (
+    audit_evidence_claims as validate_auditor_example,
+    read_research_evidence as validate_reader_example,
+    system_builtin_subagent_definitions,
+)
 from backend.research_assistant.storage.database import (
     create_research_project_in_database,
     delete_memory_entry_from_database,
+    ensure_subagent_definitions_in_database,
     get_audit_result_from_database,
     get_evidence_record_from_database,
     get_research_session_status_from_database,
     get_session_research_project_from_database,
+    list_recent_subagent_runs_from_database,
+    list_subagent_definitions_from_database,
     list_project_paper_assets_from_database,
     list_memory_entries_from_database,
     list_research_projects_from_database,
@@ -71,6 +79,7 @@ from backend.research_assistant.storage.database import (
     persist_database_evidence_source_to_database,
     persist_memory_entry_to_database,
     persist_web_evidence_source_to_database,
+    update_subagent_definition_in_database,
     upsert_session_research_project_in_database,
 )
 from backend.user.dependencies import get_current_user, require_user, User
@@ -198,6 +207,18 @@ class DatabaseEvidenceIngestRequest(BaseModel):
 class RuntimeResultAuditExportRequest(BaseModel):
     tool_pack_id: Optional[str] = Field(default=None, description="Optional research tool pack id filter")
     result_sha256: Optional[str] = Field(default=None, description="Optional stable runtime result hash filter")
+
+
+class ResearchAgentUpdateRequest(BaseModel):
+    display_name: Optional[str] = Field(default=None, min_length=1, description="Custom Research Agent display name")
+    description: Optional[str] = Field(default=None, min_length=1, description="Delegation description shown to Supervisor")
+    system_prompt: Optional[str] = Field(default=None, min_length=1, description="Custom Research Agent system prompt")
+    skill_refs: Optional[List[str]] = Field(default=None, description="Skill references attached to this custom agent")
+    allowed_tools: Optional[List[str]] = Field(default=None, description="Allowed tool names for this custom agent")
+    input_boundaries: Optional[Dict[str, Any]] = Field(default=None, description="Input boundary metadata")
+    output_boundary: Optional[str] = Field(default=None, description="Output boundary")
+    enabled: Optional[bool] = Field(default=None, description="Whether Supervisor may delegate to this custom agent")
+    metadata: Optional[Dict[str, Any]] = Field(default=None, description="Extensible governance metadata")
 
 
 def _source_quality(source_type: str, identity: dict[str, Any]) -> dict[str, Any]:
@@ -479,8 +500,9 @@ def _map_plan_to_steps(plan: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             return "failed"
         return "pending"
 
-    return [
-        {
+    steps = []
+    for step in plan:
+        mapped = {
             "event_id": _new_event_id(),
             "timestamp": _now_ts(),
             "status": _map_status(str(step.get("status") or "pending")),
@@ -488,8 +510,10 @@ def _map_plan_to_steps(plan: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             "description": str(step.get("content") or ""),
             "tools": step.get("tools") if isinstance(step.get("tools"), list) else [],
         }
-        for step in plan
-    ]
+        if isinstance(step.get("metadata"), dict):
+            mapped["metadata"] = step["metadata"]
+        steps.append(mapped)
+    return steps
 
 
 def _infer_tool_name(tool_function: str) -> str:
@@ -854,7 +878,7 @@ def _map_science_stream_to_agent_event(evt: Dict[str, Any]) -> Optional[Dict[str
         tool_function = str(data.get("function") or "")
         tool_args = _normalize_tool_args(tool_function, data.get("args") or {}, tool_call_id)
         tool_meta = _extract_tool_meta(data)
-        return _wrap_event("tool", {
+        result = {
             "event_id": _new_event_id(), "timestamp": ts,
             "tool_call_id": tool_call_id,
             "name": _infer_tool_name(tool_function),
@@ -862,7 +886,10 @@ def _map_science_stream_to_agent_event(evt: Dict[str, Any]) -> Optional[Dict[str
             "function": tool_function,
             "args": tool_args,
             "tool_meta": tool_meta,
-        })
+        }
+        if isinstance(data.get("subagent_lifecycle"), dict):
+            result["metadata"] = {"subagent_lifecycle": data["subagent_lifecycle"]}
+        return _wrap_event("tool", result)
 
     if event_type == "tool_result":
         tool_call_id = str(data.get("tool_call_id") or "")
@@ -887,6 +914,8 @@ def _map_science_stream_to_agent_event(evt: Dict[str, Any]) -> Optional[Dict[str
         # 只在有实际 args 时才包含，避免覆盖前端 calling 事件中保存的 args
         if tool_args:
             result["args"] = tool_args
+        if isinstance(data.get("subagent_lifecycle"), dict):
+            result["metadata"] = {"subagent_lifecycle": data["subagent_lifecycle"]}
         return _wrap_event("tool", result)
 
     if event_type == "statistics":
@@ -2006,6 +2035,203 @@ async def list_research_projects_for_user(
     except Exception as exc:
         logger.exception("list_research_projects_for_user failed")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/research/agents", response_model=ApiResponse)
+async def list_research_agents_for_user(
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """List governed Research Agents available to Supervisor."""
+    try:
+        await ensure_subagent_definitions_in_database(settings.research_database_url)
+        agents = await list_subagent_definitions_from_database(
+            settings.research_database_url,
+            enabled_only=False,
+        )
+        registry_agents = [
+            *system_builtin_subagent_definitions(),
+            *agents,
+        ]
+        registry_agents.sort(key=lambda agent: (0 if agent.agent_type == "system_builtin" else 1, agent.name))
+        return ApiResponse(data={"agents": [agent.to_dict() for agent in registry_agents]})
+    except Exception as exc:
+        logger.exception("list_research_agents_for_user failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.patch("/research/agents/{agent_name}", response_model=ApiResponse)
+async def update_research_agent_for_user(
+    agent_name: str,
+    payload: ResearchAgentUpdateRequest,
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """Update a custom Research Agent definition."""
+    try:
+        await ensure_subagent_definitions_in_database(settings.research_database_url)
+        custom_agents = await list_subagent_definitions_from_database(
+            settings.research_database_url,
+            enabled_only=False,
+        )
+        registry_agents = [
+            *system_builtin_subagent_definitions(),
+            *custom_agents,
+        ]
+        definitions = {definition.name: definition for definition in registry_agents}
+        definition = definitions.get(agent_name)
+        if definition is None:
+            raise HTTPException(status_code=404, detail="Research Agent not found")
+        if definition.agent_type != "custom" or not definition.editable:
+            raise HTTPException(status_code=403, detail="Research Agent is system managed and read-only")
+
+        patch = payload.model_dump(exclude_unset=True)
+        updates = {
+            "display_name": patch.get("display_name", definition.display_name),
+            "description": patch.get("description", definition.description),
+            "system_prompt": patch.get("system_prompt", definition.system_prompt),
+            "skill_refs": patch.get("skill_refs", definition.skill_refs),
+            "allowed_tools": patch.get("allowed_tools", definition.allowed_tools),
+            "input_boundaries": patch.get("input_boundaries", definition.input_boundaries),
+            "output_boundary": patch.get("output_boundary", definition.output_boundary),
+            "enabled": patch.get("enabled", definition.enabled),
+            "metadata": patch.get("metadata", definition.metadata or {}),
+        }
+        updated = await update_subagent_definition_in_database(
+            settings.research_database_url,
+            name=agent_name,
+            updates=updates,
+        )
+        return ApiResponse(data={"agent": updated.to_dict()})
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("update_research_agent_for_user failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.get("/research/agents/{agent_name}/runs", response_model=ApiResponse)
+async def list_research_agent_runs_for_user(
+    agent_name: str,
+    limit: int = Query(default=5, ge=1, le=20),
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """List recent persisted lifecycle runs for a visible Research Agent."""
+    try:
+        runs = await list_recent_subagent_runs_from_database(
+            settings.research_database_url,
+            agent_name=agent_name,
+            limit=limit,
+        )
+        return ApiResponse(data={"agent_name": agent_name, "runs": runs})
+    except Exception as exc:
+        logger.exception("list_research_agent_runs_for_user failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/research/agents/{agent_name}/validate", response_model=ApiResponse)
+async def validate_research_agent_for_user(
+    agent_name: str,
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """Run a bounded validation example for a governed Research Agent."""
+    try:
+        await ensure_subagent_definitions_in_database(settings.research_database_url)
+        custom_agents = await list_subagent_definitions_from_database(
+            settings.research_database_url,
+            enabled_only=False,
+        )
+        registry_agents = [
+            *system_builtin_subagent_definitions(),
+            *custom_agents,
+        ]
+        definitions = {definition.name: definition for definition in registry_agents}
+        definition = definitions.get(agent_name)
+        if definition is None:
+            raise HTTPException(status_code=404, detail="Research Agent not found")
+
+        if definition.agent_type == "system_builtin":
+            return ApiResponse(
+                data={
+                    "agent_name": agent_name,
+                    "status": "system_managed",
+                    "editable": False,
+                    "checks": ["system_builtin_read_only", "runtime_managed"],
+                    "example_result": None,
+                    "validated_at": datetime.now(timezone.utc).isoformat(),
+                    "errors": [],
+                }
+            )
+
+        validation = _run_research_agent_validation_example(agent_name)
+        validation.update(
+            {
+                "agent_name": agent_name,
+                "editable": bool(definition.editable),
+                "validated_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        return ApiResponse(data=validation)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("validate_research_agent_for_user failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+def _run_research_agent_validation_example(agent_name: str) -> Dict[str, Any]:
+    checks = ["definition_contract"]
+    errors: list[str] = []
+    example_result: Any = None
+    try:
+        if agent_name == "research_auditor":
+            example_result = validate_auditor_example.invoke(
+                {
+                    "answer_content": "Unsupported validation claim.",
+                    "citations_json": "[]",
+                }
+            )
+        elif agent_name == "paper_reader_worker":
+            example_result = validate_reader_example.invoke(
+                {
+                    "material_package_json": json.dumps(
+                        {
+                            "records": [
+                                {
+                                    "evidence_id": 1,
+                                    "source_type": "paper",
+                                    "title": "Validation Example",
+                                    "quote": "Reader validation keeps notes context-only.",
+                                }
+                            ]
+                        }
+                    )
+                }
+            )
+        else:
+            errors.append("No validation example is registered for this custom agent.")
+
+        if isinstance(example_result, dict):
+            expected_keys = {"status", "agent", "boundary", "citation_evidence", "content", "metadata"}
+            if set(example_result) == expected_keys:
+                checks.append("minimal_envelope")
+            else:
+                errors.append("Example result does not match the minimal envelope.")
+            if example_result.get("citation_evidence") is False:
+                checks.append("citation_evidence_false")
+            else:
+                errors.append("Example result must not be citation evidence.")
+        elif not errors:
+            errors.append("Validation example did not return a structured result.")
+    except Exception as exc:
+        errors.append(str(exc))
+
+    return {
+        "status": "failed" if errors else "passed",
+        "checks": checks,
+        "example_result": example_result,
+        "errors": errors,
+    }
 
 
 @router.get("/research/projects/{project_id}/papers", response_model=ApiResponse)
