@@ -1,0 +1,58 @@
+{
+  "associated_session": "GYaPmyF4fdKjgWjwZpukjs",
+  "associated_snapshot": {
+    "subagents": [
+      {
+        "name": "paper_reader_worker",
+        "skills": [
+          "research-paper-reading"
+        ],
+        "tools": [
+          "read_research_evidence",
+          "audit_evidence_claims"
+        ]
+      },
+      {
+        "name": "research_auditor",
+        "skills": [
+          "research-evidence-audit"
+        ],
+        "tools": [
+          "audit_evidence_claims"
+        ]
+      }
+    ],
+    "active_tool_packs": []
+  },
+  "cancelled_session": "9cHkdFJ8EWVvinFnhNf9fG",
+  "cancelled_snapshot": {
+    "subagents": [
+      {
+        "name": "paper_reader_worker",
+        "skills": [
+          "research-paper-reading"
+        ],
+        "tools": [
+          "read_research_evidence"
+        ]
+      },
+      {
+        "name": "research_auditor",
+        "skills": [
+          "research-evidence-audit"
+        ],
+        "tools": [
+          "audit_evidence_claims"
+        ]
+      }
+    ],
+    "active_tool_packs": []
+  },
+  "associated_tools": [
+    "read_research_evidence",
+    "audit_evidence_claims"
+  ],
+  "cancelled_tools": [
+    "read_research_evidence"
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "url": "http://127.0.0.1:4176/chat/research-agents",
+  "sections": [
+    "BaseInfo",
+    "BaseInfo",
+    "CapabilityAccess",
+    "SkillBindingSelector",
+    "ToolBindingSelector"
+  ],
+  "skill_visible": true,
+  "tool_visible": true,
+  "save_patch_status": 200,
+  "requests": [
+    "GET http://127.0.0.1:4176/api/v1/auth/status",
+    "GET http://127.0.0.1:4176/api/v1/auth/check-default-password",
+    "POST http://127.0.0.1:4176/api/v1/auth/login",
+    "GET http://127.0.0.1:4176/api/v1/sessions/notifications",
+    "GET http://127.0.0.1:4176/api/v1/sessions/notifications",
+    "GET http://127.0.0.1:4176/api/v1/sessions",
+    "GET http://127.0.0.1:4176/api/v1/sessions/research/agents",
+    "GET http://127.0.0.1:4176/api/v1/sessions/research/agents/capabilities",
+    "GET http://127.0.0.1:4176/api/v1/sessions/research/agents/research_auditor/runs?limit=5",
+    "GET http://127.0.0.1:4176/api/v1/sessions/research/agents/f021_methods_mapper_live/runs?limit=5",
+    "PATCH http://127.0.0.1:4176/api/v1/sessions/research/agents/f021_methods_mapper_live"
+  ],
+  "responses": [
+    "200 http://127.0.0.1:4176/api/v1/auth/status",
+    "200 http://127.0.0.1:4176/api/v1/auth/check-default-password",
+    "200 http://127.0.0.1:4176/api/v1/auth/login",
+    "200 http://127.0.0.1:4176/api/v1/sessions",
+    "200 http://127.0.0.1:4176/api/v1/sessions/research/agents/capabilities",
+    "200 http://127.0.0.1:4176/api/v1/sessions/research/agents",
+    "200 http://127.0.0.1:4176/api/v1/sessions/research/agents/research_auditor/runs?limit=5",
+    "200 http://127.0.0.1:4176/api/v1/sessions/research/agents/f021_methods_mapper_live/runs?limit=5",
+    "200 http://127.0.0.1:4176/api/v1/sessions/research/agents/f021_methods_mapper_live"
+  ],
+  "console": []
+}
