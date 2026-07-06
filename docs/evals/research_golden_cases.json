@@ -1,0 +1,129 @@
+{
+  "cases": [
+    {
+      "case_id": "leo_space_time_summary_live_001",
+      "task_type": "whole_paper_summary",
+      "mode": "live_ui",
+      "paper_paths": [
+        "paper_data/Space-Time_Beamforming_for_LEO_Satellite_Communications_Enabling_Extremely_Narrow_Beams(1).pdf"
+      ],
+      "question": "Summarize this paper's research problem, method, core contribution, and evidence-backed limitations.",
+      "quality_thresholds": {
+        "min_citation_count": 1,
+        "max_unsupported_claim_ratio": 0.65,
+        "max_invalid_claims": 0,
+        "required_summary_mode": "llm_section_global"
+      },
+      "required_outputs": {
+        "answer": true,
+        "report": true,
+        "markdown_summary": true
+      }
+    },
+    {
+      "case_id": "leo_space_time_summary_payload_001",
+      "task_type": "whole_paper_summary",
+      "mode": "payload",
+      "paper_paths": [
+        "paper_data/Space-Time_Beamforming_for_LEO_Satellite_Communications_Enabling_Extremely_Narrow_Beams(1).pdf"
+      ],
+      "question": "Summarize the paper's problem, method, contribution, and limitations.",
+      "answer_payload_path": "payloads/leo_space_time_summary_payload_001.answer.json",
+      "quality_thresholds": {
+        "min_citation_count": 2,
+        "max_unsupported_claim_ratio": 0.4,
+        "max_invalid_claims": 0,
+        "required_summary_mode": "llm_section_global"
+      },
+      "required_outputs": {
+        "answer": true,
+        "report": false,
+        "markdown_summary": true
+      }
+    },
+    {
+      "case_id": "leo_space_time_evidence_qa_payload_001",
+      "task_type": "evidence_qa",
+      "mode": "payload",
+      "paper_paths": [
+        "paper_data/Space-Time_Beamforming_for_LEO_Satellite_Communications_Enabling_Extremely_Narrow_Beams(1).pdf"
+      ],
+      "question": "What evidence does the paper provide for extremely narrow LEO beams?",
+      "answer_payload_path": "payloads/leo_space_time_evidence_qa_payload_001.answer.json",
+      "quality_thresholds": {
+        "min_citation_count": 1,
+        "max_unsupported_claim_ratio": 0.5,
+        "max_invalid_claims": 0
+      },
+      "required_outputs": {
+        "answer": true,
+        "report": false,
+        "markdown_summary": true
+      }
+    },
+    {
+      "case_id": "leo_integrated_comm_nav_evidence_qa_payload_001",
+      "task_type": "evidence_qa",
+      "mode": "payload",
+      "paper_paths": [
+        "paper_data/Beamforming_Design_and_Satellite_Selection_for_Realizing_the_Integrated_Communication_and_Navigation_in_LEO_Satellite_Networks.pdf"
+      ],
+      "question": "What evidence supports the communication and navigation integration claim?",
+      "answer_payload_path": "payloads/leo_integrated_comm_nav_evidence_qa_payload_001.answer.json",
+      "quality_thresholds": {
+        "min_citation_count": 1,
+        "max_unsupported_claim_ratio": 0.5,
+        "max_invalid_claims": 0
+      },
+      "required_outputs": {
+        "answer": true,
+        "report": false,
+        "markdown_summary": true
+      }
+    },
+    {
+      "case_id": "leo_insufficient_evidence_payload_001",
+      "task_type": "no_evidence_or_insufficient_evidence",
+      "mode": "payload",
+      "paper_paths": [
+        "paper_data/Beamforming_Design_and_Satellite_Selection_for_Realizing_the_Integrated_Communication_and_Navigation_in_LEO_Satellite_Networks.pdf"
+      ],
+      "question": "Does the paper prove clinical safety outcomes for medical patients?",
+      "answer_payload_path": "payloads/leo_insufficient_evidence_payload_001.answer.json",
+      "quality_thresholds": {
+        "min_citation_count": 0,
+        "max_citation_count": 0,
+        "allowed_admission_decisions": ["rejected", "insufficient", "no_evidence"],
+        "max_unsupported_claim_ratio": 1.0,
+        "max_invalid_claims": 0
+      },
+      "required_outputs": {
+        "answer": true,
+        "report": false,
+        "markdown_summary": true
+      }
+    },
+    {
+      "case_id": "leo_multi_paper_synthesis_payload_001",
+      "task_type": "multi_paper_synthesis",
+      "mode": "payload",
+      "paper_paths": [
+        "paper_data/Space-Time_Beamforming_for_LEO_Satellite_Communications_Enabling_Extremely_Narrow_Beams(1).pdf",
+        "paper_data/Beamforming_Design_and_Satellite_Selection_for_Realizing_the_Integrated_Communication_and_Navigation_in_LEO_Satellite_Networks.pdf"
+      ],
+      "question": "Compare how the two papers frame beamforming as a LEO satellite research problem.",
+      "answer_payload_path": "payloads/leo_multi_paper_synthesis_payload_001.answer.json",
+      "quality_thresholds": {
+        "min_citation_count": 2,
+        "min_distinct_cited_papers": 2,
+        "max_unsupported_claim_ratio": 0.6,
+        "max_invalid_claims": 0
+      },
+      "required_outputs": {
+        "answer": true,
+        "report": false,
+        "markdown_summary": true
+      }
+    }
+  ]
+}

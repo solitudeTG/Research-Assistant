@@ -1,0 +1,39 @@
+{
+  "answer_id": "golden-evidence-qa-002",
+  "content": "The answer cites original paper evidence about integrated communication and navigation in LEO satellite networks.",
+  "citations": [
+    {
+      "evidence_id": 21,
+      "chunk_id": "chunk-21",
+      "paper_id": "paper-comm-nav",
+      "title": "Beamforming Design and Satellite Selection for Integrated Communication and Navigation",
+      "section": "System Model",
+      "page_start": 2,
+      "page_end": 2,
+      "quote": "The paper frames beamforming and satellite selection as part of integrated communication and navigation.",
+      "citation_label": "paper-comm-nav:System Model:2",
+      "source_type": "paper",
+      "source_identity": {"paper_id": "paper-comm-nav"},
+      "evidence_scope": "project"
+    }
+  ],
+  "citation_count": 1,
+  "context_boundaries": {
+    "citation_evidence": ["paper", "web", "database"],
+    "context_only_memory": ["memory"],
+    "process_trace": ["tool_logs", "runtime_results", "agent_lifecycle"],
+    "model_reasoning": ["model_reasoning"]
+  },
+  "summary_synthesis": {},
+  "evidence_admission": {"decision": "accepted"},
+  "task_route": {"route": "evidence_qa"},
+  "audit": {
+    "status": "approved",
+    "claim_count": 2,
+    "approved_claim_count": 2,
+    "partial_claim_count": 0,
+    "unsupported_claim_count": 0,
+    "invalid_source_count": 0,
+    "claims": []
+  }
+}

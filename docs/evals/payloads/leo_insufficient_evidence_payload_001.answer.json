@@ -1,0 +1,24 @@
+{
+  "answer_id": "golden-insufficient-001",
+  "content": "No citation evidence in the satellite paper supports clinical safety outcomes for medical patients.",
+  "citations": [],
+  "citation_count": 0,
+  "context_boundaries": {
+    "citation_evidence": ["paper", "web", "database"],
+    "context_only_memory": ["memory"],
+    "process_trace": ["tool_logs", "runtime_results", "agent_lifecycle"],
+    "model_reasoning": ["model_reasoning"]
+  },
+  "summary_synthesis": {},
+  "evidence_admission": {"decision": "rejected"},
+  "task_route": {"route": "evidence_qa"},
+  "audit": {
+    "status": "unsupported",
+    "claim_count": 1,
+    "approved_claim_count": 0,
+    "partial_claim_count": 0,
+    "unsupported_claim_count": 1,
+    "invalid_source_count": 0,
+    "claims": []
+  }
+}

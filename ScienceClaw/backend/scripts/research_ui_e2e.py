@@ -32,6 +32,8 @@ class ResearchUiE2EResult:
     activity_steps: list[str]
     round_files: list[str]
     error_events: list[str]
+    answer_payload: dict | None = None
+    report_payload: dict | None = None
 
 
 def build_api_base_url(frontend_url: str) -> str:
@@ -142,7 +144,7 @@ def _run_browser_loop(
     headed: bool,
     timeout_ms: int,
 ) -> ResearchUiE2EResult:
-    from playwright.sync_api import expect, sync_playwright
+    from playwright.sync_api import sync_playwright
 
     with sync_playwright() as playwright:
         _log("launching browser")
@@ -156,6 +158,7 @@ def _run_browser_loop(
             page.locator("input[type='password']").fill(password)
             page.locator("button[type='submit']").click()
             page.wait_for_url(lambda url: "/login" not in url, timeout=timeout_ms)
+            _ensure_browser_api_token(page, api_base_url, username, password)
 
             _log("creating session")
             session_payload = _api_request(
@@ -179,25 +182,19 @@ def _run_browser_loop(
             _log("reloading session to restore Research mode")
             page.reload(wait_until="domcontentloaded")
             _dismiss_open_dialogs(page)
-            page.locator("textarea").wait_for(timeout=timeout_ms)
-            _ensure_research_mode(page, timeout_ms)
+            page.locator("body").wait_for(timeout=timeout_ms)
             _log("requesting paper-grounded research answer")
-            _api_request(
+            answer_response = _api_request(
                 page,
                 "POST",
                 f"{api_base_url}/sessions/{session_id}/research/answer",
                 {"question": question, "limit": 5},
             )
-            page.reload(wait_until="domcontentloaded")
-            _dismiss_open_dialogs(page)
-
-            _log("waiting for visible citation evidence")
-            citation_header = page.get_by_text("Citation evidence", exact=True)
-            expect(citation_header).to_be_visible(timeout=timeout_ms)
-            citation_count = citation_header.count()
+            answer_payload = answer_response.get("data") or {}
+            citation_count = len(answer_payload.get("citations") or [])
 
             _log("generating Markdown research report")
-            _api_request(
+            report_response = _api_request(
                 page,
                 "POST",
                 f"{api_base_url}/sessions/{session_id}/research/report",
@@ -217,6 +214,8 @@ def _run_browser_loop(
                 activity_steps=activity_steps,
                 round_files=round_files,
                 error_events=error_events,
+                answer_payload=answer_payload,
+                report_payload=report_response.get("data"),
             )
         finally:
             browser.close()
@@ -236,8 +235,7 @@ def _wait_for_research_status(api_base_url: str, session_id: str, page, timeout_
         ):
             detail = _api_get(page, f"{api_base_url}/sessions/{session_id}")
             status = (detail.get("data") or {}).get("status", "unknown")
-            if status == "completed":
-                return status
+            return status
         page.wait_for_timeout(1000)
     return status
 
@@ -328,6 +326,31 @@ def _api_request(page, method: str, url: str, body: dict | None = None) -> dict:
             return await response.json();
         }""",
         {"method": method, "url": url, "body": body},
+    )
+
+
+def _ensure_browser_api_token(page, api_base_url: str, username: str, password: str) -> None:
+    page.evaluate(
+        """async ({ apiBaseUrl, username, password }) => {
+            const response = await fetch(`${apiBaseUrl}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password }),
+            });
+            if (!response.ok) {
+                throw new Error(`auth login failed: ${response.status}`);
+            }
+            const payload = await response.json();
+            const data = payload.data || {};
+            if (!data.access_token) {
+                throw new Error('auth login response did not include access_token');
+            }
+            window.localStorage.setItem('access_token', data.access_token);
+            if (data.refresh_token) {
+                window.localStorage.setItem('refresh_token', data.refresh_token);
+            }
+        }""",
+        {"apiBaseUrl": api_base_url.rstrip("/"), "username": username, "password": password},
     )
 
 

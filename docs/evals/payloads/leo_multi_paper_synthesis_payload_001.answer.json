@@ -1,0 +1,53 @@
+{
+  "answer_id": "golden-multi-paper-001",
+  "content": "The synthesis compares two LEO satellite beamforming papers while keeping citations attached to original papers.",
+  "citations": [
+    {
+      "evidence_id": 31,
+      "chunk_id": "chunk-31",
+      "paper_id": "paper-space-time",
+      "title": "Space-Time Beamforming for LEO Satellite Communications Enabling Extremely Narrow Beams",
+      "section": "Introduction",
+      "page_start": 1,
+      "page_end": 1,
+      "quote": "The first paper frames space-time beamforming for narrow LEO beams.",
+      "citation_label": "paper-space-time:Introduction:1",
+      "source_type": "paper",
+      "source_identity": {"paper_id": "paper-space-time"},
+      "evidence_scope": "project"
+    },
+    {
+      "evidence_id": 32,
+      "chunk_id": "chunk-32",
+      "paper_id": "paper-comm-nav",
+      "title": "Beamforming Design and Satellite Selection for Integrated Communication and Navigation",
+      "section": "Introduction",
+      "page_start": 1,
+      "page_end": 1,
+      "quote": "The second paper frames beamforming with satellite selection for integrated communication and navigation.",
+      "citation_label": "paper-comm-nav:Introduction:1",
+      "source_type": "paper",
+      "source_identity": {"paper_id": "paper-comm-nav"},
+      "evidence_scope": "project"
+    }
+  ],
+  "citation_count": 2,
+  "context_boundaries": {
+    "citation_evidence": ["paper", "web", "database"],
+    "context_only_memory": ["memory"],
+    "process_trace": ["tool_logs", "runtime_results", "agent_lifecycle"],
+    "model_reasoning": ["model_reasoning"]
+  },
+  "summary_synthesis": {},
+  "evidence_admission": {"decision": "accepted"},
+  "task_route": {"route": "evidence_qa"},
+  "audit": {
+    "status": "partial",
+    "claim_count": 4,
+    "approved_claim_count": 2,
+    "partial_claim_count": 1,
+    "unsupported_claim_count": 1,
+    "invalid_source_count": 0,
+    "claims": []
+  }
+}
