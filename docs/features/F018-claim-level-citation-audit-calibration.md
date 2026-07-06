@@ -24,6 +24,7 @@ Calibrate Evidence Audit for long-document research answers so structural Markdo
 ## Feature Intake
 
 - Original problem: Evidence Audit is too literal for hierarchical LLM synthesis and treats some non-claims as unsupported claims.
+- User pain point: The research answer can be useful, but a noisy audit panel makes the user unsure which claims are actually unsupported and which are merely synthesized from cited evidence.
 - Capability promise: Audit claim extraction and support classification become more faithful to the citation contract while preserving explicit evidence boundaries.
 - Non-goals: Do not relax citation eligibility; do not hide unsupported claims; do not move audit detail into Chat answer cards.
 - Acceptance source: User request on 2026-06-30 to start implementation and run live UI E2E.
@@ -42,6 +43,23 @@ Calibrate Evidence Audit for long-document research answers so structural Markdo
 
 Completed. F018 calibrates claim extraction and audit status classification for long-document synthesis, adds `partial` audit surfacing in the right ActivityPanel, keeps audit detail out of Chat answer cards, and prevents long-running research answer/report calls from being marked failed by the default 30s frontend timeout.
 
+## Decision Context
+
+### Why
+
+The trust loop depends on distinguishing unsupported claims from partial but citation-backed synthesis. If every broad synthesis sentence is shown as simply unsupported, the audit panel becomes noisy and less useful for research review.
+
+### Why Not
+
+Do not hide unsupported claims or turn generated summaries into citation evidence. The safer boundary is a calibrated `partial` state that preserves warning visibility while respecting F004 citation eligibility.
+
+### If Modifying This Area, Check
+
+- F004 citation evidence boundary.
+- F006 Evidence Audit identity and source eligibility.
+- F017 section/global synthesis behavior.
+- F019 quality evaluation thresholds.
+
 ## Links
 
 ### Evidence
@@ -56,6 +74,10 @@ Completed. F018 calibrates claim extraction and audit status classification for 
 
 - None yet.
 
+### External Context
+
+- Live UI verification used local ScienceClaw frontend/backend services and real PDFs under `paper_data/`.
+
 ### Specs / Plans
 
 - None.
@@ -68,11 +90,19 @@ Completed. F018 calibrates claim extraction and audit status classification for 
 
 ## Acceptance Criteria
 
-- [ ] Audit extraction ignores structural Markdown headings such as `**Global synthesis:**`.
-- [ ] Cited synthesis claims with incomplete lexical support are classified as `partial`, not `unsupported`.
-- [ ] Unsupported unlabeled claims remain visible and are not silently downgraded.
-- [ ] Frontend types and ActivityPanel render partial counts without moving audit data into Chat answer cards.
-- [ ] Live UI E2E with a real PDF shows the research answer route, right-panel audit summary, and no audit block in the chat answer body.
+- [x] Audit extraction ignores structural Markdown headings such as `**Global synthesis:**`.
+- [x] Cited synthesis claims with incomplete lexical support are classified as `partial`, not `unsupported`.
+- [x] Unsupported unlabeled claims remain visible and are not silently downgraded.
+- [x] Frontend types and ActivityPanel render partial counts without moving audit data into Chat answer cards.
+- [x] Live UI E2E with a real PDF shows the research answer route, right-panel audit summary, and no audit block in the chat answer body.
+
+## Acceptance Map
+
+| Claim | Acceptance | Evidence | Status |
+| --- | --- | --- | --- |
+| Structural lines are not audited as claims. | `Global synthesis` heading is not counted as an unsupported claim. | EV-009 focused tests and live UI result. | Passed |
+| Cited but incomplete synthesis is visible as partial. | Audit result exposes `partial` status and ActivityPanel partial counter. | EV-009 focused tests and live UI result. | Passed |
+| Citation boundary remains strict. | Context-only sources remain invalid and unsupported claims are not hidden. | EV-009 focused tests. | Passed |
 
 ## State Timeline
 
