@@ -18,6 +18,7 @@ Sessions 路由。
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import os
 import re
@@ -58,8 +59,8 @@ from backend.research_assistant.parsers import PaperParseError
 from backend.research_assistant.reports import generate_markdown_research_report
 from backend.research_assistant.tool_validation import tool_source_sha256, validate_staged_tool
 from backend.research_assistant.subagents import (
-    audit_evidence_claims as validate_auditor_example,
-    read_research_evidence as validate_reader_example,
+    audit_evidence_claims as research_auditor_tool,
+    read_research_evidence as research_reader_tool,
     system_builtin_subagent_definitions,
 )
 from backend.research_assistant.storage.database import (
@@ -78,7 +79,10 @@ from backend.research_assistant.storage.database import (
     persist_audit_result_to_database,
     persist_database_evidence_source_to_database,
     persist_memory_entry_to_database,
+    persist_subagent_run_to_database,
     persist_web_evidence_source_to_database,
+    rollback_subagent_definition_in_database,
+    set_subagent_validation_status_in_database,
     update_subagent_definition_in_database,
     upsert_session_research_project_in_database,
 )
@@ -836,14 +840,29 @@ def _map_science_stream_to_agent_event(evt: Dict[str, Any]) -> Optional[Dict[str
             return None
         return _wrap_event("plan", {"event_id": _new_event_id(), "timestamp": ts, "steps": _map_plan_to_steps(plan)})
 
+    if event_type == "step":
+        result = {
+            "event_id": str(data.get("event_id") or _new_event_id()),
+            "timestamp": int(data.get("timestamp") or ts),
+            "status": str(data.get("status") or "running"),
+            "id": str(data.get("id") or ""),
+            "description": str(data.get("description") or ""),
+        }
+        if isinstance(data.get("metadata"), dict):
+            result["metadata"] = data["metadata"]
+        return _wrap_event("step", result)
+
     if event_type == "step_start":
         step = data.get("step") or {}
-        return _wrap_event("step", {
+        result = {
             "event_id": _new_event_id(), "timestamp": ts,
             "status": "running",
             "id": str(step.get("id") or ""),
             "description": str(step.get("content") or ""),
-        })
+        }
+        if isinstance(step.get("metadata"), dict):
+            result["metadata"] = step["metadata"]
+        return _wrap_event("step", result)
 
     if event_type == "step_end":
         return _wrap_event("step", {
@@ -1039,6 +1058,78 @@ def _list_skill_dirs(base_dir: str, builtin: bool = False) -> List[Dict[str, Any
         files = [str(f.relative_to(child)) for f in child.rglob("*") if f.is_file()]
         skills.append({**meta, "files": files, "builtin": builtin})
     return skills
+
+
+async def _blocked_capability_names(
+    *,
+    collection_name: str,
+    user_id: str,
+    field_name: str,
+) -> set[str]:
+    col = _db.get_collection(collection_name)
+    if col is None:
+        return set()
+    blocked_docs = col.find({"user_id": user_id}, {field_name: 1})
+    blocked_names: set[str] = set()
+    async for doc in blocked_docs:
+        name = doc.get(field_name)
+        if name:
+            blocked_names.add(name)
+    return blocked_names
+
+
+async def _research_agent_skill_capabilities(user_id: str) -> List[Dict[str, Any]]:
+    blocked_names = await _blocked_capability_names(
+        collection_name="blocked_skills",
+        user_id=user_id,
+        field_name="skill_name",
+    )
+    capabilities: List[Dict[str, Any]] = []
+    for skill in _list_skill_dirs(_BUILTIN_SKILLS_DIR, builtin=True):
+        capabilities.append(
+            {
+                "name": skill["name"],
+                "description": skill.get("description", ""),
+                "source": "builtin_skill",
+                "blocked": False,
+                "available": True,
+                "builtin": True,
+                "files": skill.get("files", []),
+            }
+        )
+    for skill in _list_skill_dirs(_EXTERNAL_SKILLS_DIR, builtin=False):
+        blocked = skill["name"] in blocked_names
+        capabilities.append(
+            {
+                "name": skill["name"],
+                "description": skill.get("description", ""),
+                "source": "external_skill",
+                "blocked": blocked,
+                "available": not blocked,
+                "builtin": False,
+                "files": skill.get("files", []),
+            }
+        )
+    return capabilities
+
+
+def _research_builtin_tool_capabilities() -> List[Dict[str, Any]]:
+    return [
+        {
+            "name": "audit_evidence_claims",
+            "description": "Audit draft research claims against supplied citation evidence.",
+            "source": "research_builtin",
+            "blocked": False,
+            "available": True,
+        },
+        {
+            "name": "read_research_evidence",
+            "description": "Read assigned research evidence and return context-only notes.",
+            "source": "research_builtin",
+            "blocked": False,
+            "available": True,
+        },
+    ]
 
 
 class SkillBlockRequest(BaseModel):
@@ -1437,6 +1528,70 @@ def _list_external_tools() -> List[Dict[str, Any]]:
                 item["tool_pack"] = metadata["tool_pack"]
         tools.append(item)
     return tools
+
+
+async def _research_agent_tool_capabilities(user_id: str) -> List[Dict[str, Any]]:
+    blocked_names = await _blocked_capability_names(
+        collection_name="blocked_tools",
+        user_id=user_id,
+        field_name="tool_name",
+    )
+    capabilities = _research_builtin_tool_capabilities()
+    for tool in _list_external_tools():
+        blocked = tool["name"] in blocked_names
+        item = {
+            "name": tool["name"],
+            "description": tool.get("description", ""),
+            "source": "external_tool",
+            "blocked": blocked,
+            "available": not blocked,
+            "file": tool.get("file", ""),
+        }
+        if isinstance(tool.get("tool_pack"), dict):
+            item["tool_pack"] = tool["tool_pack"]
+        capabilities.append(item)
+    return capabilities
+
+
+async def _resolve_research_agent_capabilities(
+    resolver: Any,
+    user_id: str,
+) -> List[Dict[str, Any]]:
+    result = resolver(user_id)
+    if inspect.isawaitable(result):
+        result = await result
+    return list(result or [])
+
+
+async def _validate_research_agent_capability_refs(
+    definition: Any,
+    *,
+    user_id: str,
+) -> list[str]:
+    skill_capabilities = await _resolve_research_agent_capabilities(
+        _research_agent_skill_capabilities,
+        user_id,
+    )
+    tool_capabilities = await _resolve_research_agent_capabilities(
+        _research_agent_tool_capabilities,
+        user_id,
+    )
+    skills = {str(item.get("name")): item for item in skill_capabilities}
+    tools = {str(item.get("name")): item for item in tool_capabilities}
+    errors: list[str] = []
+    for skill_ref in getattr(definition, "skill_refs", []) or []:
+        item = skills.get(str(skill_ref))
+        if item is None:
+            errors.append(f"Skill binding is missing: {skill_ref}")
+        elif item.get("blocked") or not item.get("available", False):
+            errors.append(f"Skill binding is unavailable: {skill_ref}")
+    for tool_name in getattr(definition, "allowed_tools", []) or []:
+        item = tools.get(str(tool_name))
+        if item is None:
+            errors.append(f"Tool binding is missing: {tool_name}")
+        elif item.get("blocked") or not item.get("available", False):
+            errors.append(f"Tool binding is unavailable: {tool_name}")
+    return errors
 
 
 class ToolBlockRequest(BaseModel):
@@ -2059,6 +2214,20 @@ async def list_research_agents_for_user(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+@router.get("/research/agents/capabilities", response_model=ApiResponse)
+async def list_research_agent_capabilities_for_user(
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """List Skill and concrete Tool capabilities that custom Research Agents may bind."""
+    try:
+        skills = await _research_agent_skill_capabilities(current_user.id)
+        tools = await _research_agent_tool_capabilities(current_user.id)
+        return ApiResponse(data={"skills": skills, "tools": tools})
+    except Exception as exc:
+        logger.exception("list_research_agent_capabilities_for_user failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @router.patch("/research/agents/{agent_name}", response_model=ApiResponse)
 async def update_research_agent_for_user(
     agent_name: str,
@@ -2082,8 +2251,30 @@ async def update_research_agent_for_user(
             raise HTTPException(status_code=404, detail="Research Agent not found")
         if definition.agent_type != "custom" or not definition.editable:
             raise HTTPException(status_code=403, detail="Research Agent is system managed and read-only")
-
         patch = payload.model_dump(exclude_unset=True)
+        content_fields = {
+            "display_name",
+            "description",
+            "system_prompt",
+            "skill_refs",
+            "allowed_tools",
+            "input_boundaries",
+            "output_boundary",
+            "metadata",
+        }
+        has_content_change = any(field in patch for field in content_fields)
+        if payload.enabled is True:
+            if definition.validation_status != "passed":
+                raise HTTPException(status_code=400, detail="Research Agent must pass validation before enablement")
+            if has_content_change:
+                raise HTTPException(status_code=400, detail="Edited Research Agent must be validated before enablement")
+            binding_errors = await _validate_research_agent_capability_refs(
+                definition,
+                user_id=current_user.id,
+            )
+            if binding_errors:
+                raise HTTPException(status_code=400, detail="; ".join(binding_errors))
+
         updates = {
             "display_name": patch.get("display_name", definition.display_name),
             "description": patch.get("description", definition.description),
@@ -2092,7 +2283,8 @@ async def update_research_agent_for_user(
             "allowed_tools": patch.get("allowed_tools", definition.allowed_tools),
             "input_boundaries": patch.get("input_boundaries", definition.input_boundaries),
             "output_boundary": patch.get("output_boundary", definition.output_boundary),
-            "enabled": patch.get("enabled", definition.enabled),
+            "enabled": False if has_content_change else patch.get("enabled", definition.enabled),
+            "validation_status": "draft" if has_content_change else definition.validation_status,
             "metadata": patch.get("metadata", definition.metadata or {}),
         }
         updated = await update_subagent_definition_in_database(
@@ -2163,12 +2355,38 @@ async def validate_research_agent_for_user(
                 }
             )
 
+        binding_errors = await _validate_research_agent_capability_refs(
+            definition,
+            user_id=current_user.id,
+        )
+        if binding_errors:
+            return ApiResponse(
+                data={
+                    "agent_name": agent_name,
+                    "status": "failed",
+                    "editable": bool(definition.editable),
+                    "checks": ["definition_contract", "capability_bindings"],
+                    "example_result": None,
+                    "validated_at": datetime.now(timezone.utc).isoformat(),
+                    "errors": binding_errors,
+                    "published": None,
+                }
+            )
+
         validation = _run_research_agent_validation_example(agent_name)
+        published = await set_subagent_validation_status_in_database(
+            settings.research_database_url,
+            name=agent_name,
+            status="passed" if validation["status"] == "passed" else "failed",
+            validation=validation,
+            enable=validation["status"] == "passed",
+        )
         validation.update(
             {
                 "agent_name": agent_name,
                 "editable": bool(definition.editable),
                 "validated_at": datetime.now(timezone.utc).isoformat(),
+                "published": published.to_dict(),
             }
         )
         return ApiResponse(data=validation)
@@ -2185,14 +2403,14 @@ def _run_research_agent_validation_example(agent_name: str) -> Dict[str, Any]:
     example_result: Any = None
     try:
         if agent_name == "research_auditor":
-            example_result = validate_auditor_example.invoke(
+            example_result = research_auditor_tool.invoke(
                 {
                     "answer_content": "Unsupported validation claim.",
                     "citations_json": "[]",
                 }
             )
         elif agent_name == "paper_reader_worker":
-            example_result = validate_reader_example.invoke(
+            example_result = research_reader_tool.invoke(
                 {
                     "material_package_json": json.dumps(
                         {
@@ -2232,6 +2450,169 @@ def _run_research_agent_validation_example(agent_name: str) -> Dict[str, Any]:
         "example_result": example_result,
         "errors": errors,
     }
+
+
+async def _record_research_answer_subagent_lifecycle(
+    *,
+    session: Any,
+    session_id: str,
+    user_id: str,
+    question: str,
+    answer: Any,
+    retrieval_metadata: Dict[str, Any],
+) -> None:
+    """Record real Reader/Auditor lifecycle for the paper-grounded answer route."""
+    parent_workflow_id = getattr(answer, "answer_id", f"research-answer-{_new_event_id()}")
+    citations = list(getattr(answer, "citations", []) or [])
+    if not citations:
+        return
+
+    reader_task_id = f"{parent_workflow_id}:paper_reader_worker"
+    auditor_task_id = f"{parent_workflow_id}:research_auditor"
+    material_records = [
+        {
+            "evidence_id": citation.evidence_id,
+            "source_type": getattr(citation, "source_type", "paper"),
+            "chunk_id": citation.chunk_id,
+            "paper_id": citation.paper_id,
+            "title": citation.title,
+            "section": citation.section,
+            "quote": citation.quote,
+            "source_identity": getattr(citation, "source_identity", {}) or {},
+        }
+        for citation in citations
+    ]
+    reader_input_boundary = {
+        "description": "Reader Worker pre-read for citation evidence answer.",
+        "question": question,
+        "record_count": len(material_records),
+        **retrieval_metadata,
+    }
+    reader_result = research_reader_tool.invoke(
+        {
+            "material_package_json": json.dumps(
+                {
+                    "records": material_records,
+                    "reading_scope": {
+                        "scope_type": retrieval_metadata.get("retrieval_scope", "session"),
+                        "session_id": session_id,
+                        "project_id": retrieval_metadata.get("project_id"),
+                        "record_count": len(material_records),
+                        "paper_count": len({record["paper_id"] for record in material_records if record.get("paper_id")}),
+                    },
+                },
+                ensure_ascii=False,
+            )
+        }
+    )
+    reader_evidence_refs = (reader_result.get("metadata") or {}).get("evidence_refs") or []
+    await persist_subagent_run_to_database(
+        settings.research_database_url,
+        task_id=reader_task_id,
+        parent_workflow_id=parent_workflow_id,
+        agent_name="paper_reader_worker",
+        agent_role="reader",
+        status="completed",
+        input_boundary=reader_input_boundary,
+        output_boundary=str(reader_result.get("boundary") or "context_only"),
+        evidence_refs=reader_evidence_refs,
+        outputs={"result": reader_result},
+    )
+    await _append_save_publish_session_event(
+        session,
+        session_id=session_id,
+        user_id=user_id,
+        event=_research_upload_step_event(
+            step_id=reader_task_id,
+            status="completed",
+            description="Reader Worker summarized citation evidence",
+            metadata={
+                "subagent_lifecycle": {
+                    "task_id": reader_task_id,
+                    "parent_workflow_id": parent_workflow_id,
+                    "agent_name": "paper_reader_worker",
+                    "agent_role": "reader",
+                    "status": "completed",
+                    "output_boundary": reader_result.get("boundary") or "context_only",
+                    "citation_evidence": False,
+                    "evidence_ref_count": len(reader_evidence_refs),
+                    **retrieval_metadata,
+                },
+                "result_envelope": reader_result,
+            },
+        ),
+    )
+
+    citations_json = json.dumps([citation.to_dict() for citation in citations], ensure_ascii=False)
+    auditor_input_boundary = {
+        "description": "Auditor Agent reviewed answer claims against citation evidence.",
+        "question": question,
+        "citation_count": len(citations),
+        **retrieval_metadata,
+    }
+    auditor_result = research_auditor_tool.invoke(
+        {
+            "answer_content": getattr(answer, "content", ""),
+            "citations_json": citations_json,
+        }
+    )
+    auditor_evidence_refs = (auditor_result.get("metadata") or {}).get("evidence_refs") or []
+    await persist_subagent_run_to_database(
+        settings.research_database_url,
+        task_id=auditor_task_id,
+        parent_workflow_id=parent_workflow_id,
+        agent_name="research_auditor",
+        agent_role="auditor",
+        status="completed",
+        input_boundary=auditor_input_boundary,
+        output_boundary=str(auditor_result.get("boundary") or "process_trace"),
+        evidence_refs=auditor_evidence_refs,
+        outputs={"result": auditor_result},
+    )
+    await _append_save_publish_session_event(
+        session,
+        session_id=session_id,
+        user_id=user_id,
+        event=_research_upload_step_event(
+            step_id=auditor_task_id,
+            status="completed",
+            description="Auditor Agent reviewed citation evidence boundaries",
+            metadata={
+                "subagent_lifecycle": {
+                    "task_id": auditor_task_id,
+                    "parent_workflow_id": parent_workflow_id,
+                    "agent_name": "research_auditor",
+                    "agent_role": "auditor",
+                    "status": "completed",
+                    "output_boundary": auditor_result.get("boundary") or "process_trace",
+                    "citation_evidence": False,
+                    "evidence_ref_count": len(auditor_evidence_refs),
+                    **retrieval_metadata,
+                },
+                "result_envelope": auditor_result,
+            },
+        ),
+    )
+
+
+@router.post("/research/agents/{agent_name}/rollback", response_model=ApiResponse)
+async def rollback_research_agent_for_user(
+    agent_name: str,
+    current_user: User = Depends(require_user),
+) -> ApiResponse:
+    """Roll back a custom Research Agent to its previous saved snapshot."""
+    try:
+        await ensure_subagent_definitions_in_database(settings.research_database_url)
+        rolled_back = await rollback_subagent_definition_in_database(
+            settings.research_database_url,
+            name=agent_name,
+        )
+        return ApiResponse(data={"agent": rolled_back.to_dict()})
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("rollback_research_agent_for_user failed")
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.get("/research/projects/{project_id}/papers", response_model=ApiResponse)
@@ -2872,6 +3253,32 @@ async def answer_research_question_for_session(
                 subject_id=answer.answer_id,
                 audit=answer.audit,
             )
+            try:
+                await _record_research_answer_subagent_lifecycle(
+                    session=session,
+                    session_id=session_id,
+                    user_id=current_user.id,
+                    question=body.question,
+                    answer=answer,
+                    retrieval_metadata=retrieval_metadata,
+                )
+            except Exception as lifecycle_exc:
+                logger.exception("research answer subagent lifecycle recording failed")
+                await _append_save_publish_session_event(
+                    session,
+                    session_id=session_id,
+                    user_id=current_user.id,
+                    event=_research_upload_step_event(
+                        step_id=f"{answer.answer_id}:subagent-lifecycle",
+                        status="failed",
+                        description="Research subagent lifecycle recording failed",
+                        metadata={
+                            "error": str(lifecycle_exc),
+                            "parent_workflow_id": answer.answer_id,
+                            **retrieval_metadata,
+                        },
+                    ),
+                )
         except Exception as exc:
             await _append_save_publish_session_event(
                 session,

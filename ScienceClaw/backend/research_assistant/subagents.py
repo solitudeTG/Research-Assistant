@@ -13,7 +13,7 @@ from backend.research_assistant.audit import audit_evidence_claims as _audit_evi
 
 OUTPUT_BOUNDARIES = {"context_only", "process_trace", "artifact"}
 AGENT_TYPES = {"system_builtin", "custom"}
-VALIDATION_STATUSES = {"valid", "invalid", "draft", "system_managed"}
+VALIDATION_STATUSES = {"passed", "failed", "draft", "disabled", "system_managed"}
 RESULT_STATUSES = {"queued", "running", "completed", "failed", "deferred", "cancelled"}
 
 
@@ -31,7 +31,7 @@ class SubagentDefinition:
     can_write_artifacts: bool
     enabled: bool = True
     version: int = 1
-    validation_status: str = "valid"
+    validation_status: str = "passed"
     citation_evidence: bool = False
     agent_type: str = "custom"
     source: str = "registry"
@@ -199,6 +199,10 @@ def validate_subagent_definition(definition: SubagentDefinition) -> None:
         raise ValueError(f"{definition.name}: output_boundary is invalid")
     if definition.validation_status not in VALIDATION_STATUSES:
         raise ValueError(f"{definition.name}: validation_status is invalid")
+    if definition.agent_type == "custom" and definition.enabled and definition.validation_status != "passed":
+        raise ValueError(f"{definition.name}: validation_status must be passed before enabling")
+    if definition.validation_status == "disabled" and definition.enabled:
+        raise ValueError(f"{definition.name}: disabled validation_status requires enabled=false")
     if definition.can_answer_user:
         raise ValueError(f"{definition.name}: can_answer_user must stay false for F020")
     if definition.citation_evidence:
@@ -304,6 +308,32 @@ def build_subagent_result_envelope(
     }
 
 
+def normalize_subagent_result_envelope(
+    value: Any,
+    *,
+    agent: str,
+    boundary: str,
+    status: str = "completed",
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if isinstance(value, dict) and set(value) == {"status", "agent", "boundary", "citation_evidence", "content", "metadata"}:
+        return build_subagent_result_envelope(
+            status=str(value["status"]),
+            agent=str(value["agent"] or agent),
+            boundary=str(value["boundary"] or boundary),
+            content=value.get("content"),
+            metadata={**dict(value.get("metadata") or {}), **dict(metadata or {})},
+            citation_evidence=bool(value.get("citation_evidence")),
+        )
+    return build_subagent_result_envelope(
+        status=status,
+        agent=agent,
+        boundary=boundary,
+        content=value,
+        metadata=metadata,
+    )
+
+
 @tool
 def audit_evidence_claims(answer_content: str, citations_json: str) -> dict[str, Any]:
     """Audit answer claims against citation evidence.
@@ -318,15 +348,17 @@ def audit_evidence_claims(answer_content: str, citations_json: str) -> dict[str,
     citations = _citation_payloads(citations_json)
     audit = _audit_evidence_claims(answer_content=answer_content, citations=citations)
     audit_payload = audit.to_dict()
+    semantic_audit = _semantic_audit_claims(answer_content, audit_payload)
     return build_subagent_result_envelope(
         status="completed",
         agent="research_auditor",
         boundary="process_trace",
-        content={"audit": audit_payload},
+        content={"audit": audit_payload, "semantic_audit": semantic_audit},
         metadata={
             "audit_status": audit.status,
             "claim_count": audit.claim_count,
             "deterministic_boundary": True,
+            "semantic_audit": semantic_audit,
         },
     )
 
@@ -342,6 +374,7 @@ def read_research_evidence(material_package_json: str) -> dict[str, Any]:
         Context-only notes with preserved evidence refs when present.
     """
     package = _json_loads(material_package_json, default=[])
+    reading_scope = package.get("reading_scope", {}) if isinstance(package, dict) else {}
     records = package.get("records", package.get("evidence_records", [])) if isinstance(package, dict) else package
     if not isinstance(records, list):
         records = [records]
@@ -353,17 +386,32 @@ def read_research_evidence(material_package_json: str) -> dict[str, Any]:
             text = str(record)
             record = {"content": text}
         evidence_id = record.get("evidence_id")
+        chunk_id = record.get("chunk_id")
+        paper_id = record.get("paper_id")
+        section = str(record.get("section") or "").strip()
         source_type = record.get("source_type") or record.get("evidence_type") or "context"
         quote = str(record.get("quote") or record.get("content") or record.get("text") or "").strip()
         title = str(record.get("title") or record.get("paper_title") or "").strip()
         if evidence_id is not None:
-            evidence_refs.append({"evidence_id": evidence_id, "source_type": source_type})
+            ref = {"evidence_id": evidence_id, "source_type": source_type}
+            if chunk_id:
+                ref["chunk_id"] = chunk_id
+            if paper_id:
+                ref["paper_id"] = paper_id
+            if title:
+                ref["title"] = title
+            if section:
+                ref["section"] = section
+            evidence_refs.append(ref)
         notes.append(
             {
                 "index": index,
                 "title": title,
                 "source_type": source_type,
                 "evidence_id": evidence_id,
+                "chunk_id": chunk_id,
+                "paper_id": paper_id,
+                "section": section,
                 "note": quote[:800],
             }
         )
@@ -376,6 +424,7 @@ def read_research_evidence(material_package_json: str) -> dict[str, Any]:
         metadata={
             "evidence_refs": evidence_refs,
             "record_count": len(records),
+            "reading_scope": reading_scope,
         },
     )
 
@@ -412,3 +461,45 @@ def _json_loads(value: str, *, default: Any) -> Any:
         return json.loads(value)
     except json.JSONDecodeError as exc:
         raise ValueError(f"invalid JSON payload: {exc}") from exc
+
+
+def _semantic_audit_claims(answer_content: str, audit_payload: dict[str, Any]) -> dict[str, Any]:
+    claims = []
+    for claim in audit_payload.get("claims", []):
+        claim_text = str(claim.get("claim_text") or "")
+        status = _semantic_claim_status(claim_text, str(claim.get("status") or ""))
+        notes = list(claim.get("notes") or [])
+        if status == "overreach":
+            notes.append("Causal or proof-strength wording appears stronger than the attached evidence supports.")
+        claims.append(
+            {
+                "claim_text": claim_text,
+                "status": status,
+                "deterministic_status": claim.get("status"),
+                "evidence_ids": claim.get("evidence_ids", []),
+                "notes": notes,
+            }
+        )
+    return {
+        "mode": "llm_ready_fallback",
+        "claim_count": len(claims),
+        "claims": claims,
+        "metadata": {
+            "llm_backed_expected": True,
+            "input_chars": len(answer_content),
+        },
+    }
+
+
+def _semantic_claim_status(claim_text: str, deterministic_status: str) -> str:
+    normalized = claim_text.lower()
+    causal_terms = {"prove", "proves", "proved", "causes", "caused", "causal", "因果", "证明", "导致"}
+    if any(term in normalized for term in causal_terms) and deterministic_status in {"partial", "unsupported"}:
+        return "overreach"
+    if deterministic_status == "approved":
+        return "supported"
+    if deterministic_status == "partial":
+        return "partially_supported"
+    if deterministic_status == "invalid_source":
+        return "unsupported"
+    return "unsupported"

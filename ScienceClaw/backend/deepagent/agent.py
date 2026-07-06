@@ -316,6 +316,34 @@ def _tool_pack_id(tool: Any) -> str | None:
     return pack_id.strip()
 
 
+def _reload_external_tools_safely() -> list:
+    if reload_external_tools is None:
+        return []
+    try:
+        return list(reload_external_tools())
+    except Exception:
+        logger.warning("[Agent] failed to reload external tools", exc_info=True)
+        return []
+
+
+def _research_subagent_available_tools(blocked_tools: Set[str] | None = None) -> Dict[str, Any]:
+    """Tools addressable by Research Subagent Registry bindings.
+
+    Main-agent external tools remain gated by active_tool_packs. Subagents use
+    their explicit allowed_tools binding as the activation boundary, so an
+    external tool can be used by a subagent only when it is bound to that
+    subagent and not blocked for the current user.
+    """
+    blocked = blocked_tools or set()
+    available: Dict[str, Any] = dict(_RESEARCH_SUBAGENT_TOOLS)
+    for tool in _reload_external_tools_safely():
+        name = getattr(tool, "name", None)
+        if not isinstance(name, str) or not name.strip() or name in blocked:
+            continue
+        available.setdefault(name, tool)
+    return available
+
+
 def _collect_tools(
     blocked_tools: Set[str] | None = None,
     active_tool_packs: Set[str] | None = None,
@@ -327,12 +355,7 @@ def _collect_tools(
     seen_names: set[str] = set()
     all_tools: List = []
 
-    ext_tools: list = []
-    if reload_external_tools is not None:
-        try:
-            ext_tools = reload_external_tools()
-        except Exception:
-            logger.warning("[Agent] failed to reload external tools", exc_info=True)
+    ext_tools = _reload_external_tools_safely()
 
     for t in _STATIC_TOOLS:
         if t.name in blocked:
@@ -551,10 +574,22 @@ async def deep_agent(
     agent_kwargs["memory"] = _mem_files_to_use
     logger.info(f"[Memory] 宸插惎鐢ㄨ蹇? {[os.path.basename(f) for f in _mem_files_to_use]}")
 
-    agent_kwargs["subagents"] = build_deepagents_subagent_configs(
+    subagent_configs = build_deepagents_subagent_configs(
         definitions=await _load_enabled_research_subagent_definitions(),
-        available_tools=_RESEARCH_SUBAGENT_TOOLS,
+        available_tools=_research_subagent_available_tools(blocked_tools=blocked_tools),
     )
+    agent_kwargs["subagents"] = subagent_configs
+    sse_middleware.runtime_subagent_bindings = [
+        {
+            "name": config.get("name"),
+            "skills": list(config.get("skills") or []),
+            "tools": [
+                getattr(tool, "name", str(tool))
+                for tool in (config.get("tools") or [])
+            ],
+        }
+        for config in subagent_configs
+    ]
 
     agent = create_deep_agent(**agent_kwargs)
 

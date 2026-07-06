@@ -24,6 +24,7 @@ from backend.research_assistant.storage.repository import (
     get_audit_result,
     get_evidence_record,
     get_session_research_project,
+    list_reader_scope_evidence,
     list_subagent_definitions,
     list_recent_subagent_runs,
     list_project_paper_assets,
@@ -37,6 +38,8 @@ from backend.research_assistant.storage.repository import (
     persist_memory_entry,
     persist_report_evidence_map,
     persist_subagent_run,
+    rollback_subagent_definition,
+    set_subagent_validation_status,
     update_subagent_definition,
     upsert_session_research_project,
 )
@@ -171,6 +174,43 @@ async def update_subagent_definition_in_database(
         await connection.close()
 
 
+async def set_subagent_validation_status_in_database(
+    database_url: str,
+    *,
+    name: str,
+    status: str,
+    validation: dict,
+    enable: bool = False,
+) -> SubagentDefinition:
+    import asyncpg
+
+    connection = await asyncpg.connect(database_url)
+    try:
+        return await set_subagent_validation_status(
+            connection,
+            name=name,
+            status=status,
+            validation=validation,
+            enable=enable,
+        )
+    finally:
+        await connection.close()
+
+
+async def rollback_subagent_definition_in_database(
+    database_url: str,
+    *,
+    name: str,
+) -> SubagentDefinition:
+    import asyncpg
+
+    connection = await asyncpg.connect(database_url)
+    try:
+        return await rollback_subagent_definition(connection, name=name)
+    finally:
+        await connection.close()
+
+
 async def persist_subagent_run_to_database(
     database_url: str,
     *,
@@ -219,6 +259,29 @@ async def list_recent_subagent_runs_from_database(
     connection = await asyncpg.connect(database_url)
     try:
         return await list_recent_subagent_runs(connection, agent_name=agent_name, limit=limit)
+    finally:
+        await connection.close()
+
+
+async def list_reader_scope_evidence_from_database(
+    database_url: str,
+    *,
+    session_id: str,
+    project_id: str | None = None,
+    limit: int = 12,
+    per_paper_limit: int = 3,
+) -> list[dict]:
+    import asyncpg
+
+    connection = await asyncpg.connect(database_url)
+    try:
+        return await list_reader_scope_evidence(
+            connection,
+            session_id=session_id,
+            project_id=project_id,
+            limit=limit,
+            per_paper_limit=per_paper_limit,
+        )
     finally:
         await connection.close()
 

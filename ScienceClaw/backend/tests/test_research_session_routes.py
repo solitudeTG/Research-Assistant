@@ -97,7 +97,7 @@ class FakeSubagentDefinition:
         self.can_write_artifacts = False
         self.enabled = True
         self.version = 1
-        self.validation_status = "valid"
+        self.validation_status = "passed"
         self.citation_evidence = False
         self.metadata = {}
 
@@ -122,6 +122,21 @@ class FakeSubagentDefinition:
             "citation_evidence": self.citation_evidence,
             "metadata": self.metadata,
         }
+
+
+class FakeAsyncCursor:
+    def __init__(self, rows):
+        self._rows = list(rows)
+
+    def __aiter__(self):
+        self._iter = iter(self._rows)
+        return self
+
+    async def __anext__(self):
+        try:
+            return next(self._iter)
+        except StopIteration as exc:
+            raise StopAsyncIteration from exc
 
 
 def test_research_answer_and_report_routes_use_citation_evidence_wording():
@@ -353,6 +368,59 @@ async def test_list_research_agents_route_returns_governed_registry(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_list_research_agent_capabilities_route_returns_skill_and_tool_libraries(monkeypatch, tmp_path):
+    sessions = _load_sessions_module(monkeypatch)
+    builtin_skills = tmp_path / "builtin_skills"
+    external_skills = tmp_path / "Skills"
+    tools_dir = tmp_path / "Tools"
+    (builtin_skills / "pdf").mkdir(parents=True)
+    (external_skills / "deep-research").mkdir(parents=True)
+    tools_dir.mkdir()
+    (builtin_skills / "pdf" / "SKILL.md").write_text(
+        "---\nname: pdf\ndescription: Read PDFs.\n---\n",
+        encoding="utf-8",
+    )
+    (external_skills / "deep-research" / "SKILL.md").write_text(
+        "---\nname: deep-research\ndescription: Run deep research.\n---\n",
+        encoding="utf-8",
+    )
+    (tools_dir / "paper_lookup.py").write_text(
+        '@tool\n'
+        'def paper_lookup(query: str) -> dict:\n'
+        '    """Look up paper metadata."""\n'
+        '    return {"query": query}\n',
+        encoding="utf-8",
+    )
+
+    class FakeCollection:
+        def find(self, query, projection):
+            return FakeAsyncCursor([])
+
+    monkeypatch.setattr(sessions, "_BUILTIN_SKILLS_DIR", str(builtin_skills))
+    monkeypatch.setattr(sessions, "_EXTERNAL_SKILLS_DIR", str(external_skills))
+    monkeypatch.setattr(sessions, "_TOOLS_DIR", str(tools_dir))
+    monkeypatch.setattr(
+        sessions,
+        "_db",
+        types.SimpleNamespace(get_collection=lambda name: FakeCollection()),
+    )
+
+    response = await sessions.list_research_agent_capabilities_for_user(
+        current_user=types.SimpleNamespace(id="user-1"),
+    )
+
+    skills = {item["name"]: item for item in response.data["skills"]}
+    tools = {item["name"]: item for item in response.data["tools"]}
+    assert skills["pdf"]["source"] == "builtin_skill"
+    assert skills["pdf"]["available"] is True
+    assert skills["deep-research"]["source"] == "external_skill"
+    assert tools["paper_lookup"]["source"] == "external_tool"
+    assert tools["paper_lookup"]["available"] is True
+    assert tools["audit_evidence_claims"]["source"] == "research_builtin"
+    assert tools["read_research_evidence"]["source"] == "research_builtin"
+
+
+@pytest.mark.asyncio
 async def test_list_research_agent_runs_route_returns_recent_preview(monkeypatch):
     sessions = _load_sessions_module(monkeypatch)
     calls = []
@@ -400,10 +468,44 @@ async def test_validate_research_agent_route_runs_custom_validation_example(monk
         return None
 
     async def fake_list_agents(database_url, *, enabled_only):
-        return [FakeSubagentDefinition(name="paper_reader_worker")]
+        agent = FakeSubagentDefinition(name="paper_reader_worker")
+        agent.skill_refs = ["research-paper-reading"]
+        agent.allowed_tools = ["read_research_evidence"]
+        agent.output_boundary = "context_only"
+        return [agent]
+
+    async def fake_set_validation(database_url, *, name, status, validation, enable):
+        agent = FakeSubagentDefinition(name=name)
+        agent.validation_status = status
+        agent.enabled = enable
+        agent.metadata = {"validation": validation}
+        return agent
 
     monkeypatch.setattr(sessions, "ensure_subagent_definitions_in_database", fake_ensure_agents)
     monkeypatch.setattr(sessions, "list_subagent_definitions_from_database", fake_list_agents)
+    monkeypatch.setattr(sessions, "set_subagent_validation_status_in_database", fake_set_validation)
+    monkeypatch.setattr(
+        sessions,
+        "_research_agent_skill_capabilities",
+        lambda user_id: [
+            {
+                "name": "research-paper-reading",
+                "available": True,
+                "blocked": False,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        sessions,
+        "_research_agent_tool_capabilities",
+        lambda user_id: [
+            {
+                "name": "read_research_evidence",
+                "available": True,
+                "blocked": False,
+            }
+        ],
+    )
 
     response = await sessions.validate_research_agent_for_user(
         "paper_reader_worker",
@@ -416,6 +518,99 @@ async def test_validate_research_agent_route_runs_custom_validation_example(monk
     assert response.data["example_result"]["agent"] == "paper_reader_worker"
     assert response.data["example_result"]["boundary"] == "context_only"
     assert response.data["example_result"]["citation_evidence"] is False
+    assert response.data["published"]["validation_status"] == "passed"
+    assert response.data["published"]["enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_validate_research_agent_route_fails_for_invalid_skill_binding(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+
+    async def fake_ensure_agents(database_url):
+        return None
+
+    async def fake_list_agents(database_url, *, enabled_only):
+        agent = FakeSubagentDefinition(name="paper_reader_worker")
+        agent.skill_refs = ["missing-skill"]
+        agent.allowed_tools = ["read_research_evidence"]
+        return [agent]
+
+    async def fake_set_validation(*args, **kwargs):
+        raise AssertionError("invalid bindings must not be published")
+
+    monkeypatch.setattr(sessions, "ensure_subagent_definitions_in_database", fake_ensure_agents)
+    monkeypatch.setattr(sessions, "list_subagent_definitions_from_database", fake_list_agents)
+    monkeypatch.setattr(sessions, "set_subagent_validation_status_in_database", fake_set_validation)
+    monkeypatch.setattr(
+        sessions,
+        "_research_agent_skill_capabilities",
+        lambda user_id: [],
+    )
+    monkeypatch.setattr(
+        sessions,
+        "_research_agent_tool_capabilities",
+        lambda user_id: [
+            {
+                "name": "read_research_evidence",
+                "available": True,
+                "blocked": False,
+            }
+        ],
+    )
+
+    response = await sessions.validate_research_agent_for_user(
+        "paper_reader_worker",
+        current_user=types.SimpleNamespace(id="user-1"),
+    )
+
+    assert response.data["status"] == "failed"
+    assert response.data["published"] is None
+    assert "missing-skill" in "\n".join(response.data["errors"])
+
+
+@pytest.mark.asyncio
+async def test_update_research_agent_route_rejects_enable_with_invalid_tool_binding(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+
+    async def fake_ensure_agents(database_url):
+        return None
+
+    async def fake_list_agents(database_url, *, enabled_only):
+        agent = FakeSubagentDefinition(name="paper_reader_worker")
+        agent.validation_status = "passed"
+        agent.enabled = False
+        agent.skill_refs = ["research-paper-reading"]
+        agent.allowed_tools = ["missing_tool"]
+        return [agent]
+
+    monkeypatch.setattr(sessions, "ensure_subagent_definitions_in_database", fake_ensure_agents)
+    monkeypatch.setattr(sessions, "list_subagent_definitions_from_database", fake_list_agents)
+    monkeypatch.setattr(
+        sessions,
+        "_research_agent_skill_capabilities",
+        lambda user_id: [
+            {
+                "name": "research-paper-reading",
+                "available": True,
+                "blocked": False,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        sessions,
+        "_research_agent_tool_capabilities",
+        lambda user_id: [],
+    )
+
+    with pytest.raises(Exception) as exc_info:
+        await sessions.update_research_agent_for_user(
+            "paper_reader_worker",
+            sessions.ResearchAgentUpdateRequest(enabled=True),
+            current_user=types.SimpleNamespace(id="user-1"),
+        )
+
+    assert getattr(exc_info.value, "status_code", None) == 400
+    assert "missing_tool" in getattr(exc_info.value, "detail", "")
 
 
 @pytest.mark.asyncio
@@ -474,6 +669,168 @@ async def test_update_research_agent_route_allows_custom_agent_edits(monkeypatch
     assert calls[2][3]["enabled"] is False
     assert response.data["agent"]["name"] == "paper_reader_worker"
     assert response.data["agent"]["editable"] is True
+    assert response.data["agent"]["validation_status"] == "draft"
+
+
+@pytest.mark.asyncio
+async def test_update_research_agent_route_rejects_enabling_without_passed_validation(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+
+    async def fake_ensure_agents(database_url):
+        return None
+
+    async def fake_list_agents(database_url, *, enabled_only):
+        agent = FakeSubagentDefinition(name="paper_reader_worker")
+        agent.validation_status = "draft"
+        agent.enabled = False
+        return [agent]
+
+    monkeypatch.setattr(sessions, "ensure_subagent_definitions_in_database", fake_ensure_agents)
+    monkeypatch.setattr(sessions, "list_subagent_definitions_from_database", fake_list_agents)
+
+    payload = sessions.ResearchAgentUpdateRequest(enabled=True)
+
+    with pytest.raises(Exception) as exc_info:
+        await sessions.update_research_agent_for_user(
+            "paper_reader_worker",
+            payload,
+            current_user=types.SimpleNamespace(id="user-1"),
+        )
+
+    assert getattr(exc_info.value, "status_code", None) == 400
+
+
+@pytest.mark.asyncio
+async def test_update_research_agent_route_rejects_edit_and_enable_in_one_step(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+
+    async def fake_ensure_agents(database_url):
+        return None
+
+    async def fake_list_agents(database_url, *, enabled_only):
+        agent = FakeSubagentDefinition(name="paper_reader_worker")
+        agent.validation_status = "passed"
+        agent.enabled = True
+        return [agent]
+
+    monkeypatch.setattr(sessions, "ensure_subagent_definitions_in_database", fake_ensure_agents)
+    monkeypatch.setattr(sessions, "list_subagent_definitions_from_database", fake_list_agents)
+
+    payload = sessions.ResearchAgentUpdateRequest(
+        description="Updated prompt boundary.",
+        enabled=True,
+    )
+
+    with pytest.raises(Exception) as exc_info:
+        await sessions.update_research_agent_for_user(
+            "paper_reader_worker",
+            payload,
+            current_user=types.SimpleNamespace(id="user-1"),
+        )
+
+    assert getattr(exc_info.value, "status_code", None) == 400
+    assert "validated before enablement" in getattr(exc_info.value, "detail", "")
+
+
+@pytest.mark.asyncio
+async def test_update_research_agent_route_allows_enabling_passed_custom_agent(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    calls = []
+
+    async def fake_ensure_agents(database_url):
+        calls.append(("ensure", database_url))
+
+    async def fake_list_agents(database_url, *, enabled_only):
+        calls.append(("list", database_url, enabled_only))
+        agent = FakeSubagentDefinition(name="paper_reader_worker")
+        agent.validation_status = "passed"
+        agent.enabled = False
+        return [agent]
+
+    async def fake_update_agent(database_url, *, name, updates):
+        calls.append(("update", database_url, name, updates))
+        updated = FakeSubagentDefinition(name=name)
+        updated.validation_status = updates["validation_status"]
+        updated.enabled = updates["enabled"]
+        return updated
+
+    monkeypatch.setattr(sessions, "ensure_subagent_definitions_in_database", fake_ensure_agents)
+    monkeypatch.setattr(sessions, "list_subagent_definitions_from_database", fake_list_agents)
+    monkeypatch.setattr(sessions, "update_subagent_definition_in_database", fake_update_agent)
+    monkeypatch.setattr(
+        sessions,
+        "_research_agent_skill_capabilities",
+        lambda user_id: [
+            {
+                "name": "research-evidence-audit",
+                "available": True,
+                "blocked": False,
+            },
+            {
+                "name": "research-paper-reading",
+                "available": True,
+                "blocked": False,
+            },
+        ],
+    )
+    monkeypatch.setattr(
+        sessions,
+        "_research_agent_tool_capabilities",
+        lambda user_id: [
+            {
+                "name": "audit_evidence_claims",
+                "available": True,
+                "blocked": False,
+            },
+            {
+                "name": "read_research_evidence",
+                "available": True,
+                "blocked": False,
+            },
+        ],
+    )
+
+    response = await sessions.update_research_agent_for_user(
+        "paper_reader_worker",
+        sessions.ResearchAgentUpdateRequest(enabled=True),
+        current_user=types.SimpleNamespace(id="user-1"),
+    )
+
+    assert calls[2][3]["enabled"] is True
+    assert calls[2][3]["validation_status"] == "passed"
+    assert response.data["agent"]["enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_rollback_research_agent_route_restores_custom_snapshot(monkeypatch):
+    sessions = _load_sessions_module(monkeypatch)
+    calls = []
+
+    async def fake_ensure_agents(database_url):
+        calls.append(("ensure", database_url))
+
+    async def fake_rollback(database_url, *, name):
+        calls.append(("rollback", database_url, name))
+        agent = FakeSubagentDefinition(name=name)
+        agent.display_name = "Reader Worker Previous"
+        agent.version = 4
+        agent.validation_status = "draft"
+        agent.enabled = False
+        return agent
+
+    monkeypatch.setattr(sessions, "ensure_subagent_definitions_in_database", fake_ensure_agents)
+    monkeypatch.setattr(sessions, "rollback_subagent_definition_in_database", fake_rollback)
+
+    response = await sessions.rollback_research_agent_for_user(
+        "paper_reader_worker",
+        current_user=types.SimpleNamespace(id="user-1"),
+    )
+
+    assert calls == [
+        ("ensure", sessions.settings.research_database_url),
+        ("rollback", sessions.settings.research_database_url, "paper_reader_worker"),
+    ]
+    assert response.data["agent"]["display_name"] == "Reader Worker Previous"
     assert response.data["agent"]["validation_status"] == "draft"
 
 
@@ -1238,6 +1595,7 @@ async def test_research_answer_persists_audit_result(monkeypatch):
     sessions = _load_sessions_module(monkeypatch)
     session = FakeSession()
     persisted_audit = {}
+    persisted_runs = []
 
     async def fake_get_session(session_id):
         assert session_id == "session-1"
@@ -1269,9 +1627,13 @@ async def test_research_answer_persists_audit_result(monkeypatch):
         persisted_audit["subject_id"] = subject_id
         persisted_audit["status"] = audit.status
 
+    async def fake_persist_subagent_run(database_url, **kwargs):
+        persisted_runs.append({"database_url": database_url, **kwargs})
+
     monkeypatch.setattr(sessions, "async_get_science_session", fake_get_session)
     monkeypatch.setattr(sessions, "answer_research_question", fake_answer)
     monkeypatch.setattr(sessions, "persist_audit_result_to_database", fake_persist_audit)
+    monkeypatch.setattr(sessions, "persist_subagent_run_to_database", fake_persist_subagent_run)
     monkeypatch.setattr(sessions, "_publish_session_event", lambda *args, **kwargs: None)
 
     response = await sessions.answer_research_question_for_session(
@@ -1290,6 +1652,22 @@ async def test_research_answer_persists_audit_result(monkeypatch):
         "subject_id": answer_id,
         "status": "approved",
     }
+    assert [run["agent_name"] for run in persisted_runs] == ["paper_reader_worker", "research_auditor"]
+    assert persisted_runs[0]["parent_workflow_id"] == answer_id
+    assert persisted_runs[0]["output_boundary"] == "context_only"
+    assert persisted_runs[0]["outputs"]["result"]["citation_evidence"] is False
+    assert persisted_runs[0]["outputs"]["result"]["metadata"]["reading_scope"]["record_count"] == 1
+    assert persisted_runs[1]["parent_workflow_id"] == answer_id
+    assert persisted_runs[1]["output_boundary"] == "process_trace"
+    assert persisted_runs[1]["outputs"]["result"]["metadata"]["semantic_audit"]["mode"] == "llm_ready_fallback"
+    lifecycle_steps = [
+        event["data"]["metadata"]["subagent_lifecycle"]
+        for event in session.events
+        if event.get("event") == "step"
+        and isinstance(event.get("data", {}).get("metadata"), dict)
+        and isinstance(event["data"]["metadata"].get("subagent_lifecycle"), dict)
+    ]
+    assert [step["agent_name"] for step in lifecycle_steps] == ["paper_reader_worker", "research_auditor"]
     assert session.events[-1]["data"]["metadata"]["research_assistant"]["answer_id"] == answer_id
 
 

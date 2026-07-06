@@ -12,6 +12,7 @@ from backend.research_assistant.subagents import (
     build_subagent_lifecycle_step_event,
     build_subagent_result_envelope,
     default_subagent_definitions,
+    normalize_subagent_result_envelope,
     read_research_evidence,
     registry_subagent_definitions,
     system_builtin_subagent_definitions,
@@ -99,6 +100,16 @@ def test_subagent_definition_validation_rejects_boundary_drift():
         validate_subagent_definition(replace(auditor, citation_evidence=True))
 
 
+def test_custom_agent_must_pass_validation_before_enabled():
+    reader = _definitions_by_name()["paper_reader_worker"]
+
+    with pytest.raises(ValueError, match="validation_status"):
+        validate_subagent_definition(replace(reader, validation_status="draft", enabled=True))
+
+    validate_subagent_definition(replace(reader, validation_status="passed", enabled=True))
+    validate_subagent_definition(replace(reader, validation_status="disabled", enabled=False))
+
+
 def test_build_deepagents_subagent_configs_preserves_registry_intent():
     audit_tool = object()
     reader_tool = object()
@@ -182,6 +193,26 @@ def test_subagent_result_envelope_keeps_stable_top_level_fields_minimal():
     }
 
 
+def test_unknown_custom_output_normalizes_to_minimal_process_trace_envelope():
+    envelope = normalize_subagent_result_envelope(
+        {
+            "message": "custom worker done",
+            "extra": {"score": 0.8},
+        },
+        agent="custom_literature_mapper",
+        boundary="process_trace",
+        metadata={"run_id": "run-1"},
+    )
+
+    assert set(envelope) == {"status", "agent", "boundary", "citation_evidence", "content", "metadata"}
+    assert envelope["status"] == "completed"
+    assert envelope["agent"] == "custom_literature_mapper"
+    assert envelope["boundary"] == "process_trace"
+    assert envelope["citation_evidence"] is False
+    assert envelope["content"] == {"message": "custom worker done", "extra": {"score": 0.8}}
+    assert envelope["metadata"] == {"run_id": "run-1"}
+
+
 def test_auditor_tool_returns_minimal_process_trace_envelope():
     result = audit_evidence_claims.invoke(
         {
@@ -198,6 +229,29 @@ def test_auditor_tool_returns_minimal_process_trace_envelope():
     assert result["content"]["audit"]["status"] == "unsupported"
     assert result["metadata"]["audit_status"] == "unsupported"
     assert result["metadata"]["deterministic_boundary"] is True
+    assert result["metadata"]["semantic_audit"]["mode"] in {"llm_ready_fallback", "llm_backed"}
+
+
+def test_auditor_semantic_layer_marks_overreach_claims():
+    result = audit_evidence_claims.invoke(
+        {
+            "answer_content": "This evidence proves that the intervention causes long-term survival improvement [1].",
+            "citations_json": json.dumps(
+                [
+                    {
+                        "evidence_id": 1,
+                        "quote": "The intervention was associated with a short-term biomarker change in a small observational cohort.",
+                        "source_type": "paper",
+                        "citation_label": "[1]",
+                    }
+                ]
+            ),
+        }
+    )
+
+    semantic_claims = result["metadata"]["semantic_audit"]["claims"]
+    assert semantic_claims[0]["status"] == "overreach"
+    assert "causal" in " ".join(semantic_claims[0]["notes"]).lower()
 
 
 def test_auditor_tool_accepts_material_labels_without_crashing():
@@ -249,4 +303,64 @@ def test_reader_tool_returns_minimal_context_only_envelope_with_metadata_refs():
     assert result["boundary"] == "context_only"
     assert result["citation_evidence"] is False
     assert result["content"]["notes"][0]["note"] == "Reader notes are context only."
-    assert result["metadata"]["evidence_refs"] == [{"evidence_id": 17, "source_type": "paper"}]
+    assert result["metadata"]["evidence_refs"] == [
+        {"evidence_id": 17, "source_type": "paper", "title": "Trace Honesty"}
+    ]
+
+
+def test_reader_tool_preserves_real_multi_paper_reading_scope_refs():
+    result = read_research_evidence.invoke(
+        {
+            "material_package_json": json.dumps(
+                {
+                    "reading_scope": {
+                        "scope_type": "session_or_project_evidence",
+                        "session_id": "session-1",
+                        "project_id": "project-1",
+                        "paper_count": 2,
+                    },
+                    "records": [
+                        {
+                            "evidence_id": 17,
+                            "chunk_id": "chunk-a",
+                            "paper_id": "paper-a",
+                            "source_type": "paper",
+                            "title": "Paper A",
+                            "section": "Methods",
+                            "quote": "Paper A uses retrieval.",
+                        },
+                        {
+                            "evidence_id": 18,
+                            "chunk_id": "chunk-b",
+                            "paper_id": "paper-b",
+                            "source_type": "paper",
+                            "title": "Paper B",
+                            "section": "Results",
+                            "quote": "Paper B uses reranking.",
+                        },
+                    ],
+                }
+            )
+        }
+    )
+
+    assert result["metadata"]["reading_scope"]["paper_count"] == 2
+    assert result["metadata"]["record_count"] == 2
+    assert result["metadata"]["evidence_refs"] == [
+        {
+            "evidence_id": 17,
+            "chunk_id": "chunk-a",
+            "paper_id": "paper-a",
+            "source_type": "paper",
+            "title": "Paper A",
+            "section": "Methods",
+        },
+        {
+            "evidence_id": 18,
+            "chunk_id": "chunk-b",
+            "paper_id": "paper-b",
+            "source_type": "paper",
+            "title": "Paper B",
+            "section": "Results",
+        },
+    ]

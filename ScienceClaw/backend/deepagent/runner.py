@@ -39,6 +39,10 @@ from backend.research_assistant.subagents import (
     subagent_lifecycle_identity,
 )
 from backend.research_assistant.storage.database import persist_subagent_run_to_database
+from backend.research_assistant.storage.database import (
+    get_session_research_project_from_database,
+    list_reader_scope_evidence_from_database,
+)
 from backend.research_assistant.task_router import decide_research_multi_agent
 from backend.task_settings import get_task_settings, TaskSettings
 from backend.config import settings
@@ -427,6 +431,48 @@ def _material_records_from_query(query: str) -> list[dict[str, Any]]:
     ]
 
 
+async def _reader_material_package_for_session(*, session: ScienceSession, query: str) -> dict[str, Any]:
+    session_id = getattr(session, "session_id", "")
+    user_id = getattr(session, "user_id", "") or ""
+    project_id: str | None = None
+    records: list[dict[str, Any]] = []
+    if session_id:
+        try:
+            project = None
+            if user_id:
+                project = await get_session_research_project_from_database(
+                    settings.research_database_url,
+                    session_id=session_id,
+                    user_id=user_id,
+                )
+            project_id = getattr(project, "project_id", None) if project is not None else None
+            records = await list_reader_scope_evidence_from_database(
+                settings.research_database_url,
+                session_id=session_id,
+                project_id=project_id,
+                limit=12,
+                per_paper_limit=3,
+            )
+        except Exception as exc:
+            logger.warning("[DeepAgent] Reader scope evidence lookup failed; falling back to query materials: %s", exc)
+            records = []
+
+    if not records:
+        records = _material_records_from_query(query)
+
+    paper_ids = {str(record.get("paper_id")) for record in records if record.get("paper_id")}
+    return {
+        "reading_scope": {
+            "scope_type": "session_or_project_evidence" if paper_ids else "user_provided_materials",
+            "session_id": session_id,
+            "project_id": project_id,
+            "record_count": len(records),
+            "paper_count": len(paper_ids),
+        },
+        "records": records,
+    }
+
+
 def _guard_delegation_decision(agent_name: str, decision: dict[str, Any]) -> dict[str, Any]:
     trigger = str(decision.get("trigger") or "supervisor_guard")
     reasons = {
@@ -698,6 +744,24 @@ async def _arun_deep_agent_stream(
     }
 
     # ---- 初始化 plan 变量（仅作为无 todos 时的兜底，不发送占位 plan 给前端） ----
+    runtime_subagent_bindings = getattr(middleware, "runtime_subagent_bindings", [])
+    yield {
+        "event": "step",
+        "data": {
+            "event_id": f"evt_{uuid.uuid4().hex[:8]}",
+            "timestamp": int(time.time()),
+            "status": "completed",
+            "id": "research-subagent-capability-bindings",
+            "description": "Research subagent capability bindings loaded",
+            "metadata": {
+                "research_agent_capability_bindings": {
+                    "subagents": runtime_subagent_bindings,
+                    "active_tool_packs": sorted(active_tool_packs or []),
+                }
+            },
+        },
+    }
+
     multi_agent_decision = decide_research_multi_agent(query).to_dict()
     plan = _build_plan(query[:200])
     plan = _attach_plan_metadata(plan, {"multi_agent_decision": multi_agent_decision})
@@ -752,7 +816,7 @@ async def _arun_deep_agent_stream(
 
         _guard_subagents_completed: set[str] = set()
         if multi_agent_decision.get("requires_reader"):
-            material_package = {"records": _material_records_from_query(query)}
+            material_package = await _reader_material_package_for_session(session=session, query=query)
             reader_args = {"material_package_json": json.dumps(material_package, ensure_ascii=False)}
             guard_events, reader_result, _ = await _run_supervisor_guard_worker(
                 agent_name="paper_reader_worker",
