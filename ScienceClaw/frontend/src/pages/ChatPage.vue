@@ -1411,7 +1411,12 @@ const researchChat = async (message: string) => {
   activityPanelRef.value?.show();
 
   try {
-    await agentApi.answerResearchQuestion(sessionId.value, trimmed, 5, getEffectiveModelConfigId());
+    await agentApi.answerResearchQuestion(
+      sessionId.value,
+      trimmed,
+      isLiteratureReviewRequest(trimmed) ? 20 : 5,
+      getEffectiveModelConfigId()
+    );
     activateResearchMode();
   } catch (error) {
     console.error('Research answer error:', error);
@@ -1421,6 +1426,11 @@ const researchChat = async (message: string) => {
   } finally {
     isLoading.value = false;
   }
+};
+
+const isLiteratureReviewRequest = (message: string) => {
+  const normalized = message.toLowerCase();
+  return normalized.includes('literature review') || normalized.includes('evidence matrix');
 };
 
 const handleGenerateResearchReport = async (question: string) => {

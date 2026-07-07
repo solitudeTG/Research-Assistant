@@ -350,6 +350,24 @@ def _audit_claim(claim_text: str, citations: list[CitationLike]) -> EvidenceAudi
             finding_code=None,
         )
 
+    basis_support = _evidence_basis_support(claim_text, citation_candidates)
+    if cited_labels and basis_support[0]:
+        evidence_ids, support_score = basis_support
+        return EvidenceAuditClaim(
+            claim_text=claim_text,
+            status="partial",
+            evidence_ids=evidence_ids,
+            notes=["Evidence basis partially supports this synthesized claim."],
+            support_score=support_score,
+            support_status="partial",
+            semantic_relevance_score=support_score,
+            source_quality_score=1.0,
+            cited_evidence=_cited_evidence_dicts(
+                [citation for citation in citation_candidates if citation.evidence_id in set(evidence_ids)]
+            ),
+            finding_code="semantic_support_partial",
+        )
+
     nearest_evidence_id, nearest_score = _nearest_citation_support(claim_body, citation_candidates)
     if (
         cited_labels
@@ -746,6 +764,7 @@ def _remove_citation_labels(claim_text: str, citations: list[CitationLike]) -> s
 
 def _claim_body_for_support(claim_text: str, citations: list[CitationLike]) -> str:
     claim_body = _remove_citation_labels(claim_text, citations)
+    claim_body = re.split(r"\bevidence basis\s*:", claim_body, maxsplit=1, flags=re.IGNORECASE)[0]
     claim_body = re.sub(r"^[-*+]\s+", "", claim_body).strip()
     claim_body = re.sub(r"^\*\*[^*]{1,80}:\*\*\s*", "", claim_body).strip()
     claim_body = re.sub(r"^[a-z][a-z0-9 /_-]{1,80}:\s+", "", claim_body).strip()
@@ -796,6 +815,25 @@ def _jointly_supporting_citation_ids(claim_body: str, citations: list[CitationLi
     if claim_terms <= jointly_supported_terms:
         return [evidence_id for evidence_id, _ in contributing]
     return []
+
+
+def _evidence_basis_support(claim_text: str, citations: list[CitationLike]) -> tuple[list[int], float]:
+    parts = re.split(r"\bevidence basis\s*:", claim_text, maxsplit=1, flags=re.IGNORECASE)
+    if len(parts) < 2:
+        return [], 0.0
+    basis = _remove_citation_labels(parts[1], citations)
+    scores = [
+        (citation.evidence_id, _lexical_support_score(basis, citation.quote))
+        for citation in citations
+    ]
+    supported = [
+        (evidence_id, score)
+        for evidence_id, score in scores
+        if score >= PARTIAL_SUPPORT_THRESHOLD
+    ]
+    if not supported:
+        return [], 0.0
+    return [evidence_id for evidence_id, _ in supported], max(score for _, score in supported)
 
 
 def _nearest_citation_support(claim_text: str, citations: list[CitationLike]) -> tuple[int | None, float]:

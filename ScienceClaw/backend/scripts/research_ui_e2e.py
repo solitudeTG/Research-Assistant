@@ -16,6 +16,7 @@ import httpx
 from backend.research_assistant.evaluation import (
     ResearchQualityRequirement,
     evaluate_research_answer,
+    literature_review_quality_gate,
 )
 from backend.scripts.research_smoke import _write_smoke_pdf
 
@@ -212,6 +213,72 @@ def assert_semantic_overreach_live_loop(result: ResearchUiE2EResult) -> None:
         case_c_quality.assert_passed()
 
 
+def assert_literature_review_live_loop(result: ResearchUiE2EResult, *, min_paper_count: int = 7) -> None:
+    if result.session_status != "completed" and not result.answer_payload:
+        raise AssertionError(f"Research UI session did not complete: {result.session_status!r}")
+    if result.error_events:
+        raise AssertionError(f"Research UI loop produced error events: {result.error_events!r}")
+    if result.question_delivery != "chat_ui":
+        raise AssertionError(f"Literature review question must be submitted through Chat UI, got {result.question_delivery!r}")
+    if result.report_delivery != "chat_ui":
+        raise AssertionError(f"Literature review report must be generated through Chat UI, got {result.report_delivery!r}")
+    answer = result.answer_payload or {}
+    matrix = answer.get("evidence_matrix") or {}
+    if not matrix:
+        raise AssertionError("Literature review answer is missing evidence_matrix")
+    paper_count = int(matrix.get("paper_count") or 0)
+    if paper_count < min_paper_count:
+        raise AssertionError(f"Literature review requires at least {min_paper_count} papers, got {paper_count}")
+    themes = matrix.get("themes") or []
+    if len(themes) < 4:
+        raise AssertionError(f"Literature review evidence matrix requires at least 4 themes, got {len(themes)}")
+    linked_cells = _matrix_linked_cell_count(matrix)
+    if linked_cells < 10:
+        raise AssertionError(f"Literature review evidence matrix requires at least 10 evidence-linked cells, got {linked_cells}")
+    distinct_papers = {
+        str(citation.get("paper_id") or (citation.get("source_identity") or {}).get("paper_id") or "")
+        for citation in answer.get("citations") or []
+        if isinstance(citation, dict)
+    }
+    distinct_papers.discard("")
+    if len(distinct_papers) < min_paper_count:
+        raise AssertionError(f"Expected citations from at least {min_paper_count} distinct papers, got {sorted(distinct_papers)!r}")
+    if not result.report_payload:
+        raise AssertionError("Literature review live loop is missing report payload")
+    _assert_literature_review_report_payload(result.report_payload)
+    for required_file in (".md", ".evidence.json", ".evidence-matrix.json"):
+        if not any(str(name).endswith(required_file) for name in result.round_files):
+            raise AssertionError(f"Literature review report files are missing required {required_file} artifact")
+    required_sections = (
+        "Evidence Matrix",
+        "Cross-paper synthesis",
+        "Agreements",
+        "Disagreements",
+        "Limitations",
+    )
+    content = str(answer.get("content") or "")
+    for section in required_sections:
+        if section not in content:
+            raise AssertionError(f"Literature review report content is missing section: {section}")
+    for citation in answer.get("citations") or []:
+        if citation.get("source_type") not in {"paper", "web", "database"}:
+            raise AssertionError(f"Citation has invalid source_type={citation.get('source_type')!r}")
+    visible_steps = "\n".join(result.activity_steps)
+    for step in (
+        "Research document uploaded",
+        "Parsing research document",
+        "Indexing paper evidence",
+        "Selected papers for literature review",
+        "Built evidence matrix",
+        "Audited synthesis claims",
+        "Generated literature review report",
+    ):
+        if step not in visible_steps and not _activity_step_equivalent(step, result.activity_steps):
+            raise AssertionError(f"Literature review did not show ActivityPanel step: {step}")
+    quality = evaluate_research_answer(answer, literature_review_quality_gate())
+    quality.assert_passed()
+
+
 def main() -> int:
     args = _parse_args()
     _log("checking optional runtime dependencies")
@@ -224,7 +291,16 @@ def main() -> int:
     asyncio.run(_check_frontend(api_base_url))
 
     with tempfile.TemporaryDirectory(prefix="research-ui-e2e-") as tmp:
-        if args.paper_path:
+        if args.paper_dir:
+            paper_dir = Path(args.paper_dir).resolve()
+            if not paper_dir.is_dir():
+                raise SystemExit(f"paper-dir missing: {paper_dir}")
+            pdf_paths = sorted(paper_dir.glob("*.pdf"))
+            if len(pdf_paths) < args.min_paper_count:
+                raise SystemExit(
+                    f"literature review requires at least {args.min_paper_count} PDFs, found {len(pdf_paths)} in {paper_dir}"
+                )
+        elif args.paper_path:
             pdf_paths = [Path(path).resolve() for path in args.paper_path]
             missing = [str(path) for path in pdf_paths if not path.exists()]
             if missing:
@@ -247,9 +323,11 @@ def main() -> int:
         )
 
     if args.output_dir:
-        _write_e2e_outputs(result, Path(args.output_dir), case_c=args.semantic_overreach)
+        _write_e2e_outputs(result, Path(args.output_dir), case_c=args.semantic_overreach, literature_review=args.literature_review)
     if args.semantic_overreach:
         assert_semantic_overreach_live_loop(result)
+    elif args.literature_review:
+        assert_literature_review_live_loop(result, min_paper_count=args.min_paper_count)
     elif args.semantic_multipaper:
         assert_semantic_multi_paper_live_loop(result)
     else:
@@ -291,8 +369,11 @@ def _parse_args() -> argparse.Namespace:
         default=[],
         help="Real PDF path to upload through the UI. Repeat for multi-paper cases. Defaults to a smoke PDF.",
     )
+    parser.add_argument("--paper-dir", default=None, help="Directory of real PDFs to upload through the UI.")
+    parser.add_argument("--min-paper-count", type=int, default=1, help="Minimum real PDFs required for the live case.")
     parser.add_argument("--semantic-multipaper", action="store_true", help="Assert semantic multi-paper synthesis plus refusal.")
     parser.add_argument("--semantic-overreach", action="store_true", help="Assert live UI semantic overreach/refusal Case C.")
+    parser.add_argument("--literature-review", action="store_true", help="Assert 7-paper literature review evidence matrix Case D.")
     parser.add_argument("--output-dir", default=None, help="Write answer/report/result artifacts to this directory.")
     parser.add_argument("--headed", action="store_true", help="Run the browser visibly instead of headless.")
     parser.add_argument("--timeout-ms", type=int, default=120_000)
@@ -421,6 +502,7 @@ def _wait_for_research_status(api_base_url: str, session_id: str, page, timeout_
         papers = data.get("papers") or []
         if (
             data.get("indexed_paper_count", 0) >= expected_papers
+            or data.get("paper_count", 0) >= expected_papers
             or sum(1 for paper in papers if paper.get("status") == "indexed") >= expected_papers
             or (expected_papers <= 1 and data.get("has_indexed_papers"))
         ):
@@ -446,20 +528,36 @@ def _goto_client_route(page, frontend_url: str, route: str, timeout_ms: int) -> 
     page.locator("body").wait_for(timeout=timeout_ms)
 
 
-def _write_e2e_outputs(result: ResearchUiE2EResult, output_dir: Path, *, case_c: bool = False) -> None:
+def _write_e2e_outputs(
+    result: ResearchUiE2EResult,
+    output_dir: Path,
+    *,
+    case_c: bool = False,
+    literature_review: bool = False,
+) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    answer_name = "case-c-answer.json" if case_c else "case-a-answer.json"
+    answer_name = "case-c-answer.json" if case_c else "answer.json" if literature_review else "case-a-answer.json"
     artifacts = {
         "answer_payload_path": output_dir / answer_name,
         "report_payload_path": output_dir / "case-a-report.json",
         "insufficient_answer_payload_path": output_dir / "case-b-insufficient-answer.json",
         "results_path": output_dir / "results.json",
         "summary_path": output_dir / "summary.md",
+        "evidence_matrix_path": output_dir / "evidence-matrix.json",
+        "literature_review_path": output_dir / "literature-review.md",
     }
     if result.answer_payload is not None:
         artifacts["answer_payload_path"].write_text(json.dumps(result.answer_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        matrix = result.answer_payload.get("evidence_matrix") or {}
+        if literature_review and matrix:
+            artifacts["evidence_matrix_path"].write_text(json.dumps(matrix, ensure_ascii=False, indent=2), encoding="utf-8")
     if result.report_payload is not None:
         artifacts["report_payload_path"].write_text(json.dumps(result.report_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        if literature_review:
+            _assert_literature_review_report_payload(result.report_payload)
+            for key in ("markdown_path", "evidence_map_path", "evidence_matrix_path"):
+                _readable_artifact_path(result.report_payload, key)
+            _copy_report_markdown(result.report_payload, artifacts["literature_review_path"])
     if result.insufficient_answer_payload is not None:
         artifacts["insufficient_answer_payload_path"].write_text(
             json.dumps(result.insufficient_answer_payload, ensure_ascii=False, indent=2),
@@ -477,8 +575,9 @@ def _write_e2e_outputs(result: ResearchUiE2EResult, output_dir: Path, *, case_c:
         "error_events": result.error_events,
         "quality_reports": {
             case_id: report.to_dict()
-            for case_id, report in _build_live_quality_reports(result, case_c=case_c).items()
+            for case_id, report in _build_live_quality_reports(result, case_c=case_c, literature_review=literature_review).items()
         },
+        "evidence_matrix_metrics": _matrix_metrics((result.answer_payload or {}).get("evidence_matrix") or {}),
         "artifact_paths": {key: str(path) for key, path in artifacts.items()},
     }
     artifacts["results_path"].write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -497,6 +596,10 @@ def _write_e2e_outputs(result: ResearchUiE2EResult, output_dir: Path, *, case_c:
                 f"- Case A quality: `{summary['quality_reports'].get('case_a', {}).get('passed')}`",
                 f"- Case B quality: `{summary['quality_reports'].get('case_b', {}).get('passed')}`",
                 f"- Case C quality: `{summary['quality_reports'].get('case_c', {}).get('passed')}`",
+                f"- Literature review quality: `{summary['quality_reports'].get('literature_review', {}).get('passed')}`",
+                f"- Matrix paper count: {summary['evidence_matrix_metrics'].get('paper_count', 0)}",
+                f"- Matrix theme count: {summary['evidence_matrix_metrics'].get('theme_count', 0)}",
+                f"- Matrix evidence-linked cells: {summary['evidence_matrix_metrics'].get('linked_cell_count', 0)}",
                 f"- Activity steps: {len(result.activity_steps)}",
                 f"- Round files: {', '.join(result.round_files)}",
             ]
@@ -504,11 +607,24 @@ def _write_e2e_outputs(result: ResearchUiE2EResult, output_dir: Path, *, case_c:
         + "\n",
         encoding="utf-8",
     )
+    if literature_review:
+        _assert_written_file(artifacts["evidence_matrix_path"], "evidence-matrix.json")
+        _assert_written_file(artifacts["literature_review_path"], "literature-review.md")
 
 
-def _build_live_quality_reports(result: ResearchUiE2EResult, *, case_c: bool = False) -> dict[str, object]:
+def _build_live_quality_reports(
+    result: ResearchUiE2EResult,
+    *,
+    case_c: bool = False,
+    literature_review: bool = False,
+) -> dict[str, object]:
     reports = {}
-    if case_c and result.answer_payload is not None:
+    if literature_review and result.answer_payload is not None:
+        reports["literature_review"] = evaluate_research_answer(
+            result.answer_payload,
+            literature_review_quality_gate(),
+        )
+    elif case_c and result.answer_payload is not None:
         decision = (result.answer_payload.get("evidence_admission") or {}).get("decision")
         reports["case_c"] = evaluate_research_answer(
             result.answer_payload,
@@ -548,6 +664,47 @@ def _build_live_quality_reports(result: ResearchUiE2EResult, *, case_c: bool = F
     return reports
 
 
+def _matrix_linked_cell_count(matrix: dict) -> int:
+    return sum(
+        1
+        for theme in matrix.get("themes", [])
+        if isinstance(theme, dict)
+        for cell in theme.get("paper_cells", [])
+        if isinstance(cell, dict) and (cell.get("evidence_ids") or cell.get("citation_labels"))
+    )
+
+
+def _matrix_metrics(matrix: dict) -> dict:
+    return {
+        "paper_count": int(matrix.get("paper_count") or 0),
+        "theme_count": len(matrix.get("themes") or []),
+        "linked_cell_count": _matrix_linked_cell_count(matrix),
+    }
+
+
+def _copy_report_markdown(report_payload: dict, destination: Path) -> None:
+    markdown_path = _readable_artifact_path(report_payload, "markdown_path")
+    destination.write_text(markdown_path.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
+
+
+def _assert_literature_review_report_payload(report_payload: dict) -> None:
+    for key in ("markdown_path", "evidence_map_path", "evidence_matrix_path"):
+        if not str(report_payload.get(key) or "").strip():
+            raise AssertionError(f"Literature review report payload is missing {key}")
+
+
+def _readable_artifact_path(report_payload: dict, key: str) -> Path:
+    path = Path(str(report_payload.get(key) or ""))
+    if not path.is_file():
+        raise FileNotFoundError(f"{key} is not a readable file: {path}")
+    return path
+
+
+def _assert_written_file(path: Path, label: str) -> None:
+    if not path.is_file() or path.stat().st_size <= 0:
+        raise AssertionError(f"Literature review output is missing readable {label}: {path}")
+
+
 def _activity_step_equivalent(expected: str, actual_steps: list[str]) -> bool:
     normalized_steps = [step.casefold() for step in actual_steps]
     if expected == "Retrieving citation evidence":
@@ -557,6 +714,8 @@ def _activity_step_equivalent(expected: str, actual_steps: list[str]) -> bool:
         )
     if expected == "Markdown research artifact generated":
         return any("research artifact" in step or "research report" in step for step in normalized_steps)
+    if expected == "Selected papers for literature review":
+        return any("selected" in step and "papers" in step and "literature review" in step for step in normalized_steps)
     return False
 
 
@@ -605,6 +764,15 @@ def _submit_research_question_via_chat(page, api_base_url: str, session_id: str,
     textbox = page.locator("textarea:visible").last
     textbox.wait_for(timeout=timeout_ms)
     textbox.fill(question)
+    send_button = textbox.locator(
+        "xpath=ancestor::div[footer][1]//footer//button[contains(@class, 'w-8') and contains(@class, 'h-8')]"
+    ).last
+    send_button.wait_for(timeout=timeout_ms)
+    page.wait_for_function(
+        """button => button && button.offsetParent !== null && button.className.includes('bg-gradient-to-r')""",
+        arg=send_button.element_handle(),
+        timeout=timeout_ms,
+    )
     with page.expect_response(
         lambda response: (
             f"/sessions/{session_id}/research/answer" in response.url
@@ -612,7 +780,7 @@ def _submit_research_question_via_chat(page, api_base_url: str, session_id: str,
         ),
         timeout=timeout_ms,
     ) as response_info:
-        textbox.press("Enter")
+        send_button.click()
     response = response_info.value
     if not response.ok:
         raise AssertionError(f"Chat UI research answer request failed: {response.status} {response.url}")

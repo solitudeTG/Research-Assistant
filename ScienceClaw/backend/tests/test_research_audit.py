@@ -377,6 +377,35 @@ def test_audit_evidence_claims_marks_cited_synthesis_with_incomplete_support_as_
     assert "Cited evidence partially supports this synthesized claim." in audit.claims[0].notes
 
 
+def test_audit_evidence_claims_marks_report_synthesis_with_quote_basis_as_partial():
+    audit = audit_evidence_claims(
+        answer_content=(
+            "- The corpus provides bounded paper evidence for method and evaluation claims. "
+            "Evidence basis: Hybrid retrieval combines lexical matching and vector search to improve recall. "
+            "[paper-1:Methods:2]"
+        ),
+        citations=[
+            ResearchCitation(
+                evidence_id=17,
+                chunk_id="chunk-17",
+                paper_id="paper-1",
+                title="Hybrid Retrieval",
+                section="Methods",
+                page_start=2,
+                page_end=2,
+                quote="Hybrid retrieval combines lexical matching and vector search to improve recall.",
+                citation_label="[paper-1:Methods:2]",
+            )
+        ],
+    )
+
+    assert audit.status == "partial"
+    assert audit.claims[0].status == "partial"
+    assert audit.claims[0].support_status == "partial"
+    assert audit.claims[0].evidence_ids == [17]
+    assert "Evidence basis partially supports this synthesized claim." in audit.claims[0].notes
+
+
 def test_semantic_audit_claims_expose_support_status_scores_evidence_and_finding_codes():
     audit = audit_evidence_claims(
         answer_content=(

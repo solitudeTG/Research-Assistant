@@ -19,6 +19,7 @@ GoldenEvalTaskType = Literal[
     "evidence_qa",
     "no_evidence_or_insufficient_evidence",
     "multi_paper_synthesis",
+    "literature_review",
 ]
 GoldenEvalMode = Literal["payload", "live_ui"]
 
@@ -36,6 +37,11 @@ class GoldenEvalThresholds:
     expected_finding_codes: list[str] | None = None
     require_llm_semantic_audit: bool = False
     allowed_semantic_auditor_modes: list[str] | None = None
+    min_evidence_matrix_papers: int | None = None
+    min_evidence_matrix_themes: int | None = None
+    min_theme_paper_cells: int | None = None
+    min_evidence_linked_cells: int | None = None
+    required_report_sections: list[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -63,6 +69,7 @@ class GoldenEvalCase:
             "evidence_qa": "evidence_qa",
             "no_evidence_or_insufficient_evidence": "evidence_qa",
             "multi_paper_synthesis": "evidence_qa",
+            "literature_review": "evidence_qa",
         }[self.task_type]
         expected_admission = "accepted"
         if self.task_type == "no_evidence_or_insufficient_evidence":
@@ -77,6 +84,11 @@ class GoldenEvalCase:
             max_unsupported_claim_ratio=self.quality_thresholds.max_unsupported_claim_ratio,
             require_llm_semantic_audit=self.quality_thresholds.require_llm_semantic_audit,
             allowed_semantic_auditor_modes=set(self.quality_thresholds.allowed_semantic_auditor_modes or ["llm_enhanced"]),
+            min_evidence_matrix_papers=self.quality_thresholds.min_evidence_matrix_papers,
+            min_evidence_matrix_themes=self.quality_thresholds.min_evidence_matrix_themes,
+            min_theme_paper_cells=self.quality_thresholds.min_theme_paper_cells,
+            min_evidence_linked_cells=self.quality_thresholds.min_evidence_linked_cells,
+            required_report_sections=set(self.quality_thresholds.required_report_sections or []),
         )
 
 
@@ -329,6 +341,8 @@ def module_hint_for_finding(code: str) -> str:
         return "Check F017 synthesis."
     if code in {"multi_paper_citation_coverage_too_low"}:
         return "Check F005 retrieval / F011 admission / F017 synthesis."
+    if code.startswith("evidence_matrix_") or code.startswith("literature_review_"):
+        return "Check F024 evidence matrix literature review."
     if code in {"admission_not_insufficient"}:
         return "Check F011 admission."
     if code in {"multi_agent_lifecycle_missing"}:
@@ -418,6 +432,11 @@ def _parse_case(raw_case: Any) -> GoldenEvalCase:
             expected_finding_codes=_optional_str_list(thresholds.get("expected_finding_codes")),
             require_llm_semantic_audit=bool(thresholds.get("require_llm_semantic_audit", False)),
             allowed_semantic_auditor_modes=_optional_str_list(thresholds.get("allowed_semantic_auditor_modes")),
+            min_evidence_matrix_papers=_optional_int(thresholds.get("min_evidence_matrix_papers")),
+            min_evidence_matrix_themes=_optional_int(thresholds.get("min_evidence_matrix_themes")),
+            min_theme_paper_cells=_optional_int(thresholds.get("min_theme_paper_cells")),
+            min_evidence_linked_cells=_optional_int(thresholds.get("min_evidence_linked_cells")),
+            required_report_sections=_optional_str_list(thresholds.get("required_report_sections")),
         ),
         required_outputs=GoldenEvalRequiredOutputs(
             answer=bool(outputs.get("answer", True)),
@@ -623,6 +642,8 @@ def _owner_modules_for_finding(code: str) -> list[str]:
         return ["F017 synthesis"]
     if code == "multi_paper_citation_coverage_too_low":
         return ["F005 retrieval", "F011 admission", "F017 synthesis"]
+    if code.startswith("evidence_matrix_") or code.startswith("literature_review_"):
+        return ["F024 evidence matrix literature review"]
     if code == "admission_not_insufficient":
         return ["F011 admission"]
     if code == "multi_agent_lifecycle_missing":

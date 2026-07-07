@@ -287,6 +287,50 @@ def test_payload_golden_eval_requires_llm_semantic_audit_when_declared(tmp_path)
     assert "F023 LLM semantic auditor" in run_result.cases[0].owner_module_hints
 
 
+def test_payload_golden_eval_checks_literature_review_matrix_contract(tmp_path):
+    from backend.research_assistant.golden_eval import evaluate_payload_cases, load_golden_cases
+
+    _write_paper_fixtures(tmp_path, *[f"p{index}.pdf" for index in range(1, 8)])
+    payload = _literature_review_payload()
+    (tmp_path / "literature.answer.json").write_text(json.dumps(payload), encoding="utf-8")
+    (tmp_path / "literature.report.json").write_text(
+        json.dumps({"report_id": "report-1", "evidence_matrix": payload["evidence_matrix"]}),
+        encoding="utf-8",
+    )
+    case = _case("literature-review", "literature.answer.json", min_citations=7)
+    case["task_type"] = "literature_review"
+    case["paper_paths"] = [f"paper_data/p{index}.pdf" for index in range(1, 8)]
+    case["report_payload_path"] = "literature.report.json"
+    case["required_outputs"]["report"] = True
+    case["quality_thresholds"].update(
+        {
+            "min_distinct_cited_papers": 7,
+            "min_evidence_matrix_papers": 7,
+            "min_evidence_matrix_themes": 4,
+            "min_theme_paper_cells": 5,
+            "min_evidence_linked_cells": 10,
+            "required_report_sections": [
+                "Evidence Matrix",
+                "Cross-paper synthesis",
+                "Agreements",
+                "Disagreements / gaps",
+                "Limitations",
+            ],
+        }
+    )
+    cases_path = tmp_path / "cases.json"
+    cases_path.write_text(json.dumps({"cases": [case]}), encoding="utf-8")
+
+    run_result = evaluate_payload_cases(load_golden_cases(cases_path), root=tmp_path)
+
+    assert run_result.passed
+    quality = run_result.cases[0].quality
+    assert quality["metrics"]["distinct_cited_paper_count"] == 7
+    assert quality["metrics"]["evidence_matrix_paper_count"] == 7
+    assert quality["metrics"]["evidence_matrix_theme_count"] == 4
+    assert quality["metrics"]["evidence_matrix_linked_cell_count"] >= 10
+
+
 def test_payload_golden_eval_rejects_fabricated_citation_for_insufficient_evidence(tmp_path):
     from backend.research_assistant.golden_eval import evaluate_payload_cases, load_golden_cases
 
@@ -612,3 +656,73 @@ def _answer_payload(
             ],
         },
     }
+
+
+def _literature_review_payload():
+    payload = _answer_payload(
+        route="evidence_qa",
+        admission="accepted",
+        citation_count=14,
+        summary_mode="evidence_matrix_literature_review",
+        claim_count=4,
+        approved=3,
+        partial=1,
+        unsupported=0,
+    )
+    paper_ids = [f"paper-{index}" for index in range(1, 8)]
+    for index, citation in enumerate(payload["citations"]):
+        paper_id = paper_ids[index % len(paper_ids)]
+        citation["paper_id"] = paper_id
+        citation["source_identity"] = {"paper_id": paper_id}
+        citation["citation_label"] = f"[{paper_id}:Method:{index + 1}]"
+    payload["evidence_matrix"] = {
+        "paper_count": 7,
+        "papers": [
+            {
+                "paper_id": paper_id,
+                "title": f"LEO Beamforming Study {index}",
+                "year": str(2020 + index),
+                "source_type": "paper",
+                "citation_label": f"[{paper_id}:Method:{index}]",
+            }
+            for index, paper_id in enumerate(paper_ids, start=1)
+        ],
+        "themes": [
+            {
+                "theme_id": f"theme-{theme_index}",
+                "label": label,
+                "synthesis_claim": f"The corpus supports a cross-paper claim about {label}.",
+                "evidence_strength": "strong",
+                "paper_cells": [
+                    {
+                        "paper_id": paper_id,
+                        "stance": "supports",
+                        "contribution": f"{paper_id} contributes evidence for {label}.",
+                        "method": "Simulation and analytical comparison.",
+                        "limitation": "Deployment assumptions remain bounded.",
+                        "evidence_ids": [paper_index],
+                        "citation_labels": [f"[{paper_id}:Method:{paper_index}]"],
+                        "quote_snippets": [f"{paper_id} reports method evidence."],
+                        "support_status": "supported",
+                    }
+                    for paper_index, paper_id in enumerate(paper_ids, start=1)
+                ],
+            }
+            for theme_index, label in enumerate(["Methods", "Evidence strength", "Agreements", "Limitations"], start=1)
+        ],
+        "agreements": ["The papers agree on deployment trade-offs."],
+        "disagreements": ["The papers differ in method emphasis."],
+        "gaps": ["Real-world validation remains open."],
+        "limitations": ["Evidence comes from admitted snippets only."],
+    }
+    payload["report"] = {
+        "artifact": True,
+        "sections": [
+            "Evidence Matrix",
+            "Cross-paper synthesis",
+            "Agreements",
+            "Disagreements / gaps",
+            "Limitations",
+        ],
+    }
+    return payload

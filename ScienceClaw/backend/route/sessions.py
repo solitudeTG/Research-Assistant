@@ -3293,6 +3293,59 @@ async def answer_research_question_for_session(
                 subject_id=answer.answer_id,
                 audit=answer.audit,
             )
+            evidence_matrix = answer.evidence_matrix or {}
+            if evidence_matrix:
+                await _append_save_publish_session_event(
+                    session,
+                    session_id=session_id,
+                    user_id=current_user.id,
+                    event=_research_upload_step_event(
+                        step_id=f"{answer.answer_id}:literature-review-papers",
+                        status="completed",
+                        description="Selected papers for literature review",
+                        metadata={
+                            "paper_count": evidence_matrix.get("paper_count"),
+                            "paper_ids": [
+                                paper.get("paper_id")
+                                for paper in evidence_matrix.get("papers", [])
+                                if isinstance(paper, dict)
+                            ],
+                            **retrieval_metadata,
+                        },
+                    ),
+                )
+                await _append_save_publish_session_event(
+                    session,
+                    session_id=session_id,
+                    user_id=current_user.id,
+                    event=_research_upload_step_event(
+                        step_id=f"{answer.answer_id}:evidence-matrix",
+                        status="completed",
+                        description="Built evidence matrix",
+                        metadata={
+                            "evidence_matrix": {
+                                "paper_count": evidence_matrix.get("paper_count"),
+                                "theme_count": len(evidence_matrix.get("themes", [])),
+                            },
+                            **retrieval_metadata,
+                        },
+                    ),
+                )
+                await _append_save_publish_session_event(
+                    session,
+                    session_id=session_id,
+                    user_id=current_user.id,
+                    event=_research_upload_step_event(
+                        step_id=f"{answer.answer_id}:synthesis-audit",
+                        status="completed",
+                        description="Audited synthesis claims",
+                        metadata={
+                            "audit_status": audit_payload.get("status"),
+                            "claim_count": audit_payload.get("claim_count"),
+                            **retrieval_metadata,
+                        },
+                    ),
+                )
             try:
                 await _record_research_answer_subagent_lifecycle(
                     session=session,
@@ -3356,6 +3409,10 @@ async def answer_research_question_for_session(
                 "evidence_admission": admission_metadata,
                 "task_route": task_route_metadata,
                 "summary_synthesis": answer.summary_synthesis,
+                "evidence_matrix": {
+                    "paper_count": answer.evidence_matrix.get("paper_count"),
+                    "theme_count": len(answer.evidence_matrix.get("themes", [])),
+                } if answer.evidence_matrix else {},
                 "embedding_model": settings.research_embedding_model,
                 **retrieval_metadata,
             },
@@ -3863,7 +3920,11 @@ async def generate_research_report_for_session(
         report_completed = _research_upload_step_event(
             step_id=step_id,
             status="completed",
-            description="Markdown research artifact generated",
+            description=(
+                "Generated literature review report"
+                if getattr(report, "evidence_matrix_path", None)
+                else "Markdown research artifact generated"
+            ),
             metadata={**report.to_dict(), "context_boundaries": CONTEXT_BOUNDARIES},
         )
         _append_session_event(session, report_completed)

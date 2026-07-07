@@ -2,10 +2,12 @@ import pytest
 
 from backend.scripts.research_ui_e2e import (
     ResearchUiE2EResult,
+    assert_literature_review_live_loop,
     assert_semantic_multi_paper_live_loop,
     assert_semantic_overreach_live_loop,
     assert_research_ui_loop,
     build_api_base_url,
+    _write_e2e_outputs,
 )
 
 
@@ -354,6 +356,119 @@ def test_assert_semantic_multi_paper_live_loop_uses_quality_gate():
         assert_semantic_multi_paper_live_loop(result)
 
 
+def test_assert_literature_review_live_loop_accepts_7paper_matrix_and_report():
+    result = ResearchUiE2EResult(
+        session_id="session-1",
+        session_status="completed",
+        citation_count=14,
+        question_delivery="chat_ui",
+        report_delivery="chat_ui",
+        activity_steps=[
+            "Research document uploaded",
+            "Parsing research document",
+            "Indexing paper evidence",
+            "Selected 7 papers for literature review",
+            "Built evidence matrix",
+            "Audited synthesis claims",
+            "Generated literature review report",
+        ],
+        round_files=[
+            "research-report-abc.evidence.json",
+            "research-report-abc.evidence-matrix.json",
+            "research-report-abc.md",
+        ],
+        error_events=[],
+        answer_payload=_literature_review_answer_payload(),
+        report_payload={
+            "report_id": "report-1",
+            "markdown_path": "research-report-abc.md",
+            "evidence_map_path": "research-report-abc.evidence.json",
+            "evidence_matrix_path": "research-report-abc.evidence-matrix.json",
+        },
+    )
+
+    assert_literature_review_live_loop(result, min_paper_count=7)
+
+
+def test_assert_literature_review_live_loop_rejects_six_papers():
+    result = ResearchUiE2EResult(
+        session_id="session-1",
+        session_status="completed",
+        citation_count=12,
+        question_delivery="chat_ui",
+        report_delivery="chat_ui",
+        activity_steps=[
+            "Selected 6 papers for literature review",
+            "Built evidence matrix",
+            "Audited synthesis claims",
+            "Generated literature review report",
+        ],
+        round_files=["research-report-abc.evidence.json", "research-report-abc.md"],
+        error_events=[],
+        answer_payload=_literature_review_answer_payload(paper_count=6),
+        report_payload={"report_id": "report-1"},
+    )
+
+    with pytest.raises(AssertionError, match="at least 7"):
+        assert_literature_review_live_loop(result, min_paper_count=7)
+
+
+def test_assert_literature_review_live_loop_rejects_missing_report_sidecar_paths():
+    result = ResearchUiE2EResult(
+        session_id="session-1",
+        session_status="completed",
+        citation_count=14,
+        question_delivery="chat_ui",
+        report_delivery="chat_ui",
+        activity_steps=[
+            "Research document uploaded",
+            "Parsing research document",
+            "Indexing paper evidence",
+            "Selected 7 papers for literature review",
+            "Built evidence matrix",
+            "Audited synthesis claims",
+            "Generated literature review report",
+        ],
+        round_files=[
+            "research-report-abc.evidence.json",
+            "research-report-abc.md",
+        ],
+        error_events=[],
+        answer_payload=_literature_review_answer_payload(),
+        report_payload={
+            "report_id": "report-1",
+            "markdown_path": "research-report-abc.md",
+            "evidence_map_path": "research-report-abc.evidence.json",
+        },
+    )
+
+    with pytest.raises(AssertionError, match="evidence_matrix_path"):
+        assert_literature_review_live_loop(result, min_paper_count=7)
+
+
+def test_write_e2e_outputs_requires_literature_review_artifact_files(tmp_path):
+    result = ResearchUiE2EResult(
+        session_id="session-1",
+        session_status="completed",
+        citation_count=14,
+        question_delivery="chat_ui",
+        report_delivery="chat_ui",
+        activity_steps=[],
+        round_files=[],
+        error_events=[],
+        answer_payload=_literature_review_answer_payload(),
+        report_payload={
+            "report_id": "report-1",
+            "markdown_path": str(tmp_path / "missing-report.md"),
+            "evidence_map_path": str(tmp_path / "missing.evidence.json"),
+            "evidence_matrix_path": str(tmp_path / "missing.evidence-matrix.json"),
+        },
+    )
+
+    with pytest.raises(FileNotFoundError, match="markdown_path"):
+        _write_e2e_outputs(result, tmp_path / "out", literature_review=True)
+
+
 def test_assert_semantic_overreach_live_loop_accepts_llm_enhanced_case_c():
     result = ResearchUiE2EResult(
         session_id="session-1",
@@ -502,6 +617,113 @@ def _case_c_answer_payload(
                     "cited_evidence": citations,
                     "finding_code": finding_code,
                 }
+            ],
+        },
+        "context_boundaries": {
+            "citation_evidence": ["paper", "web", "database"],
+            "context_only_memory": ["memory"],
+            "process_trace": ["tool_logs", "runtime_results", "agent_lifecycle"],
+            "model_reasoning": ["model_reasoning"],
+        },
+    }
+
+
+def _literature_review_answer_payload(*, paper_count=7):
+    paper_ids = [f"paper-{index}" for index in range(1, paper_count + 1)]
+    citations = [
+        {
+            "evidence_id": index,
+            "source_type": "paper",
+            "evidence_scope": "session",
+            "paper_id": paper_ids[(index - 1) % len(paper_ids)],
+            "title": f"Paper {index}",
+            "section": "Method",
+            "chunk_id": f"chunk-{index}",
+            "quote": "The paper reports method evidence and bounded limitations.",
+            "citation_label": f"[paper-{index}:Method:{index}]",
+            "source_identity": {"paper_id": paper_ids[(index - 1) % len(paper_ids)]},
+        }
+        for index in range(1, max(10, paper_count * 2) + 1)
+    ]
+    return {
+        "content": (
+            "# Literature Review\n\n"
+            "## Evidence Matrix\n\n"
+            "## Cross-paper synthesis\n\n"
+            "## Agreements\n\n"
+            "## Disagreements / gaps\n\n"
+            "## Limitations\n"
+        ),
+        "task_route": {"route": "evidence_qa"},
+        "evidence_admission": {"decision": "accepted"},
+        "citation_count": len(citations),
+        "citations": citations,
+        "summary_synthesis": {"mode": "evidence_matrix_literature_review"},
+        "report": {
+            "artifact": True,
+            "sections": [
+                "Evidence Matrix",
+                "Cross-paper synthesis",
+                "Agreements",
+                "Disagreements / gaps",
+                "Limitations",
+            ],
+        },
+        "evidence_matrix": {
+            "paper_count": paper_count,
+            "papers": [
+                {
+                    "paper_id": paper_id,
+                    "title": f"Paper {index}",
+                    "year": str(2020 + index),
+                    "source_type": "paper",
+                    "citation_label": f"[{paper_id}:Method:{index}]",
+                }
+                for index, paper_id in enumerate(paper_ids, start=1)
+            ],
+            "themes": [
+                {
+                    "theme_id": f"theme-{theme_index}",
+                    "label": label,
+                    "synthesis_claim": f"Cross-paper claim about {label}.",
+                    "evidence_strength": "moderate",
+                    "paper_cells": [
+                        {
+                            "paper_id": paper_id,
+                            "stance": "supports",
+                            "contribution": f"{paper_id} contributes {label}.",
+                            "method": "Simulation.",
+                            "limitation": "Bounded setup.",
+                            "evidence_ids": [paper_index],
+                            "citation_labels": [f"[{paper_id}:Method:{paper_index}]"],
+                            "quote_snippets": ["The paper reports method evidence."],
+                            "support_status": "supported",
+                        }
+                        for paper_index, paper_id in enumerate(paper_ids, start=1)
+                    ],
+                }
+                for theme_index, label in enumerate(["Methods", "Evidence", "Agreements", "Limitations"], start=1)
+            ],
+            "agreements": ["Shared LEO beamforming focus."],
+            "disagreements": ["Different method emphasis."],
+            "gaps": ["Real-world validation."],
+            "limitations": ["Snippet-bounded evidence."],
+        },
+        "audit": {
+            "claim_count": 4,
+            "approved_claim_count": 3,
+            "partial_claim_count": 1,
+            "unsupported_claim_count": 0,
+            "invalid_source_count": 0,
+            "claims": [
+                {
+                    "claim_id": f"claim-{index}",
+                    "support_status": "supported" if index < 4 else "partial",
+                    "semantic_relevance_score": 1.0,
+                    "source_quality_score": 1.0,
+                    "cited_evidence": citations[:2],
+                }
+                for index in range(1, 5)
             ],
         },
         "context_boundaries": {

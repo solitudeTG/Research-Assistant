@@ -164,6 +164,21 @@ def test_research_answer_and_report_routes_use_citation_evidence_wording():
     assert '"mode": "paper_evidence"' not in sessions_source
 
 
+def test_research_routes_surface_literature_review_matrix_trace_and_artifacts():
+    sessions_source = (
+        Path(__file__).resolve().parents[1]
+        / "route"
+        / "sessions.py"
+    ).read_text(encoding="utf-8")
+
+    assert "Selected papers for literature review" in sessions_source
+    assert "Built evidence matrix" in sessions_source
+    assert "Audited synthesis claims" in sessions_source
+    assert "Generated literature review report" in sessions_source
+    assert "evidence_matrix" in sessions_source
+    assert "evidence_matrix_path" in sessions_source
+
+
 def test_tool_call_mapping_preserves_subagent_lifecycle_metadata(monkeypatch):
     sessions = _load_sessions_module(monkeypatch)
     lifecycle = {

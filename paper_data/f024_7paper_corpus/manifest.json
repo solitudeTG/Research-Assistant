@@ -1,0 +1,78 @@
+{
+  "corpus_id": "f024_leo_beamforming_literature_review_7paper",
+  "topic": "LEO satellite beamforming, distributed beamforming, ISAC, and predictive beamforming",
+  "open_access_note": "All PDFs were downloaded from arXiv public PDF endpoints for local live UI E2E validation. arXiv pages expose a PDF link and license link for each record.",
+  "created": "2026-07-07",
+  "papers": [
+    {
+      "paper_id": "arxiv-2505.07547",
+      "filename": "01-space-time-beamforming-leo.pdf",
+      "title": "Space-Time Beamforming for LEO Satellite Communications",
+      "authors": "Jungbin Yim; Jinseok Choi; Jeonghun Park; Ian P. Roberts; Namyoon Lee",
+      "year": "2025",
+      "source_url": "https://arxiv.org/abs/2505.07547",
+      "pdf_url": "https://arxiv.org/pdf/2505.07547",
+      "license_or_access": "arXiv open-access record with public PDF and license link"
+    },
+    {
+      "paper_id": "arxiv-2410.19358",
+      "filename": "02-joint-beamforming-satellite-selection-ican.pdf",
+      "title": "Joint Beamforming Design and Satellite Selection for Integrated Communication and Navigation in LEO Satellite Networks",
+      "authors": "Jiajing Li; Binghong Liu; Mugen Peng",
+      "year": "2024",
+      "source_url": "https://arxiv.org/abs/2410.19358",
+      "pdf_url": "https://arxiv.org/pdf/2410.19358",
+      "license_or_access": "arXiv open-access record with public PDF and license link"
+    },
+    {
+      "paper_id": "arxiv-2506.01382",
+      "filename": "03-scalable-distributed-beamforming-networked-leo.pdf",
+      "title": "Enabling Scalable Distributed Beamforming via Networked LEO Satellites Towards 6G",
+      "authors": "Yuchen Zhang; Tareq Y. Al-Naffouri",
+      "year": "2025",
+      "source_url": "https://arxiv.org/abs/2506.01382",
+      "pdf_url": "https://arxiv.org/pdf/2506.01382",
+      "license_or_access": "arXiv open-access record with public PDF and license link"
+    },
+    {
+      "paper_id": "arxiv-2308.05055",
+      "filename": "04-direct-leo-satellite-to-smartphone-distributed-beamforming.pdf",
+      "title": "Enhancement of Direct LEO Satellite-to-Smartphone Communications by Distributed Beamforming",
+      "authors": "Zhuoao Xu; Gaojie Chen; Ryan Fernandez; Yue Gao; Rahim Tafazolli",
+      "year": "2023",
+      "source_url": "https://arxiv.org/abs/2308.05055",
+      "pdf_url": "https://arxiv.org/pdf/2308.05055",
+      "license_or_access": "arXiv open-access record with public PDF and license link"
+    },
+    {
+      "paper_id": "arxiv-2104.11158",
+      "filename": "05-hybrid-beamforming-massive-mimo-leo.pdf",
+      "title": "A hybrid beamforming design for massive MIMO LEO satellite communications",
+      "authors": "Joan Palacios; Nuria Gonzalez-Prelcic; Carlos Mosquera; Takayuki Shimizu; Chang-Heng Wang",
+      "year": "2021",
+      "source_url": "https://arxiv.org/abs/2104.11158",
+      "pdf_url": "https://arxiv.org/pdf/2104.11158",
+      "license_or_access": "arXiv open-access record with public PDF and license link"
+    },
+    {
+      "paper_id": "arxiv-2304.00941",
+      "filename": "06-isac-enabled-leo-satellite-systems.pdf",
+      "title": "Integrated Sensing and Communications Enabled Low Earth Orbit Satellite Systems",
+      "authors": "Longfei Yin; Ziang Liu; Bhavani Shankar M. R.; Mohammad Alaee-Kerahroodi; Bruno Clerckx",
+      "year": "2023",
+      "source_url": "https://arxiv.org/abs/2304.00941",
+      "pdf_url": "https://arxiv.org/pdf/2304.00941",
+      "license_or_access": "arXiv open-access record with public PDF and license link"
+    },
+    {
+      "paper_id": "arxiv-2510.10561",
+      "filename": "07-llm-channel-prediction-predictive-beamforming-leo.pdf",
+      "title": "Large Language Model-Empowered Channel Prediction and Predictive Beamforming for LEO Satellite Communications",
+      "authors": "Zhixiong Chen; Hyundong Shin; Arumugam Nallanathan; Jonathon Chambers",
+      "year": "2025",
+      "source_url": "https://arxiv.org/abs/2510.10561",
+      "pdf_url": "https://arxiv.org/pdf/2510.10561",
+      "license_or_access": "arXiv open-access record with public PDF and license link"
+    }
+  ]
+}
