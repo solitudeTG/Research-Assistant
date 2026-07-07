@@ -528,3 +528,36 @@ async def test_llm_semantic_auditor_invalid_json_safely_degrades_to_deterministi
     assert payload["claims"][0]["support_status"] == "supported"
     assert payload["semantic_auditor"]["mode"] == "llm_failed"
     assert payload["semantic_auditor"]["llm_auditor_status"].startswith("invalid_output")
+
+
+@pytest.mark.asyncio
+async def test_llm_semantic_auditor_normalizes_non_llm_finding_code():
+    class FakeAuditor:
+        async def audit_claims(self, *, deterministic_audit, citations):
+            return [
+                {
+                    "claim_id": "claim-1",
+                    "support_status": "insufficient_evidence",
+                    "finding_code": "insufficient_evidence_should_refuse",
+                    "rationale": "There is not enough cited evidence to support the claim.",
+                }
+            ]
+
+    audit = await audit_evidence_claims_with_semantic_auditor(
+        answer_content=(
+            "Insufficient citation evidence was found for this question. "
+            "I cannot answer it as a cited research claim yet."
+        ),
+        citations=[],
+        auditor=FakeAuditor(),
+        model="fake-auditor",
+    )
+
+    payload = audit.to_dict()
+    claim = payload["claims"][0]
+
+    assert payload["semantic_auditor"]["mode"] == "llm_enhanced"
+    assert claim["support_status"] == "insufficient_evidence"
+    assert claim["finding_code"] == "llm_insufficient_evidence"
+    assert claim["deterministic_support_status"] == "insufficient_evidence"
+    assert claim["llm_support_status"] == "insufficient_evidence"

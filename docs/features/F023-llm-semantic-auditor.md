@@ -1,7 +1,7 @@
 ---
 id: F023
 doc_kind: feature
-status: active
+status: completed
 owner: solitudeTG
 created: 2026-07-07
 updated: 2026-07-07
@@ -61,7 +61,7 @@ F022 已经让 audit payload 可机器检查，但 semantic support 仍由 lexic
 
 ## Current Status
 
-Active, blocked on live `llm_enhanced` evidence. Backend audit/answer/evaluation/golden/live E2E script changes have been added. Focused tests, payload golden eval, and AgentMentor strict knowledge check pass. The current live UI Case C run exercised safe degradation because the configured model returned `PermissionDeniedError`; that is valid fallback evidence but not sufficient F023 acceptance evidence for the LLM-backed live auditor.
+Completed. Backend audit/answer/evaluation/golden/live E2E script changes have been added. Focused tests, payload golden eval, AgentMentor strict knowledge check, and live UI Case C now pass. The accepted live Case C artifact used `qwen3.7-plus` and recorded `semantic_auditor.mode=llm_enhanced`, `llm_auditor_status=completed`, claim-level `llm_support_status`, `llm_rationale`, and `finding_code=llm_insufficient_evidence`.
 
 ## Links
 
@@ -100,7 +100,7 @@ Active, blocked on live `llm_enhanced` evidence. Backend audit/answer/evaluation
 - [x] Answer route records real deterministic and LLM auditor trace steps.
 - [x] Evaluation can require LLM enhanced audit fields and fail when missing.
 - [x] Payload golden eval includes overreach and unsupported LLM-audited cases.
-- [ ] Live UI Case C runs through real browser UI upload and Chat textarea question, writes artifacts, and passes with `semantic_auditor.mode=llm_enhanced` and at least one claim carrying `llm_support_status`, `llm_rationale`, and an `llm_*` finding code.
+- [x] Live UI Case C runs through real browser UI upload and Chat textarea question, writes artifacts, and passes with `semantic_auditor.mode=llm_enhanced` and at least one claim carrying `llm_support_status`, `llm_rationale`, and an `llm_*` finding code.
 
 ## Acceptance Map
 
@@ -110,7 +110,7 @@ Active, blocked on live `llm_enhanced` evidence. Backend audit/answer/evaluation
 | Answer payload exposes LLM auditor metadata. | Injected auditor produces `llm_enhanced`, `llm_overreach`, and per-claim LLM fields. | Focused `test_research_answering.py`. | Passed |
 | Quality gate enforces LLM audit when required. | Missing `semantic_auditor` fails with `llm_semantic_auditor_missing`. | Focused `test_research_evaluation.py` and golden eval tests. | Passed |
 | Payload golden cases cover overreach and unsupported. | `leo_llm_overreach_payload_001` and `leo_llm_unsupported_payload_001` pass with required LLM audit. | `.pytest_tmp/f023-golden`. | Passed |
-| Real UI path proves Case C behavior. | Browser uploads real PDF, asks overreach question through Chat textarea, records audit trace, and proves live `llm_enhanced` auditor judgment. | `.pytest_tmp/f023-live-case-c` currently shows `llm_failed/PermissionDeniedError`. | Blocked |
+| Real UI path proves Case C behavior. | Browser uploads real PDF, asks overreach question through Chat textarea, records audit trace, and proves live `llm_enhanced` auditor judgment. | `.pytest_tmp/f023-live-case-c-qwen37/case-c-answer.json`, `.pytest_tmp/f023-live-case-c-qwen37/results.json`, `.pytest_tmp/f023-live-case-c-qwen37/summary.md`. | Passed |
 
 ## State Timeline
 
@@ -119,6 +119,7 @@ Active, blocked on live `llm_enhanced` evidence. Backend audit/answer/evaluation
 | 2026-07-07 | active | User requested F023 | This Feature | New boundary created after F022 to avoid overloading F006/F019 patch chains. |
 | 2026-07-07 | partially verified | Backend and payload verification passed | EV-024 | Live UI Case C remains the completion blocker. |
 | 2026-07-07 | blocked on live LLM evidence | Review found Case C accepted fallback as pass | EV-024 | Live model call failed with `PermissionDeniedError`; script now requires `llm_enhanced` and must fail this artifact until a valid model credential is available. |
+| 2026-07-07 | completed | `qwen3.7-plus` live Case C passed | EV-024 | Real browser UI upload and Chat textarea path produced `semantic_auditor.mode=llm_enhanced`, model `qwen3.7-plus`, `llm_insufficient_evidence`, and `quality_reports.case_c.passed=true`. |
 
 ## Patch History
 
@@ -126,6 +127,11 @@ Active, blocked on live `llm_enhanced` evidence. Backend audit/answer/evaluation
 | --- | --- | --- | --- | --- | --- | --- |
 | F023.1 | 2026-07-07 | pending | Semantic audit lacked a configurable LLM entailment overlay and LLM-required quality gate. | F022 semantic fields were deterministic heuristics only. | Added LLM auditor overlay, fallback metadata, route trace, quality checks, payload golden cases, and Case C script assertions. | backend/payload verified; live blocked |
 | F023.2 | 2026-07-07 | pending | Live Case C passed even though `semantic_auditor.mode=llm_failed` and no claim had LLM support/rationale fields. | The Case C script accepted `insufficient_evidence_should_refuse` and did not require `require_llm_semantic_audit=True`. | Case C now requires `semantic_auditor.mode=llm_enhanced`, claim-level `llm_support_status`/`llm_rationale`, and an `llm_*` finding code; fallback is documented as limitation only. | verified |
+| F023.3 | 2026-07-07 | verified | Live `qwen3.7-plus` auditor returned `llm_support_status=insufficient_evidence` and rationale, but preserved a deterministic finding code. | LLM overlay trusted the returned `finding_code` even when it was not an `llm_*` code. | Normalize non-`llm_*` auditor finding codes to the LLM support-status mapping; live Case C accepted with `llm_insufficient_evidence`. | verified |
+
+## Patch Churn Review
+
+F023 has three patch rows because the work moved through implementation, live-gate hardening, and then a live-model edge case. The patches all protect the same invariant rather than adding unrelated branches: deterministic audit remains the floor, live Case C cannot pass without `llm_enhanced`, and successful LLM overlay output must expose an `llm_*` finding code. The current abstraction still fits the original goal; no ADR or feature split is needed. Future changes should avoid adding case-specific exceptions in the UI script and should keep normalization at the audit overlay boundary.
 
 ## Evidence
 
@@ -136,9 +142,10 @@ Active, blocked on live `llm_enhanced` evidence. Backend audit/answer/evaluation
 - Read first: this Feature, F022, F019, EV-024.
 - Current implementation files: `audit.py`, `answering.py`, `evaluation.py`, `golden_eval.py`, `sessions.py`, `research_ui_e2e.py`, focused tests, payload cases.
 - Safe fallback invariant: if LLM auditor is absent, fails, or returns invalid JSON/status, the deterministic audit remains the returned audit and metadata records the fallback mode.
-- Latest live state: Case C ran through real browser UI with zero citations and `insufficient_evidence_should_refuse`; LLM auditor metadata recorded `llm_failed` with `PermissionDeniedError`. This is fallback evidence only and must not satisfy F023 completion.
-- Next safe action: provide a model credential/config that permits auditor calls, then rerun Case C to capture a live `llm_enhanced` artifact.
+- Latest live state: Case C ran through real browser UI with zero citations, `semantic_auditor.mode=llm_enhanced`, model `qwen3.7-plus`, `llm_support_status=insufficient_evidence`, `llm_rationale`, `finding_code=llm_insufficient_evidence`, and `quality_reports.case_c.passed=true`.
+- Historical fallback state: `.pytest_tmp/f023-live-case-c` and `.pytest_tmp/f023-live-case-c-review` remain fallback/blocked evidence only because they used the old `qwen3.6-flash-2026-04-16` runtime and returned `PermissionDeniedError`.
+- Next safe action: keep F023 regression coverage in focused tests, payload golden eval, and live UI Case C when touching audit overlay, answer routing, or quality gate behavior.
 
 ## Next Step
 
-Rerun live Case C with a model credential that permits auditor calls to capture a live `llm_enhanced` artifact.
+Keep F023 regression coverage in focused tests, payload golden eval, and live UI Case C when touching audit overlay, answer routing, or quality gate behavior.

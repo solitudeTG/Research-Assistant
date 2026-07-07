@@ -464,7 +464,10 @@ def _apply_llm_auditor_findings(
         llm_status = str(finding.get("support_status") or "").strip()
         if llm_status not in _allowed_llm_support_statuses():
             raise ValueError(f"invalid llm support status: {llm_status}")
-        finding_code = str(finding.get("finding_code") or _finding_code_for_llm_status(llm_status)).strip()
+        finding_code = _normalize_llm_finding_code(
+            support_status=llm_status,
+            finding_code=str(finding.get("finding_code") or "").strip(),
+        )
         rationale = _bounded_rationale(str(finding.get("rationale") or finding.get("llm_rationale") or ""))
         claims.append(
             _copy_claim_with_semantic_overlay(
@@ -558,6 +561,12 @@ def _finding_code_for_llm_status(support_status: str) -> str:
         "source_mismatch": "llm_source_mismatch",
         "insufficient_evidence": "llm_insufficient_evidence",
     }[support_status]
+
+
+def _normalize_llm_finding_code(*, support_status: str, finding_code: str) -> str:
+    if finding_code.startswith("llm_"):
+        return finding_code
+    return _finding_code_for_llm_status(support_status)
 
 
 def _bounded_rationale(value: str, *, limit: int = 360) -> str:
