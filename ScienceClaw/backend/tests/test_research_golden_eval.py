@@ -230,6 +230,35 @@ def test_payload_golden_eval_checks_multi_paper_and_insufficient_evidence_contra
     assert multi_result.quality["metrics"]["distinct_cited_paper_count"] == 2
 
 
+def test_payload_golden_eval_checks_expected_semantic_statuses_and_finding_codes(tmp_path):
+    from backend.research_assistant.golden_eval import evaluate_payload_cases, load_golden_cases
+
+    _write_paper_fixtures(tmp_path, "a.pdf")
+    payload = _answer_payload(
+        route="evidence_qa",
+        admission="accepted",
+        citation_count=1,
+        summary_mode="",
+        claim_count=2,
+        approved=1,
+        partial=1,
+        unsupported=0,
+    )
+    payload["audit"]["claims"][1]["finding_code"] = "semantic_support_partial"
+    (tmp_path / "answer.json").write_text(json.dumps(payload), encoding="utf-8")
+    case = _case("semantic-partial", "answer.json", min_citations=1)
+    case["quality_thresholds"]["expected_support_statuses"] = ["supported", "partial"]
+    case["quality_thresholds"]["expected_finding_codes"] = ["semantic_support_partial"]
+    cases_path = tmp_path / "cases.json"
+    cases_path.write_text(json.dumps({"cases": [case]}), encoding="utf-8")
+
+    run_result = evaluate_payload_cases(load_golden_cases(cases_path), root=tmp_path)
+
+    assert run_result.passed
+    assert run_result.cases[0].quality["metrics"]["semantic_support_statuses"] == ["partial", "supported"]
+    assert run_result.cases[0].quality["metrics"]["semantic_finding_codes"] == ["semantic_support_partial"]
+
+
 def test_payload_golden_eval_rejects_fabricated_citation_for_insufficient_evidence(tmp_path):
     from backend.research_assistant.golden_eval import evaluate_payload_cases, load_golden_cases
 
@@ -523,6 +552,35 @@ def _answer_payload(
             "partial_claim_count": partial,
             "unsupported_claim_count": unsupported,
             "invalid_source_count": 0,
-            "claims": [],
+            "claims": [
+                {
+                    "claim_id": f"claim-{index}",
+                    "claim_text": "The paper reports a grounded finding.",
+                    "support_status": (
+                        "supported"
+                        if index <= approved
+                        else "partial"
+                        if index <= approved + partial
+                        else "unsupported"
+                    ),
+                    "semantic_relevance_score": 1.0 if index <= approved else 0.5 if index <= approved + partial else 0.2,
+                    "source_quality_score": 1.0,
+                    "cited_evidence": [
+                        {
+                            "source_type": "paper",
+                            "paper_id": "paper-1",
+                            "title": "Paper",
+                            "section": "Results",
+                            "page_start": 1,
+                            "page_end": 1,
+                            "chunk_id": "chunk-1",
+                            "quote": "The paper reports a grounded finding.",
+                        }
+                    ],
+                    "rationale": "Fixture semantic audit claim.",
+                    "finding_code": None if index <= approved else "semantic_support_partial" if index <= approved + partial else "semantic_support_missing",
+                }
+                for index in range(1, claim_count + 1)
+            ],
         },
     }

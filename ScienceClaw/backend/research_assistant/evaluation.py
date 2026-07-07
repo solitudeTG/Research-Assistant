@@ -31,6 +31,7 @@ class ResearchQualityRequirement:
     max_unsupported_claim_ratio: float | None = None
     require_context_boundaries: bool = True
     require_original_evidence_citations: bool = True
+    require_semantic_audit_fields: bool = True
 
 
 @dataclass(frozen=True)
@@ -117,6 +118,20 @@ def evaluate_research_answer(
         "unsupported_claim_ratio": round(unsupported_ratio, 4),
         "citation_source_types": sorted({str(citation.get("source_type", "")) for citation in citations if isinstance(citation, Mapping)}),
         "citation_evidence_scopes": sorted({str(citation.get("evidence_scope", "")) for citation in citations if isinstance(citation, Mapping)}),
+        "semantic_finding_codes": sorted(
+            {
+                str(claim.get("finding_code"))
+                for claim in _as_sequence(audit.get("claims"))
+                if isinstance(claim, Mapping) and claim.get("finding_code")
+            }
+        ),
+        "semantic_support_statuses": sorted(
+            {
+                str(claim.get("support_status"))
+                for claim in _as_sequence(audit.get("claims"))
+                if isinstance(claim, Mapping) and claim.get("support_status")
+            }
+        ),
     }
 
     _check_equals(findings, "route", route.get("route"), requirement.expected_route, "task_route.route")
@@ -165,6 +180,8 @@ def evaluate_research_answer(
         _check_context_boundaries(findings, boundaries)
 
     _check_citations(findings, citations, requirement)
+    if requirement.require_semantic_audit_fields:
+        _check_semantic_audit_claims(findings, audit)
 
     passed = not any(finding.severity == "error" for finding in findings)
     return ResearchQualityReport(
@@ -251,6 +268,106 @@ def _check_citations(
                     code="citation_missing_evidence_id",
                     message=f"Citation {citation.get('citation_label') or index} is missing original evidence_id.",
                     path=f"citations[{index}].evidence_id",
+                )
+            )
+        _check_citation_traceability(findings, citation, index)
+
+
+def _check_citation_traceability(
+    findings: list[ResearchQualityFinding],
+    citation: Mapping[str, Any],
+    index: int,
+) -> None:
+    required_identity = ("paper_id", "title", "section", "chunk_id")
+    for field_name in required_identity:
+        if not str(citation.get(field_name) or "").strip():
+            findings.append(
+                ResearchQualityFinding(
+                    code=f"citation_{field_name}_missing",
+                    message=f"Citation {citation.get('citation_label') or index} is missing {field_name}.",
+                    path=f"citations[{index}].{field_name}",
+                )
+            )
+    if not str(citation.get("quote") or "").strip():
+        findings.append(
+            ResearchQualityFinding(
+                code="citation_quote_missing",
+                message=f"Citation {citation.get('citation_label') or index} is missing a quote/snippet.",
+                path=f"citations[{index}].quote",
+            )
+        )
+
+
+def _check_semantic_audit_claims(findings: list[ResearchQualityFinding], audit: Mapping[str, Any]) -> None:
+    claims = _as_sequence(audit.get("claims"))
+    if _as_int(audit.get("claim_count")) > 0 and not claims:
+        findings.append(
+            ResearchQualityFinding(
+                code="semantic_audit_claims_missing",
+                message="Audit reports claims but does not include claim-level semantic audit records.",
+                path="audit.claims",
+            )
+        )
+        return
+
+    allowed_support_status = {
+        "supported",
+        "partial",
+        "unsupported",
+        "source_mismatch",
+        "insufficient_evidence",
+    }
+    for index, claim in enumerate(claims):
+        if not isinstance(claim, Mapping):
+            findings.append(
+                ResearchQualityFinding(
+                    code="semantic_audit_claim_shape_invalid",
+                    message=f"Audit claim at index {index} is not an object.",
+                    path=f"audit.claims[{index}]",
+                )
+            )
+            continue
+        if not str(claim.get("claim_id") or "").strip():
+            findings.append(
+                ResearchQualityFinding(
+                    code="semantic_audit_claim_id_missing",
+                    message=f"Audit claim at index {index} is missing claim_id.",
+                    path=f"audit.claims[{index}].claim_id",
+                )
+            )
+        support_status = str(claim.get("support_status") or "")
+        if support_status not in allowed_support_status:
+            findings.append(
+                ResearchQualityFinding(
+                    code="semantic_audit_support_status_invalid",
+                    message=f"Audit claim {claim.get('claim_id') or index} has invalid support_status={support_status!r}.",
+                    path=f"audit.claims[{index}].support_status",
+                )
+            )
+        for score_field in ("semantic_relevance_score", "source_quality_score"):
+            score = claim.get(score_field)
+            if not isinstance(score, (int, float)):
+                findings.append(
+                    ResearchQualityFinding(
+                        code="semantic_audit_score_missing",
+                        message=f"Audit claim {claim.get('claim_id') or index} is missing numeric {score_field}.",
+                        path=f"audit.claims[{index}].{score_field}",
+                    )
+                )
+            elif score < 0 or score > 1:
+                findings.append(
+                    ResearchQualityFinding(
+                        code="semantic_audit_score_out_of_range",
+                        message=f"Audit claim {claim.get('claim_id') or index} has {score_field} outside [0, 1].",
+                        path=f"audit.claims[{index}].{score_field}",
+                    )
+                )
+        if support_status != "insufficient_evidence" and not _as_sequence(claim.get("cited_evidence")):
+            findings.append(
+                ResearchQualityFinding(
+                    code="semantic_audit_cited_evidence_missing",
+                    message=f"Audit claim {claim.get('claim_id') or index} is missing cited_evidence.",
+                    path=f"audit.claims[{index}].cited_evidence",
                 )
             )
 

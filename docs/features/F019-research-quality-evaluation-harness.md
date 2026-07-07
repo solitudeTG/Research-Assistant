@@ -71,6 +71,7 @@ Research Assistant 的核心价值不是更多入口，而是可信工作流。F
 - [EV-010 F019 Research Quality Evaluation Harness Verification](../evidence/EV-010-f019-research-quality-evaluation-harness-verification.md)
 - [EV-018 F019 Golden Eval Live UI E2E](../evidence/EV-018-f019-golden-eval-live-ui-e2e.md)
 - [EV-022 F019 Golden Eval Benchmark Expansion](../evidence/EV-022-f019-golden-eval-benchmark-expansion.md)
+- [EV-023 Semantic Audit Multi-paper Verification](../evidence/EV-023-semantic-audit-multi-paper-verification.md)
 
 ### Decisions / ADRs
 
@@ -142,6 +143,7 @@ Research Assistant 的核心价值不是更多入口，而是可信工作流。F
 | F019.1 | 2026-07-04 | pending | F019 could validate saved answer JSON but could not run real-paper golden eval through live UI. | The first slice stopped at structural answer payload validation; no golden cases or live UI artifact capture existed. | Added golden eval module, CLI, deterministic payload fixtures, live UI bridge, answer/report artifact export, EV-018. | Completed for seed golden set. |
 | F019.2 | 2026-07-06 | pending | Golden eval coverage and failure attribution were still too seed/demo-oriented for interview demonstration. | The F019.1 runner could pass seed payload/live cases, but case intent and owner-module attribution were not fully machine-readable. | Added explicit insufficient-evidence and multi-paper thresholds, owner hints in `results.json`, failed-case summaries, CLI aliases, focused tests, and EV-022. | Completed for payload benchmark expansion. |
 | F019.3 | 2026-07-06 | pending | Review found payload mode could pass with missing declared paper fixtures or missing required report artifacts. | Payload evaluation treated `paper_paths` and `required_outputs` as descriptive metadata instead of preflighted case contract. | Added payload preflight findings for missing paper fixtures and required report artifacts, copied report payload snapshots when present, and added negative regression tests. | Completed review hardening. |
+| F019.4 | 2026-07-07 | pending | Golden eval needed to verify semantic audit statuses/finding codes and live UI needed a two-paper synthesis/refusal A/B runner. | The F019.3 harness enforced structural payload contracts but did not assert claim-level semantic fields or run the requested multi-paper live path. | F022 adds semantic audit field checks, expected support/finding-code thresholds, expanded payload cases, and semantic multi-paper live UI script assertions. | pending |
 
 ## Patch Churn Review
 

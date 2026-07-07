@@ -52,6 +52,132 @@
     "partial_claim_count": 1,
     "unsupported_claim_count": 1,
     "invalid_source_count": 0,
-    "claims": []
+    "claims": [
+      {
+        "claim_id": "claim-1",
+        "claim_text": "The paper studies LEO satellite beamforming.",
+        "status": "approved",
+        "support_status": "supported",
+        "semantic_relevance_score": 1.0,
+        "source_quality_score": 1.0,
+        "evidence_ids": [1],
+        "cited_evidence": [
+          {
+            "source_type": "paper",
+            "paper_id": "paper-space-time",
+            "title": "Space-Time Beamforming for LEO Satellite Communications Enabling Extremely Narrow Beams",
+            "section": "Introduction",
+            "page_start": 1,
+            "page_end": 1,
+            "chunk_id": "chunk-1",
+            "quote": "The paper discusses space-time beamforming for LEO satellite communications."
+          }
+        ],
+        "rationale": "The claim is directly supported by the introduction quote.",
+        "finding_code": null
+      },
+      {
+        "claim_id": "claim-2",
+        "claim_text": "The method focuses on narrow beams in the LEO satellite setting.",
+        "status": "approved",
+        "support_status": "supported",
+        "semantic_relevance_score": 1.0,
+        "source_quality_score": 1.0,
+        "evidence_ids": [2],
+        "cited_evidence": [
+          {
+            "source_type": "paper",
+            "paper_id": "paper-space-time",
+            "title": "Space-Time Beamforming for LEO Satellite Communications Enabling Extremely Narrow Beams",
+            "section": "Method",
+            "page_start": 3,
+            "page_end": 3,
+            "chunk_id": "chunk-2",
+            "quote": "The method focuses on narrow beams in the LEO satellite setting."
+          }
+        ],
+        "rationale": "The claim restates the cited method quote.",
+        "finding_code": null
+      },
+      {
+        "claim_id": "claim-3",
+        "claim_text": "The summary covers problem, method, contribution, and limitations.",
+        "status": "partial",
+        "support_status": "partial",
+        "semantic_relevance_score": 0.5,
+        "source_quality_score": 1.0,
+        "evidence_ids": [1, 2],
+        "cited_evidence": [
+          {
+            "source_type": "paper",
+            "paper_id": "paper-space-time",
+            "title": "Space-Time Beamforming for LEO Satellite Communications Enabling Extremely Narrow Beams",
+            "section": "Introduction",
+            "page_start": 1,
+            "page_end": 1,
+            "chunk_id": "chunk-1",
+            "quote": "The paper discusses space-time beamforming for LEO satellite communications."
+          },
+          {
+            "source_type": "paper",
+            "paper_id": "paper-space-time",
+            "title": "Space-Time Beamforming for LEO Satellite Communications Enabling Extremely Narrow Beams",
+            "section": "Method",
+            "page_start": 3,
+            "page_end": 3,
+            "chunk_id": "chunk-2",
+            "quote": "The method focuses on narrow beams in the LEO satellite setting."
+          }
+        ],
+        "rationale": "The citations support the problem and method portions but only partially cover all summary dimensions.",
+        "finding_code": "semantic_support_partial"
+      },
+      {
+        "claim_id": "claim-4",
+        "claim_text": "The answer uses original citation evidence.",
+        "status": "approved",
+        "support_status": "supported",
+        "semantic_relevance_score": 1.0,
+        "source_quality_score": 1.0,
+        "evidence_ids": [1, 2],
+        "cited_evidence": [
+          {
+            "source_type": "paper",
+            "paper_id": "paper-space-time",
+            "title": "Space-Time Beamforming for LEO Satellite Communications Enabling Extremely Narrow Beams",
+            "section": "Introduction",
+            "page_start": 1,
+            "page_end": 1,
+            "chunk_id": "chunk-1",
+            "quote": "The paper discusses space-time beamforming for LEO satellite communications."
+          }
+        ],
+        "rationale": "The payload citations are original paper evidence.",
+        "finding_code": null
+      },
+      {
+        "claim_id": "claim-5",
+        "claim_text": "The paper proves deployment success.",
+        "status": "unsupported",
+        "support_status": "unsupported",
+        "semantic_relevance_score": 0.2,
+        "source_quality_score": 1.0,
+        "evidence_ids": [],
+        "cited_evidence": [
+          {
+            "source_type": "paper",
+            "paper_id": "paper-space-time",
+            "title": "Space-Time Beamforming for LEO Satellite Communications Enabling Extremely Narrow Beams",
+            "section": "Method",
+            "page_start": 3,
+            "page_end": 3,
+            "chunk_id": "chunk-2",
+            "quote": "The method focuses on narrow beams in the LEO satellite setting."
+          }
+        ],
+        "rationale": "The cited method quote does not prove deployment success.",
+        "finding_code": "semantic_support_mismatch"
+      }
+    ]
   }
 }

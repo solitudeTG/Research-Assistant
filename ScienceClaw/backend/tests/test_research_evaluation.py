@@ -76,6 +76,60 @@ def test_evidence_qa_quality_gate_rejects_context_only_citation_source():
     assert report.findings[0].code == "citation_source_type_invalid"
 
 
+def test_evidence_qa_quality_gate_requires_semantic_audit_fields_and_traceable_citations():
+    payload = _answer_payload(
+        route="evidence_qa",
+        admission="accepted",
+        citation_count=1,
+        summary_mode="",
+        claim_count=1,
+        approved=1,
+        partial=0,
+        unsupported=0,
+    )
+    payload["citations"][0]["quote"] = ""
+    payload["audit"]["claims"] = [
+        {
+            "claim_id": "claim-1",
+            "claim_text": "The paper reports a grounded finding.",
+            "support_status": "approved",
+            "semantic_relevance_score": None,
+            "source_quality_score": None,
+            "cited_evidence": [],
+        }
+    ]
+
+    report = evaluate_research_answer(payload, evidence_qa_quality_gate())
+
+    assert not report.passed
+    assert {finding.code for finding in report.findings} >= {
+        "citation_quote_missing",
+        "semantic_audit_support_status_invalid",
+        "semantic_audit_score_missing",
+        "semantic_audit_cited_evidence_missing",
+    }
+
+
+def test_evidence_qa_quality_gate_accepts_paper_citation_without_page_when_traceable_fields_exist():
+    payload = _answer_payload(
+        route="evidence_qa",
+        admission="accepted",
+        citation_count=1,
+        summary_mode="",
+        claim_count=1,
+        approved=1,
+        partial=0,
+        unsupported=0,
+    )
+    payload["citations"][0]["page_start"] = None
+    payload["citations"][0]["page_end"] = None
+
+    report = evaluate_research_answer(payload, evidence_qa_quality_gate())
+
+    assert report.passed
+    assert "citation_page_missing" not in {finding.code for finding in report.findings}
+
+
 def test_non_evidence_turn_quality_gate_accepts_skipped_retrieval_without_citations():
     report = evaluate_research_answer(
         _answer_payload(
@@ -179,6 +233,35 @@ def _answer_payload(
             "partial_claim_count": partial,
             "unsupported_claim_count": unsupported,
             "invalid_source_count": 0,
-            "claims": [],
+            "claims": [
+                {
+                    "claim_id": f"claim-{index}",
+                    "claim_text": "The paper reports a grounded finding.",
+                    "support_status": (
+                        "supported"
+                        if index <= approved
+                        else "partial"
+                        if index <= approved + partial
+                        else "unsupported"
+                    ),
+                    "semantic_relevance_score": 1.0 if index <= approved else 0.5 if index <= approved + partial else 0.2,
+                    "source_quality_score": 1.0,
+                    "cited_evidence": [
+                        {
+                            "source_type": "paper",
+                            "paper_id": "paper-1",
+                            "title": "Paper",
+                            "section": "Results",
+                            "page_start": 1,
+                            "page_end": 1,
+                            "chunk_id": "chunk-1",
+                            "quote": "The paper reports a grounded finding.",
+                        }
+                    ],
+                    "rationale": "Fixture semantic audit claim.",
+                    "finding_code": None if index <= approved else "semantic_support_partial" if index <= approved + partial else "semantic_support_missing",
+                }
+                for index in range(1, claim_count + 1)
+            ],
         },
     }

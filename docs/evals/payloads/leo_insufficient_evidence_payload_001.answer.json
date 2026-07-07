@@ -19,6 +19,19 @@
     "partial_claim_count": 0,
     "unsupported_claim_count": 1,
     "invalid_source_count": 0,
-    "claims": []
+    "claims": [
+      {
+        "claim_id": "claim-1",
+        "claim_text": "No citation evidence in the satellite paper supports clinical safety outcomes for medical patients.",
+        "status": "unsupported",
+        "support_status": "insufficient_evidence",
+        "semantic_relevance_score": 0.0,
+        "source_quality_score": 0.0,
+        "evidence_ids": [],
+        "cited_evidence": [],
+        "rationale": "The available satellite beamforming evidence does not support a clinical safety claim.",
+        "finding_code": "insufficient_evidence_should_refuse"
+      }
+    ]
   }
 }

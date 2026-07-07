@@ -1,0 +1,56 @@
+{
+  "answer_id": "golden-context-only-001",
+  "content": "Context-only memory was rejected as citation evidence for this claim.",
+  "citations": [],
+  "citation_count": 0,
+  "context_memory": [
+    {
+      "memory_id": "memory-1",
+      "source_type": "memory",
+      "context_only": true,
+      "content": "Prior notes mention beamforming constraints."
+    }
+  ],
+  "context_boundaries": {
+    "citation_evidence": ["paper", "web", "database"],
+    "context_only_memory": ["memory"],
+    "process_trace": ["tool_logs", "runtime_results", "agent_lifecycle"],
+    "model_reasoning": ["model_reasoning"]
+  },
+  "summary_synthesis": {},
+  "evidence_admission": {"decision": "accepted"},
+  "task_route": {"route": "evidence_qa"},
+  "audit": {
+    "status": "invalid_source",
+    "claim_count": 1,
+    "approved_claim_count": 0,
+    "partial_claim_count": 0,
+    "unsupported_claim_count": 0,
+    "invalid_source_count": 1,
+    "claims": [
+      {
+        "claim_id": "claim-1",
+        "claim_text": "Prior memory mentions beamforming constraints.",
+        "status": "invalid_source",
+        "support_status": "source_mismatch",
+        "semantic_relevance_score": 0.0,
+        "source_quality_score": 0.0,
+        "evidence_ids": ["memory-1"],
+        "cited_evidence": [
+          {
+            "source_type": "memory",
+            "paper_id": "memory",
+            "title": "Session memory",
+            "section": "Memory",
+            "page_start": null,
+            "page_end": null,
+            "chunk_id": "memory-1",
+            "quote": "Prior notes mention beamforming constraints."
+          }
+        ],
+        "rationale": "Memory is context-only and cannot be used as citation evidence.",
+        "finding_code": "context_only_source_used_as_citation"
+      }
+    ]
+  }
+}

@@ -32,6 +32,8 @@ class GoldenEvalThresholds:
     required_summary_mode: str | None = None
     allowed_admission_decisions: list[str] | None = None
     min_distinct_cited_papers: int | None = None
+    expected_support_statuses: list[str] | None = None
+    expected_finding_codes: list[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -315,6 +317,8 @@ def module_hint_for_finding(code: str) -> str:
         return "Check F013 routing."
     if code in {"unsupported_claim_ratio_exceeded", "invalid_claims_exceeded"}:
         return "Check F006 Evidence Audit / F018 calibration / F019 thresholds."
+    if code.startswith("semantic_"):
+        return "Check F006 Evidence Audit / F018 calibration / F022 semantic audit."
     if code in {"summary_mode_mismatch"}:
         return "Check F017 synthesis."
     if code in {"multi_paper_citation_coverage_too_low"}:
@@ -404,6 +408,8 @@ def _parse_case(raw_case: Any) -> GoldenEvalCase:
             required_summary_mode=thresholds.get("required_summary_mode"),
             allowed_admission_decisions=_optional_str_list(thresholds.get("allowed_admission_decisions")),
             min_distinct_cited_papers=_optional_int(thresholds.get("min_distinct_cited_papers")),
+            expected_support_statuses=_optional_str_list(thresholds.get("expected_support_statuses")),
+            expected_finding_codes=_optional_str_list(thresholds.get("expected_finding_codes")),
         ),
         required_outputs=GoldenEvalRequiredOutputs(
             answer=bool(outputs.get("answer", True)),
@@ -538,6 +544,28 @@ def _quality_dict_with_case_checks(
                     "citations",
                 )
             )
+    if thresholds.expected_support_statuses:
+        actual_statuses = set(_as_list(quality_dict.get("metrics", {}).get("semantic_support_statuses")))
+        missing_statuses = sorted(set(thresholds.expected_support_statuses) - actual_statuses)
+        if missing_statuses:
+            findings.append(
+                _finding_dict(
+                    "semantic_support_status_missing",
+                    f"Expected semantic support statuses {missing_statuses!r} in audit claims.",
+                    "audit.claims.support_status",
+                )
+            )
+    if thresholds.expected_finding_codes:
+        actual_codes = set(_as_list(quality_dict.get("metrics", {}).get("semantic_finding_codes")))
+        missing_codes = sorted(set(thresholds.expected_finding_codes) - actual_codes)
+        if missing_codes:
+            findings.append(
+                _finding_dict(
+                    "semantic_finding_code_missing",
+                    f"Expected semantic finding codes {missing_codes!r} in audit claims.",
+                    "audit.claims.finding_code",
+                )
+            )
 
     decorated_findings = [_decorate_finding(finding) for finding in findings]
     quality_dict["findings"] = decorated_findings
@@ -579,6 +607,8 @@ def _owner_modules_for_finding(code: str) -> list[str]:
         return ["F013 routing"]
     if code in {"unsupported_claim_ratio_exceeded", "invalid_claims_exceeded"}:
         return ["F006 audit", "F018 calibration", "F019 golden eval"]
+    if code.startswith("semantic_"):
+        return ["F006 audit", "F018 calibration", "F022 semantic audit"]
     if code == "summary_mode_mismatch":
         return ["F017 synthesis"]
     if code == "multi_paper_citation_coverage_too_low":

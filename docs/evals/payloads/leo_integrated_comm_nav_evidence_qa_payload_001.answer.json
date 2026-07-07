@@ -34,6 +34,53 @@
     "partial_claim_count": 0,
     "unsupported_claim_count": 0,
     "invalid_source_count": 0,
-    "claims": []
+    "claims": [
+      {
+        "claim_id": "claim-1",
+        "claim_text": "The answer cites original paper evidence about integrated communication and navigation in LEO satellite networks.",
+        "status": "approved",
+        "support_status": "supported",
+        "semantic_relevance_score": 1.0,
+        "source_quality_score": 1.0,
+        "evidence_ids": [21],
+        "cited_evidence": [
+          {
+            "source_type": "paper",
+            "paper_id": "paper-comm-nav",
+            "title": "Beamforming Design and Satellite Selection for Integrated Communication and Navigation",
+            "section": "System Model",
+            "page_start": 2,
+            "page_end": 2,
+            "chunk_id": "chunk-21",
+            "quote": "The paper frames beamforming and satellite selection as part of integrated communication and navigation."
+          }
+        ],
+        "rationale": "The cited paper quote supports the integrated communication and navigation framing.",
+        "finding_code": null
+      },
+      {
+        "claim_id": "claim-2",
+        "claim_text": "The paper frames beamforming and satellite selection as part of integrated communication and navigation.",
+        "status": "approved",
+        "support_status": "supported",
+        "semantic_relevance_score": 1.0,
+        "source_quality_score": 1.0,
+        "evidence_ids": [21],
+        "cited_evidence": [
+          {
+            "source_type": "paper",
+            "paper_id": "paper-comm-nav",
+            "title": "Beamforming Design and Satellite Selection for Integrated Communication and Navigation",
+            "section": "System Model",
+            "page_start": 2,
+            "page_end": 2,
+            "chunk_id": "chunk-21",
+            "quote": "The paper frames beamforming and satellite selection as part of integrated communication and navigation."
+          }
+        ],
+        "rationale": "The claim restates the cited quote.",
+        "finding_code": null
+      }
+    ]
   }
 }

@@ -34,6 +34,53 @@
     "partial_claim_count": 0,
     "unsupported_claim_count": 0,
     "invalid_source_count": 0,
-    "claims": []
+    "claims": [
+      {
+        "claim_id": "claim-1",
+        "claim_text": "The answer cites the paper evidence for narrow-beam LEO satellite communication claims.",
+        "status": "approved",
+        "support_status": "supported",
+        "semantic_relevance_score": 1.0,
+        "source_quality_score": 1.0,
+        "evidence_ids": [11],
+        "cited_evidence": [
+          {
+            "source_type": "paper",
+            "paper_id": "paper-space-time",
+            "title": "Space-Time Beamforming for LEO Satellite Communications Enabling Extremely Narrow Beams",
+            "section": "Results",
+            "page_start": 5,
+            "page_end": 5,
+            "chunk_id": "chunk-11",
+            "quote": "The result section reports beamforming behavior in a LEO satellite communication scenario."
+          }
+        ],
+        "rationale": "The cited paper quote directly supports the LEO beamforming evidence claim.",
+        "finding_code": null
+      },
+      {
+        "claim_id": "claim-2",
+        "claim_text": "The result section reports beamforming behavior in a LEO satellite communication scenario.",
+        "status": "approved",
+        "support_status": "supported",
+        "semantic_relevance_score": 1.0,
+        "source_quality_score": 1.0,
+        "evidence_ids": [11],
+        "cited_evidence": [
+          {
+            "source_type": "paper",
+            "paper_id": "paper-space-time",
+            "title": "Space-Time Beamforming for LEO Satellite Communications Enabling Extremely Narrow Beams",
+            "section": "Results",
+            "page_start": 5,
+            "page_end": 5,
+            "chunk_id": "chunk-11",
+            "quote": "The result section reports beamforming behavior in a LEO satellite communication scenario."
+          }
+        ],
+        "rationale": "The claim restates the cited quote.",
+        "finding_code": null
+      }
+    ]
   }
 }
