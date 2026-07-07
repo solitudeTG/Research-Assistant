@@ -34,6 +34,8 @@ class GoldenEvalThresholds:
     min_distinct_cited_papers: int | None = None
     expected_support_statuses: list[str] | None = None
     expected_finding_codes: list[str] | None = None
+    require_llm_semantic_audit: bool = False
+    allowed_semantic_auditor_modes: list[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -73,6 +75,8 @@ class GoldenEvalCase:
             required_summary_mode=self.quality_thresholds.required_summary_mode,
             max_invalid_claims=self.quality_thresholds.max_invalid_claims,
             max_unsupported_claim_ratio=self.quality_thresholds.max_unsupported_claim_ratio,
+            require_llm_semantic_audit=self.quality_thresholds.require_llm_semantic_audit,
+            allowed_semantic_auditor_modes=set(self.quality_thresholds.allowed_semantic_auditor_modes or ["llm_enhanced"]),
         )
 
 
@@ -317,8 +321,10 @@ def module_hint_for_finding(code: str) -> str:
         return "Check F013 routing."
     if code in {"unsupported_claim_ratio_exceeded", "invalid_claims_exceeded"}:
         return "Check F006 Evidence Audit / F018 calibration / F019 thresholds."
+    if code.startswith("llm_semantic_"):
+        return "Check F023 LLM semantic auditor."
     if code.startswith("semantic_"):
-        return "Check F006 Evidence Audit / F018 calibration / F022 semantic audit."
+        return "Check F006 Evidence Audit / F018 calibration / F022/F023 semantic audit."
     if code in {"summary_mode_mismatch"}:
         return "Check F017 synthesis."
     if code in {"multi_paper_citation_coverage_too_low"}:
@@ -410,6 +416,8 @@ def _parse_case(raw_case: Any) -> GoldenEvalCase:
             min_distinct_cited_papers=_optional_int(thresholds.get("min_distinct_cited_papers")),
             expected_support_statuses=_optional_str_list(thresholds.get("expected_support_statuses")),
             expected_finding_codes=_optional_str_list(thresholds.get("expected_finding_codes")),
+            require_llm_semantic_audit=bool(thresholds.get("require_llm_semantic_audit", False)),
+            allowed_semantic_auditor_modes=_optional_str_list(thresholds.get("allowed_semantic_auditor_modes")),
         ),
         required_outputs=GoldenEvalRequiredOutputs(
             answer=bool(outputs.get("answer", True)),
@@ -607,8 +615,10 @@ def _owner_modules_for_finding(code: str) -> list[str]:
         return ["F013 routing"]
     if code in {"unsupported_claim_ratio_exceeded", "invalid_claims_exceeded"}:
         return ["F006 audit", "F018 calibration", "F019 golden eval"]
+    if code.startswith("llm_semantic_"):
+        return ["F023 LLM semantic auditor"]
     if code.startswith("semantic_"):
-        return ["F006 audit", "F018 calibration", "F022 semantic audit"]
+        return ["F006 audit", "F018 calibration", "F022 semantic audit", "F023 LLM semantic auditor"]
     if code == "summary_mode_mismatch":
         return ["F017 synthesis"]
     if code == "multi_paper_citation_coverage_too_low":

@@ -8,7 +8,13 @@ import logging
 
 import shortuuid
 
-from backend.research_assistant.audit import EvidenceAudit, audit_evidence_claims
+from backend.research_assistant.audit import (
+    EvidenceAudit,
+    LangChainSemanticAuditor,
+    SemanticAuditorLike,
+    audit_evidence_claims,
+    audit_evidence_claims_with_semantic_auditor,
+)
 from backend.research_assistant.admission import (
     EvidenceAdmissionResult,
     admit_evidence_hits,
@@ -206,7 +212,9 @@ async def answer_research_question(
     embedding_model: str,
     limit: int = 5,
     whole_paper_synthesizer: WholePaperSynthesizer | None = None,
+    semantic_auditor: SemanticAuditorLike | None = None,
     use_llm_whole_paper_synthesis: bool = False,
+    use_llm_semantic_auditor: bool = True,
     model_config: dict[str, Any] | None = None,
 ) -> ResearchAnswer:
     task_route = classify_research_task(question)
@@ -219,13 +227,20 @@ async def answer_research_question(
     if task_route.route == "general_chat":
         admission = skipped_admission_result()
         content = _compose_skipped_answer()
+        audit = await _audit_answer_content(
+            content=content,
+            citations=[],
+            semantic_auditor=semantic_auditor,
+            use_llm_semantic_auditor=use_llm_semantic_auditor,
+            model_config=model_config,
+        )
         return ResearchAnswer(
             content=content,
             citations=[],
             context_memory=context_memory,
             admission=admission,
             task_route=task_route,
-            audit=audit_evidence_claims(answer_content=content, citations=[]),
+            audit=audit,
         )
 
     if task_route.route == "whole_paper_summary":
@@ -252,7 +267,13 @@ async def answer_research_question(
             summary_synthesis=summary_synthesis,
             admission=admission,
             task_route=task_route,
-            audit=audit_evidence_claims(answer_content=content, citations=citations),
+            audit=await _audit_answer_content(
+                content=content,
+                citations=citations,
+                semantic_auditor=semantic_auditor,
+                use_llm_semantic_auditor=use_llm_semantic_auditor,
+                model_config=model_config,
+            ),
         )
 
     provider = HashingEmbeddingProvider(
@@ -290,7 +311,46 @@ async def answer_research_question(
         context_memory=context_memory,
         admission=admission,
         task_route=task_route,
-        audit=audit_evidence_claims(answer_content=content, citations=citations),
+        audit=await _audit_answer_content(
+            content=content,
+            citations=citations,
+            semantic_auditor=semantic_auditor,
+            use_llm_semantic_auditor=use_llm_semantic_auditor,
+            model_config=model_config,
+        ),
+    )
+
+
+async def _audit_answer_content(
+    *,
+    content: str,
+    citations: list[ResearchCitation],
+    semantic_auditor: SemanticAuditorLike | None,
+    use_llm_semantic_auditor: bool,
+    model_config: dict[str, Any] | None,
+) -> EvidenceAudit:
+    if not use_llm_semantic_auditor:
+        return audit_evidence_claims(answer_content=content, citations=citations)
+    auditor = semantic_auditor
+    model_name = _model_name_from_config(model_config)
+    if auditor is None and model_config:
+        auditor = LangChainSemanticAuditor(model_config=model_config)
+    return await audit_evidence_claims_with_semantic_auditor(
+        answer_content=content,
+        citations=citations,
+        auditor=auditor,
+        model=model_name,
+    )
+
+
+def _model_name_from_config(model_config: dict[str, Any] | None) -> str | None:
+    if not isinstance(model_config, dict):
+        return None
+    return str(
+        model_config.get("model_name")
+        or model_config.get("model")
+        or model_config.get("id")
+        or "configured-model"
     )
 
 

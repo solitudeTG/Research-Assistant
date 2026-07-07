@@ -142,6 +142,76 @@ def assert_semantic_multi_paper_live_loop(result: ResearchUiE2EResult) -> None:
         raise AssertionError("Insufficient-evidence audit did not include insufficient_evidence_should_refuse")
 
 
+def assert_semantic_overreach_live_loop(result: ResearchUiE2EResult) -> None:
+    if result.session_status != "completed" and not result.answer_payload:
+        raise AssertionError(f"Research UI session did not complete: {result.session_status!r}")
+    if result.error_events:
+        raise AssertionError(f"Research UI loop produced error events: {result.error_events!r}")
+    if result.question_delivery != "chat_ui":
+        raise AssertionError(f"Case C question must be submitted through Chat UI, got {result.question_delivery!r}")
+
+    visible_steps = "\n".join(result.activity_steps)
+    for step in (
+        "Research document uploaded",
+        "Parsing research document",
+        "Indexing paper evidence",
+        "Deterministic evidence audit completed",
+    ):
+        if step not in visible_steps and not _activity_step_equivalent(step, result.activity_steps):
+            raise AssertionError(f"Case C did not show ActivityPanel step: {step}")
+    if not any("semantic auditor" in step.casefold() or "evidence audit" in step.casefold() for step in result.activity_steps):
+        raise AssertionError("Case C did not show a real auditor/audit step in ActivityPanel trace")
+
+    answer = result.answer_payload or {}
+    audit_claims = ((answer.get("audit") or {}).get("claims") or [])
+    if not audit_claims:
+        raise AssertionError("Case C answer is missing audit.claims")
+    semantic_auditor = (answer.get("audit") or {}).get("semantic_auditor") or {}
+    if semantic_auditor.get("mode") != "llm_enhanced":
+        raise AssertionError(
+            "Case C requires a live LLM semantic auditor result; "
+            f"got semantic_auditor.mode={semantic_auditor.get('mode')!r} "
+            f"status={semantic_auditor.get('llm_auditor_status')!r}"
+        )
+    accepted_codes = {
+        "llm_overreach",
+        "llm_unsupported",
+        "llm_source_mismatch",
+        "llm_insufficient_evidence",
+    }
+    actual_codes = {
+        claim.get("finding_code")
+        for claim in audit_claims
+        if isinstance(claim, dict) and claim.get("finding_code")
+    }
+    if not (actual_codes & accepted_codes):
+        raise AssertionError(f"Case C did not expose an LLM overreach/unsupported finding code: {sorted(actual_codes)!r}")
+    if not any(
+        isinstance(claim, dict)
+        and claim.get("llm_support_status")
+        and claim.get("llm_rationale")
+        and claim.get("finding_code") in accepted_codes
+        for claim in audit_claims
+    ):
+        raise AssertionError("Case C requires at least one claim with llm_support_status, llm_rationale, and an LLM finding code")
+
+    citations = answer.get("citations") or []
+    content = str(answer.get("content") or "").casefold()
+    refusal_markers = (
+        "insufficient citation evidence",
+        "cannot answer it as a cited research claim",
+        "evidence only supports",
+        "not support",
+    )
+    if citations and not any(marker in content for marker in refusal_markers):
+        raise AssertionError("Case C must have zero citations or explicitly refuse/qualify the citation as non-supporting evidence")
+
+    quality_reports = _build_live_quality_reports(result, case_c=True)
+    case_c_quality = quality_reports.get("case_c")
+    if case_c_quality:
+        case_c_quality.assert_passed()
+
+
 def main() -> int:
     args = _parse_args()
     _log("checking optional runtime dependencies")
@@ -173,11 +243,14 @@ def main() -> int:
             pdf_paths=pdf_paths,
             headed=args.headed,
             timeout_ms=args.timeout_ms,
+            generate_report=not args.semantic_overreach,
         )
 
     if args.output_dir:
-        _write_e2e_outputs(result, Path(args.output_dir))
-    if args.semantic_multipaper:
+        _write_e2e_outputs(result, Path(args.output_dir), case_c=args.semantic_overreach)
+    if args.semantic_overreach:
+        assert_semantic_overreach_live_loop(result)
+    elif args.semantic_multipaper:
         assert_semantic_multi_paper_live_loop(result)
     else:
         assert_research_ui_loop(result)
@@ -219,6 +292,7 @@ def _parse_args() -> argparse.Namespace:
         help="Real PDF path to upload through the UI. Repeat for multi-paper cases. Defaults to a smoke PDF.",
     )
     parser.add_argument("--semantic-multipaper", action="store_true", help="Assert semantic multi-paper synthesis plus refusal.")
+    parser.add_argument("--semantic-overreach", action="store_true", help="Assert live UI semantic overreach/refusal Case C.")
     parser.add_argument("--output-dir", default=None, help="Write answer/report/result artifacts to this directory.")
     parser.add_argument("--headed", action="store_true", help="Run the browser visibly instead of headless.")
     parser.add_argument("--timeout-ms", type=int, default=120_000)
@@ -253,6 +327,7 @@ def _run_browser_loop(
     pdf_paths: list[Path],
     headed: bool,
     timeout_ms: int,
+    generate_report: bool,
 ) -> ResearchUiE2EResult:
     from playwright.sync_api import sync_playwright
 
@@ -298,9 +373,11 @@ def _run_browser_loop(
             answer_payload = _submit_research_question_via_chat(page, api_base_url, session_id, question, timeout_ms)
             citation_count = len(answer_payload.get("citations") or [])
 
-            _log("generating Markdown research report through Chat UI")
-            report_payload = _generate_research_report_via_chat(page, api_base_url, session_id, timeout_ms)
-            _wait_for_report_files(api_base_url, session_id, page, timeout_ms)
+            report_payload = None
+            if generate_report:
+                _log("generating Markdown research report through Chat UI")
+                report_payload = _generate_research_report_via_chat(page, api_base_url, session_id, timeout_ms)
+                _wait_for_report_files(api_base_url, session_id, page, timeout_ms)
 
             _log("collecting trace and file evidence")
             activity_steps = _load_activity_steps(api_base_url, session_id, page)
@@ -322,7 +399,7 @@ def _run_browser_loop(
                 session_status=status,
                 citation_count=citation_count,
                 question_delivery="chat_ui",
-                report_delivery="chat_ui",
+                report_delivery="chat_ui" if generate_report else "",
                 insufficient_question_delivery="chat_ui" if insufficient_question else "",
                 activity_steps=activity_steps,
                 round_files=round_files,
@@ -369,10 +446,11 @@ def _goto_client_route(page, frontend_url: str, route: str, timeout_ms: int) -> 
     page.locator("body").wait_for(timeout=timeout_ms)
 
 
-def _write_e2e_outputs(result: ResearchUiE2EResult, output_dir: Path) -> None:
+def _write_e2e_outputs(result: ResearchUiE2EResult, output_dir: Path, *, case_c: bool = False) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
+    answer_name = "case-c-answer.json" if case_c else "case-a-answer.json"
     artifacts = {
-        "answer_payload_path": output_dir / "case-a-answer.json",
+        "answer_payload_path": output_dir / answer_name,
         "report_payload_path": output_dir / "case-a-report.json",
         "insufficient_answer_payload_path": output_dir / "case-b-insufficient-answer.json",
         "results_path": output_dir / "results.json",
@@ -399,7 +477,7 @@ def _write_e2e_outputs(result: ResearchUiE2EResult, output_dir: Path) -> None:
         "error_events": result.error_events,
         "quality_reports": {
             case_id: report.to_dict()
-            for case_id, report in _build_live_quality_reports(result).items()
+            for case_id, report in _build_live_quality_reports(result, case_c=case_c).items()
         },
         "artifact_paths": {key: str(path) for key, path in artifacts.items()},
     }
@@ -418,6 +496,7 @@ def _write_e2e_outputs(result: ResearchUiE2EResult, output_dir: Path) -> None:
                 f"- Case B admission: `{((result.insufficient_answer_payload or {}).get('evidence_admission') or {}).get('decision')}`",
                 f"- Case A quality: `{summary['quality_reports'].get('case_a', {}).get('passed')}`",
                 f"- Case B quality: `{summary['quality_reports'].get('case_b', {}).get('passed')}`",
+                f"- Case C quality: `{summary['quality_reports'].get('case_c', {}).get('passed')}`",
                 f"- Activity steps: {len(result.activity_steps)}",
                 f"- Round files: {', '.join(result.round_files)}",
             ]
@@ -427,9 +506,22 @@ def _write_e2e_outputs(result: ResearchUiE2EResult, output_dir: Path) -> None:
     )
 
 
-def _build_live_quality_reports(result: ResearchUiE2EResult) -> dict[str, object]:
+def _build_live_quality_reports(result: ResearchUiE2EResult, *, case_c: bool = False) -> dict[str, object]:
     reports = {}
-    if result.answer_payload is not None:
+    if case_c and result.answer_payload is not None:
+        decision = (result.answer_payload.get("evidence_admission") or {}).get("decision")
+        reports["case_c"] = evaluate_research_answer(
+            result.answer_payload,
+            ResearchQualityRequirement(
+                case_id="live_ui_case_c_semantic_overreach",
+                expected_admission=decision if decision else None,
+                min_citation_count=0,
+                max_unsupported_claim_ratio=1.0,
+                require_original_evidence_citations=False,
+                require_llm_semantic_audit=True,
+            ),
+        )
+    elif result.answer_payload is not None:
         route = ((result.answer_payload.get("task_route") or {}).get("route") or "evidence_qa")
         reports["case_a"] = evaluate_research_answer(
             result.answer_payload,

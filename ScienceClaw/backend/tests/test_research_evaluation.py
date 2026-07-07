@@ -110,6 +110,79 @@ def test_evidence_qa_quality_gate_requires_semantic_audit_fields_and_traceable_c
     }
 
 
+def test_quality_gate_requires_llm_semantic_auditor_when_configured():
+    payload = _answer_payload(
+        route="evidence_qa",
+        admission="accepted",
+        citation_count=1,
+        summary_mode="",
+        claim_count=1,
+        approved=0,
+        partial=0,
+        unsupported=1,
+    )
+    payload["audit"]["semantic_auditor"] = {
+        "mode": "llm_enhanced",
+        "model": "fake-auditor",
+        "claim_count": 1,
+        "overreach_count": 1,
+        "unsupported_count": 0,
+        "llm_auditor_status": "completed",
+    }
+    payload["audit"]["claims"][0].update(
+        {
+            "support_status": "overreach",
+            "finding_code": "llm_overreach",
+            "deterministic_support_status": "supported",
+            "llm_support_status": "overreach",
+            "llm_rationale": "The quote is related but does not entail the outcome claim.",
+        }
+    )
+
+    report = evaluate_research_answer(
+        payload,
+        evidence_qa_quality_gate().__class__(
+            case_id="llm-required",
+            expected_route="evidence_qa",
+            expected_admission="accepted",
+            min_citation_count=1,
+            max_unsupported_claim_ratio=1.0,
+            require_llm_semantic_audit=True,
+        ),
+    )
+
+    assert report.passed
+    assert report.metrics["semantic_auditor_mode"] == "llm_enhanced"
+    assert "overreach" in report.metrics["semantic_support_statuses"]
+
+
+def test_quality_gate_fails_when_llm_semantic_auditor_required_but_missing():
+    payload = _answer_payload(
+        route="evidence_qa",
+        admission="accepted",
+        citation_count=1,
+        summary_mode="",
+        claim_count=1,
+        approved=1,
+        partial=0,
+        unsupported=0,
+    )
+
+    report = evaluate_research_answer(
+        payload,
+        evidence_qa_quality_gate().__class__(
+            case_id="llm-required",
+            expected_route="evidence_qa",
+            expected_admission="accepted",
+            min_citation_count=1,
+            require_llm_semantic_audit=True,
+        ),
+    )
+
+    assert not report.passed
+    assert "llm_semantic_auditor_missing" in {finding.code for finding in report.findings}
+
+
 def test_evidence_qa_quality_gate_accepts_paper_citation_without_page_when_traceable_fields_exist():
     payload = _answer_payload(
         route="evidence_qa",

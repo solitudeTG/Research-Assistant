@@ -3245,6 +3245,46 @@ async def answer_research_question_for_session(
                 use_llm_whole_paper_synthesis=True,
                 model_config=model_config_dict,
             )
+            audit_payload = answer.audit.to_dict() if answer.audit else {}
+            semantic_auditor = audit_payload.get("semantic_auditor") or {}
+            await _append_save_publish_session_event(
+                session,
+                session_id=session_id,
+                user_id=current_user.id,
+                event=_research_upload_step_event(
+                    step_id=f"{answer.answer_id}:deterministic-audit",
+                    status="completed",
+                    description="Deterministic evidence audit completed",
+                    metadata={
+                        "audit_status": audit_payload.get("status"),
+                        "claim_count": audit_payload.get("claim_count"),
+                        "unsupported_claim_count": audit_payload.get("unsupported_claim_count"),
+                        **retrieval_metadata,
+                    },
+                ),
+            )
+            semantic_mode = semantic_auditor.get("mode")
+            if semantic_mode == "llm_enhanced":
+                semantic_description = "LLM semantic auditor completed"
+            elif semantic_mode in {"llm_unavailable", "llm_failed"}:
+                semantic_description = "LLM semantic auditor unavailable; deterministic audit used"
+            else:
+                semantic_description = ""
+            if semantic_description:
+                await _append_save_publish_session_event(
+                    session,
+                    session_id=session_id,
+                    user_id=current_user.id,
+                    event=_research_upload_step_event(
+                        step_id=f"{answer.answer_id}:semantic-auditor",
+                        status="completed" if semantic_mode == "llm_enhanced" else "failed",
+                        description=semantic_description,
+                        metadata={
+                            "semantic_auditor": semantic_auditor,
+                            **retrieval_metadata,
+                        },
+                    ),
+                )
             await persist_audit_result_to_database(
                 settings.research_database_url,
                 audit_id=f"{answer.answer_id}:audit",

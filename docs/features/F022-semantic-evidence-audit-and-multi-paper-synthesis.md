@@ -67,6 +67,7 @@ Completed. Backend semantic audit fields、multi-paper answer formatting、seman
 ### Evidence
 
 - [EV-023 Semantic Audit Multi-paper Verification](../evidence/EV-023-semantic-audit-multi-paper-verification.md)
+- [EV-024 LLM Semantic Auditor Verification](../evidence/EV-024-llm-semantic-auditor-verification.md)
 
 ### Decisions / ADRs
 

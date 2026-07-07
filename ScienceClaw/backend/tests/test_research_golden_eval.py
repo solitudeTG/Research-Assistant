@@ -259,6 +259,34 @@ def test_payload_golden_eval_checks_expected_semantic_statuses_and_finding_codes
     assert run_result.cases[0].quality["metrics"]["semantic_finding_codes"] == ["semantic_support_partial"]
 
 
+def test_payload_golden_eval_requires_llm_semantic_audit_when_declared(tmp_path):
+    from backend.research_assistant.golden_eval import evaluate_payload_cases, load_golden_cases
+
+    _write_paper_fixtures(tmp_path, "a.pdf")
+    payload = _answer_payload(
+        route="evidence_qa",
+        admission="accepted",
+        citation_count=1,
+        summary_mode="",
+        claim_count=1,
+        approved=1,
+        partial=0,
+        unsupported=0,
+    )
+    (tmp_path / "answer.json").write_text(json.dumps(payload), encoding="utf-8")
+    case = _case("llm-required", "answer.json", min_citations=1)
+    case["quality_thresholds"]["require_llm_semantic_audit"] = True
+    cases_path = tmp_path / "cases.json"
+    cases_path.write_text(json.dumps({"cases": [case]}), encoding="utf-8")
+
+    run_result = evaluate_payload_cases(load_golden_cases(cases_path), root=tmp_path)
+
+    assert not run_result.passed
+    finding_codes = {finding["code"] for finding in run_result.cases[0].quality["findings"]}
+    assert "llm_semantic_auditor_missing" in finding_codes
+    assert "F023 LLM semantic auditor" in run_result.cases[0].owner_module_hints
+
+
 def test_payload_golden_eval_rejects_fabricated_citation_for_insufficient_evidence(tmp_path):
     from backend.research_assistant.golden_eval import evaluate_payload_cases, load_golden_cases
 

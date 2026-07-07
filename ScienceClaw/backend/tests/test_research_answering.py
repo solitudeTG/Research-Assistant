@@ -190,6 +190,108 @@ async def test_answer_research_question_refuses_clinical_safety_claim_when_admit
 
 
 @pytest.mark.asyncio
+async def test_answer_research_question_uses_injected_llm_semantic_auditor(monkeypatch):
+    async def fake_search(*args, **kwargs):
+        return [
+            EvidenceHit(
+                evidence_id=11,
+                chunk_id="space-time-intro",
+                paper_id="paper-space-time",
+                title="Space-Time Beamforming",
+                source_type="paper",
+                section="Introduction",
+                page_start=1,
+                page_end=1,
+                quote="Space-time beamforming frames LEO satellite communication as extremely narrow beam control.",
+                rank_score=0.9,
+            )
+        ]
+
+    async def fake_list_memory(*args, **kwargs):
+        return []
+
+    class FakeSemanticAuditor:
+        async def audit_claims(self, *, deterministic_audit, citations):
+            return [
+                {
+                    "claim_id": "claim-1",
+                    "support_status": "overreach",
+                    "finding_code": "llm_overreach",
+                    "rationale": "The evidence is about satellite communications, not earthquake prediction outcomes.",
+                }
+            ]
+
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.hybrid_search_evidence_in_database",
+        fake_search,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_memory_entries_from_database",
+        fake_list_memory,
+    )
+
+    answer = await answer_research_question(
+        database_url="postgresql://test",
+        session_id="session-1",
+        question="Does LEO beamforming prove earthquake prediction outcomes?",
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=5,
+        semantic_auditor=FakeSemanticAuditor(),
+        model_config={"model_name": "fake-auditor"},
+    )
+
+    payload = answer.to_dict()
+
+    assert payload["audit"]["semantic_auditor"]["mode"] == "llm_enhanced"
+    assert payload["audit"]["semantic_auditor"]["overreach_count"] == 1
+    assert payload["audit"]["claims"][0]["finding_code"] == "llm_overreach"
+    assert payload["audit"]["claims"][0]["llm_support_status"] == "overreach"
+
+
+@pytest.mark.asyncio
+async def test_answer_research_question_marks_llm_auditor_unavailable_without_model_config(monkeypatch):
+    async def fake_search(*args, **kwargs):
+        return [
+            EvidenceHit(
+                evidence_id=11,
+                chunk_id="chunk-1",
+                paper_id="paper-1",
+                title="Hybrid Retrieval",
+                source_type="paper",
+                section="Results",
+                page_start=1,
+                page_end=1,
+                quote="Hybrid retrieval improves recall.",
+                rank_score=0.9,
+            )
+        ]
+
+    async def fake_list_memory(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.hybrid_search_evidence_in_database",
+        fake_search,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_memory_entries_from_database",
+        fake_list_memory,
+    )
+
+    answer = await answer_research_question(
+        database_url="postgresql://test",
+        session_id="session-1",
+        question="How does hybrid retrieval work?",
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=5,
+    )
+
+    assert answer.to_dict()["audit"]["semantic_auditor"]["mode"] == "llm_unavailable"
+
+
+@pytest.mark.asyncio
 async def test_answer_research_question_passes_project_id_to_retrieval(monkeypatch):
     captured = {}
 

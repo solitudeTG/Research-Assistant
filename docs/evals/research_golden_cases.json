@@ -195,6 +195,54 @@
         "report": false,
         "markdown_summary": true
       }
+    },
+    {
+      "case_id": "leo_llm_overreach_payload_001",
+      "task_type": "evidence_qa",
+      "mode": "payload",
+      "paper_paths": [
+        "paper_data/Space-Time_Beamforming_for_LEO_Satellite_Communications_Enabling_Extremely_Narrow_Beams(1).pdf"
+      ],
+      "question": "Does this LEO beamforming paper prove hospital patient safety outcomes?",
+      "answer_payload_path": "payloads/leo_llm_overreach_payload_001.answer.json",
+      "quality_thresholds": {
+        "min_citation_count": 1,
+        "max_unsupported_claim_ratio": 1.0,
+        "max_invalid_claims": 0,
+        "expected_support_statuses": ["overreach"],
+        "expected_finding_codes": ["llm_overreach"],
+        "require_llm_semantic_audit": true,
+        "allowed_semantic_auditor_modes": ["llm_enhanced"]
+      },
+      "required_outputs": {
+        "answer": true,
+        "report": false,
+        "markdown_summary": true
+      }
+    },
+    {
+      "case_id": "leo_llm_unsupported_payload_001",
+      "task_type": "evidence_qa",
+      "mode": "payload",
+      "paper_paths": [
+        "paper_data/Beamforming_Design_and_Satellite_Selection_for_Realizing_the_Integrated_Communication_and_Navigation_in_LEO_Satellite_Networks.pdf"
+      ],
+      "question": "Does this LEO beamforming citation support randomized clinical trial results?",
+      "answer_payload_path": "payloads/leo_llm_unsupported_payload_001.answer.json",
+      "quality_thresholds": {
+        "min_citation_count": 1,
+        "max_unsupported_claim_ratio": 1.0,
+        "max_invalid_claims": 0,
+        "expected_support_statuses": ["unsupported"],
+        "expected_finding_codes": ["llm_unsupported"],
+        "require_llm_semantic_audit": true,
+        "allowed_semantic_auditor_modes": ["llm_enhanced"]
+      },
+      "required_outputs": {
+        "answer": true,
+        "report": false,
+        "markdown_summary": true
+      }
     }
   ]
 }

@@ -32,6 +32,8 @@ class ResearchQualityRequirement:
     require_context_boundaries: bool = True
     require_original_evidence_citations: bool = True
     require_semantic_audit_fields: bool = True
+    require_llm_semantic_audit: bool = False
+    allowed_semantic_auditor_modes: set[str] = field(default_factory=lambda: {"llm_enhanced"})
 
 
 @dataclass(frozen=True)
@@ -132,6 +134,8 @@ def evaluate_research_answer(
                 if isinstance(claim, Mapping) and claim.get("support_status")
             }
         ),
+        "semantic_auditor_mode": _as_mapping(audit.get("semantic_auditor")).get("mode"),
+        "semantic_auditor_status": _as_mapping(audit.get("semantic_auditor")).get("llm_auditor_status"),
     }
 
     _check_equals(findings, "route", route.get("route"), requirement.expected_route, "task_route.route")
@@ -182,6 +186,8 @@ def evaluate_research_answer(
     _check_citations(findings, citations, requirement)
     if requirement.require_semantic_audit_fields:
         _check_semantic_audit_claims(findings, audit)
+    if requirement.require_llm_semantic_audit:
+        _check_llm_semantic_auditor(findings, audit, requirement)
 
     passed = not any(finding.severity == "error" for finding in findings)
     return ResearchQualityReport(
@@ -314,6 +320,7 @@ def _check_semantic_audit_claims(findings: list[ResearchQualityFinding], audit: 
         "supported",
         "partial",
         "unsupported",
+        "overreach",
         "source_mismatch",
         "insufficient_evidence",
     }
@@ -368,6 +375,59 @@ def _check_semantic_audit_claims(findings: list[ResearchQualityFinding], audit: 
                     code="semantic_audit_cited_evidence_missing",
                     message=f"Audit claim {claim.get('claim_id') or index} is missing cited_evidence.",
                     path=f"audit.claims[{index}].cited_evidence",
+                )
+            )
+
+
+def _check_llm_semantic_auditor(
+    findings: list[ResearchQualityFinding],
+    audit: Mapping[str, Any],
+    requirement: ResearchQualityRequirement,
+) -> None:
+    metadata = _as_mapping(audit.get("semantic_auditor"))
+    mode = str(metadata.get("mode") or "")
+    if not metadata:
+        findings.append(
+            ResearchQualityFinding(
+                code="llm_semantic_auditor_missing",
+                message="Audit payload is missing semantic_auditor metadata required by this case.",
+                path="audit.semantic_auditor",
+            )
+        )
+        return
+    if mode not in requirement.allowed_semantic_auditor_modes:
+        findings.append(
+            ResearchQualityFinding(
+                code="llm_semantic_auditor_mode_invalid",
+                message=f"Expected semantic auditor mode in {sorted(requirement.allowed_semantic_auditor_modes)!r}, got {mode!r}.",
+                path="audit.semantic_auditor.mode",
+            )
+        )
+    for index, claim in enumerate(_as_sequence(audit.get("claims"))):
+        if not isinstance(claim, Mapping):
+            continue
+        if not str(claim.get("deterministic_support_status") or "").strip():
+            findings.append(
+                ResearchQualityFinding(
+                    code="llm_semantic_audit_deterministic_status_missing",
+                    message=f"Audit claim {claim.get('claim_id') or index} is missing deterministic_support_status.",
+                    path=f"audit.claims[{index}].deterministic_support_status",
+                )
+            )
+        if not str(claim.get("llm_support_status") or "").strip():
+            findings.append(
+                ResearchQualityFinding(
+                    code="llm_semantic_audit_status_missing",
+                    message=f"Audit claim {claim.get('claim_id') or index} is missing llm_support_status.",
+                    path=f"audit.claims[{index}].llm_support_status",
+                )
+            )
+        if not str(claim.get("llm_rationale") or "").strip():
+            findings.append(
+                ResearchQualityFinding(
+                    code="llm_semantic_audit_rationale_missing",
+                    message=f"Audit claim {claim.get('claim_id') or index} is missing llm_rationale.",
+                    path=f"audit.claims[{index}].llm_rationale",
                 )
             )
 

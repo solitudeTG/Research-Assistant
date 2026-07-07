@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import re
+import json
 from dataclasses import asdict, dataclass
-from typing import Iterable, Protocol
+from typing import Any, Iterable, Mapping, Protocol
 
 
 CITATION_EVIDENCE_TYPES = ("paper", "web", "database")
@@ -15,6 +16,16 @@ class CitationLike(Protocol):
     quote: str
     source_type: str
     citation_label: str
+
+
+class SemanticAuditorLike(Protocol):
+    async def audit_claims(
+        self,
+        *,
+        deterministic_audit: "EvidenceAudit",
+        citations: list[CitationLike],
+    ) -> list[dict[str, Any]]:
+        ...
 
 
 @dataclass(frozen=True)
@@ -31,6 +42,9 @@ class EvidenceAuditClaim:
     cited_evidence: list[dict] | None = None
     rationale: str = ""
     finding_code: str | None = None
+    deterministic_support_status: str | None = None
+    llm_support_status: str | None = None
+    llm_rationale: str | None = None
 
     def to_dict(self) -> dict:
         payload = asdict(self)
@@ -39,6 +53,9 @@ class EvidenceAuditClaim:
         payload["source_quality_score"] = self.source_quality_score
         payload["cited_evidence"] = self.cited_evidence or []
         payload["rationale"] = self.rationale or " ".join(self.notes)
+        payload["deterministic_support_status"] = (
+            self.deterministic_support_status or _support_status_for_legacy_status(self.status)
+        )
         return payload
 
 
@@ -47,6 +64,7 @@ class EvidenceAudit:
     status: str
     claims: list[EvidenceAuditClaim]
     boundaries: dict[str, list[str]]
+    semantic_auditor: dict[str, Any] | None = None
 
     @property
     def claim_count(self) -> int:
@@ -78,6 +96,10 @@ class EvidenceAudit:
             "invalid_source_count": self.invalid_source_count,
             "boundaries": self.boundaries,
             "claims": [claim.to_dict() for claim in self.claims],
+            "semantic_auditor": self.semantic_auditor or _semantic_auditor_metadata(
+                mode="deterministic_only",
+                claims=self.claims,
+            ),
         }
 
 
@@ -102,7 +124,104 @@ def audit_evidence_claims(
             "citation_evidence": list(CITATION_EVIDENCE_TYPES),
             "context_only": list(CONTEXT_ONLY_TYPES),
         },
+        semantic_auditor=_semantic_auditor_metadata(mode="deterministic_only", claims=claims),
     )
+
+
+async def audit_evidence_claims_with_semantic_auditor(
+    *,
+    answer_content: str,
+    citations: Iterable[CitationLike],
+    auditor: SemanticAuditorLike | None = None,
+    model: str | None = None,
+) -> EvidenceAudit:
+    citation_list = list(citations)
+    deterministic_audit = audit_evidence_claims(answer_content=answer_content, citations=citation_list)
+    if auditor is None:
+        return _with_semantic_metadata(
+            deterministic_audit,
+            _semantic_auditor_metadata(
+                mode="llm_unavailable",
+                model=model,
+                claims=deterministic_audit.claims,
+                status="missing_auditor",
+            ),
+        )
+    try:
+        findings = await auditor.audit_claims(
+            deterministic_audit=deterministic_audit,
+            citations=citation_list,
+        )
+    except Exception as exc:
+        return _with_semantic_metadata(
+            deterministic_audit,
+            _semantic_auditor_metadata(
+                mode="llm_failed",
+                model=model,
+                claims=deterministic_audit.claims,
+                status=type(exc).__name__,
+            ),
+        )
+    try:
+        return _apply_llm_auditor_findings(
+            deterministic_audit,
+            findings=findings,
+            model=model,
+        )
+    except Exception as exc:
+        return _with_semantic_metadata(
+            deterministic_audit,
+            _semantic_auditor_metadata(
+                mode="llm_failed",
+                model=model,
+                claims=deterministic_audit.claims,
+                status=f"invalid_output:{type(exc).__name__}",
+            ),
+        )
+
+
+class LangChainSemanticAuditor:
+    def __init__(self, *, model_config: dict[str, Any] | None = None) -> None:
+        self.model_config = model_config
+
+    @property
+    def model_name(self) -> str:
+        if isinstance(self.model_config, Mapping):
+            return str(
+                self.model_config.get("model_name")
+                or self.model_config.get("model")
+                or self.model_config.get("id")
+                or "configured-model"
+            )
+        return "default-model"
+
+    async def audit_claims(
+        self,
+        *,
+        deterministic_audit: EvidenceAudit,
+        citations: list[CitationLike],
+    ) -> list[dict[str, Any]]:
+        from backend.deepagent.engine import get_llm_model
+
+        model = get_llm_model(self.model_config, max_tokens_override=2048, streaming=False)
+        prompt = _semantic_auditor_prompt(deterministic_audit=deterministic_audit, citations=citations)
+        content = await _invoke_text_model(model, prompt)
+        payload = _parse_llm_json_object(content)
+        findings = payload.get("claims")
+        if not isinstance(findings, list):
+            raise ValueError("semantic auditor JSON must include claims array")
+        return [finding for finding in findings if isinstance(finding, Mapping)]
+
+
+async def _invoke_text_model(model: Any, prompt: str) -> str:
+    if hasattr(model, "ainvoke"):
+        response = await model.ainvoke(prompt)
+    else:
+        response = model.invoke(prompt)
+    content = getattr(response, "content", response)
+    if isinstance(content, list):
+        return "\n".join(str(part.get("text", part)) if isinstance(part, dict) else str(part) for part in content).strip()
+    return str(content).strip()
 
 
 def _audit_claim(claim_text: str, citations: list[CitationLike]) -> EvidenceAuditClaim:
@@ -288,6 +407,225 @@ def _with_claim_id(claim: EvidenceAuditClaim, index: int) -> EvidenceAuditClaim:
         cited_evidence=claim.cited_evidence,
         rationale=claim.rationale,
         finding_code=claim.finding_code,
+        deterministic_support_status=claim.deterministic_support_status,
+        llm_support_status=claim.llm_support_status,
+        llm_rationale=claim.llm_rationale,
+    )
+
+
+def _copy_claim_with_semantic_overlay(
+    claim: EvidenceAuditClaim,
+    *,
+    support_status: str,
+    finding_code: str | None,
+    llm_rationale: str,
+) -> EvidenceAuditClaim:
+    status = _legacy_status_for_support_status(support_status)
+    deterministic_support_status = claim.support_status or _support_status_for_legacy_status(claim.status)
+    notes = list(claim.notes)
+    if llm_rationale:
+        notes.append(f"LLM semantic auditor: {llm_rationale}")
+    return EvidenceAuditClaim(
+        claim_text=claim.claim_text,
+        status=status,
+        evidence_ids=claim.evidence_ids if status != "unsupported" else [],
+        notes=notes,
+        support_score=claim.support_score,
+        claim_id=claim.claim_id,
+        support_status=support_status,
+        semantic_relevance_score=claim.semantic_relevance_score,
+        source_quality_score=claim.source_quality_score,
+        cited_evidence=claim.cited_evidence,
+        rationale=claim.rationale,
+        finding_code=finding_code or claim.finding_code,
+        deterministic_support_status=deterministic_support_status,
+        llm_support_status=support_status,
+        llm_rationale=llm_rationale,
+    )
+
+
+def _apply_llm_auditor_findings(
+    audit: EvidenceAudit,
+    *,
+    findings: list[dict[str, Any]],
+    model: str | None,
+) -> EvidenceAudit:
+    findings_by_id = {
+        str(finding.get("claim_id")): finding
+        for finding in findings
+        if str(finding.get("claim_id") or "").strip()
+    }
+    claims: list[EvidenceAuditClaim] = []
+    for claim in audit.claims:
+        finding = findings_by_id.get(claim.claim_id)
+        if not finding:
+            claims.append(claim)
+            continue
+        llm_status = str(finding.get("support_status") or "").strip()
+        if llm_status not in _allowed_llm_support_statuses():
+            raise ValueError(f"invalid llm support status: {llm_status}")
+        finding_code = str(finding.get("finding_code") or _finding_code_for_llm_status(llm_status)).strip()
+        rationale = _bounded_rationale(str(finding.get("rationale") or finding.get("llm_rationale") or ""))
+        claims.append(
+            _copy_claim_with_semantic_overlay(
+                claim,
+                support_status=llm_status,
+                finding_code=finding_code,
+                llm_rationale=rationale,
+            )
+        )
+    return EvidenceAudit(
+        status=_overall_status(claims),
+        claims=claims,
+        boundaries=audit.boundaries,
+        semantic_auditor=_semantic_auditor_metadata(
+            mode="llm_enhanced",
+            model=model,
+            claims=claims,
+        ),
+    )
+
+
+def _with_semantic_metadata(audit: EvidenceAudit, metadata: dict[str, Any]) -> EvidenceAudit:
+    return EvidenceAudit(
+        status=audit.status,
+        claims=audit.claims,
+        boundaries=audit.boundaries,
+        semantic_auditor=metadata,
+    )
+
+
+def _semantic_auditor_metadata(
+    *,
+    mode: str,
+    claims: list[EvidenceAuditClaim],
+    model: str | None = None,
+    status: str | None = None,
+) -> dict[str, Any]:
+    support_statuses = [
+        claim.support_status or _support_status_for_legacy_status(claim.status)
+        for claim in claims
+    ]
+    payload: dict[str, Any] = {
+        "mode": mode,
+        "model": model,
+        "claim_count": len(claims),
+        "overreach_count": sum(1 for status in support_statuses if status == "overreach"),
+        "unsupported_count": sum(1 for status in support_statuses if status == "unsupported"),
+        "source_mismatch_count": sum(1 for status in support_statuses if status == "source_mismatch"),
+        "insufficient_evidence_count": sum(1 for status in support_statuses if status == "insufficient_evidence"),
+    }
+    if status:
+        payload["llm_auditor_status"] = status
+    elif mode == "llm_enhanced":
+        payload["llm_auditor_status"] = "completed"
+    elif mode == "deterministic_only":
+        payload["llm_auditor_status"] = "not_requested"
+    elif mode == "llm_unavailable":
+        payload["llm_auditor_status"] = "unavailable"
+    elif mode == "llm_failed":
+        payload["llm_auditor_status"] = "failed"
+    return payload
+
+
+def _allowed_llm_support_statuses() -> set[str]:
+    return {
+        "supported",
+        "partial",
+        "unsupported",
+        "overreach",
+        "source_mismatch",
+        "insufficient_evidence",
+    }
+
+
+def _legacy_status_for_support_status(support_status: str) -> str:
+    if support_status == "supported":
+        return "approved"
+    if support_status == "partial":
+        return "partial"
+    if support_status == "source_mismatch":
+        return "invalid_source"
+    return "unsupported"
+
+
+def _finding_code_for_llm_status(support_status: str) -> str:
+    return {
+        "supported": "llm_supported",
+        "partial": "llm_partial",
+        "unsupported": "llm_unsupported",
+        "overreach": "llm_overreach",
+        "source_mismatch": "llm_source_mismatch",
+        "insufficient_evidence": "llm_insufficient_evidence",
+    }[support_status]
+
+
+def _bounded_rationale(value: str, *, limit: int = 360) -> str:
+    normalized = re.sub(r"\s+", " ", value).strip()
+    if len(normalized) <= limit:
+        return normalized
+    return normalized[: limit - 3].rstrip() + "..."
+
+
+def _parse_llm_json_object(content: str) -> dict[str, Any]:
+    text = content.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    start = text.find("{")
+    end = text.rfind("}")
+    if start < 0 or end < start:
+        raise ValueError("semantic auditor response did not contain a JSON object")
+    payload = json.loads(text[start : end + 1])
+    if not isinstance(payload, dict):
+        raise ValueError("semantic auditor response JSON must be an object")
+    return payload
+
+
+def _semantic_auditor_prompt(
+    *,
+    deterministic_audit: EvidenceAudit,
+    citations: list[CitationLike],
+) -> str:
+    claims = []
+    for claim in deterministic_audit.claims:
+        claim_payload = claim.to_dict()
+        claims.append(
+            {
+                "claim_id": claim_payload.get("claim_id"),
+                "claim_text": claim_payload.get("claim_text"),
+                "deterministic_support_status": claim_payload.get("support_status"),
+                "deterministic_finding_code": claim_payload.get("finding_code"),
+                "cited_evidence": claim_payload.get("cited_evidence"),
+            }
+        )
+    source_metadata = [
+        {
+            "evidence_id": getattr(citation, "evidence_id", None),
+            "source_type": getattr(citation, "source_type", ""),
+            "paper_id": getattr(citation, "paper_id", ""),
+            "title": getattr(citation, "title", ""),
+            "section": getattr(citation, "section", ""),
+            "citation_label": getattr(citation, "citation_label", ""),
+            "quote": getattr(citation, "quote", ""),
+        }
+        for citation in citations
+    ]
+    payload = {
+        "allowed_support_statuses": sorted(_allowed_llm_support_statuses()),
+        "claims": claims,
+        "source_identity_and_quotes": source_metadata,
+    }
+    return (
+        "You are a semantic evidence auditor for a trustworthy research workflow.\n"
+        "Use only the claim text, cited evidence quote/snippet, source identity metadata, and deterministic audit result below.\n"
+        "Do not use hidden reasoning, outside knowledge, memory, tool logs, or process trace as evidence.\n"
+        "Return only JSON with a claims array. Each claim object must include claim_id, support_status, finding_code, and rationale.\n"
+        "Use overreach when the evidence is related but the claim goes beyond what the quote entails.\n"
+        "Use unsupported when the cited quote does not support the claim.\n"
+        "Use source_mismatch when source identity/type cannot support the claim.\n"
+        "Use insufficient_evidence when there is not enough cited evidence to answer as a research claim.\n\n"
+        + json.dumps(payload, ensure_ascii=False)
     )
 
 

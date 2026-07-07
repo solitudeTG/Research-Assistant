@@ -1,0 +1,76 @@
+{
+  "answer_id": "golden-llm-unsupported-001",
+  "content": "The cited LEO beamforming paper reports randomized clinical trial results. [paper-ican:Introduction:2]",
+  "citations": [
+    {
+      "evidence_id": 72,
+      "chunk_id": "chunk-72",
+      "paper_id": "paper-ican",
+      "title": "Beamforming Design and Satellite Selection for Integrated Communication and Navigation",
+      "section": "Introduction",
+      "page_start": 2,
+      "page_end": 2,
+      "quote": "Integrated communication and navigation frames LEO beamforming as joint service and satellite selection.",
+      "citation_label": "[paper-ican:Introduction:2]",
+      "source_type": "paper",
+      "source_identity": {"paper_id": "paper-ican"},
+      "evidence_scope": "project"
+    }
+  ],
+  "citation_count": 1,
+  "context_boundaries": {
+    "citation_evidence": ["paper", "web", "database"],
+    "context_only_memory": ["memory"],
+    "process_trace": ["tool_logs", "runtime_results", "agent_lifecycle"],
+    "model_reasoning": ["model_reasoning"]
+  },
+  "summary_synthesis": {},
+  "evidence_admission": {"decision": "accepted"},
+  "task_route": {"route": "evidence_qa"},
+  "audit": {
+    "status": "unsupported",
+    "claim_count": 1,
+    "approved_claim_count": 0,
+    "partial_claim_count": 0,
+    "unsupported_claim_count": 1,
+    "invalid_source_count": 0,
+    "semantic_auditor": {
+      "mode": "llm_enhanced",
+      "model": "fixture-semantic-auditor",
+      "claim_count": 1,
+      "overreach_count": 0,
+      "unsupported_count": 1,
+      "source_mismatch_count": 0,
+      "insufficient_evidence_count": 0,
+      "llm_auditor_status": "completed"
+    },
+    "claims": [
+      {
+        "claim_id": "claim-1",
+        "claim_text": "The cited LEO beamforming paper reports randomized clinical trial results. [paper-ican:Introduction:2]",
+        "status": "unsupported",
+        "support_status": "unsupported",
+        "deterministic_support_status": "unsupported",
+        "llm_support_status": "unsupported",
+        "semantic_relevance_score": 0.16,
+        "source_quality_score": 1.0,
+        "evidence_ids": [],
+        "cited_evidence": [
+          {
+            "source_type": "paper",
+            "paper_id": "paper-ican",
+            "title": "Beamforming Design and Satellite Selection for Integrated Communication and Navigation",
+            "section": "Introduction",
+            "page_start": 2,
+            "page_end": 2,
+            "chunk_id": "chunk-72",
+            "quote": "Integrated communication and navigation frames LEO beamforming as joint service and satellite selection."
+          }
+        ],
+        "rationale": "The cited quote does not discuss clinical trials.",
+        "llm_rationale": "The evidence is about communication/navigation service design, not randomized clinical trial evidence.",
+        "finding_code": "llm_unsupported"
+      }
+    ]
+  }
+}

@@ -1,4 +1,6 @@
-from backend.research_assistant.audit import audit_evidence_claims
+import pytest
+
+from backend.research_assistant.audit import audit_evidence_claims, audit_evidence_claims_with_semantic_auditor
 from backend.research_assistant.answering import ResearchCitation
 
 
@@ -448,3 +450,81 @@ def test_semantic_audit_marks_no_citation_answer_as_insufficient_evidence_refusa
 
     assert claim["support_status"] == "insufficient_evidence"
     assert claim["finding_code"] == "insufficient_evidence_should_refuse"
+
+
+@pytest.mark.asyncio
+async def test_llm_semantic_auditor_overlays_overreach_without_replacing_floor():
+    class FakeAuditor:
+        async def audit_claims(self, *, deterministic_audit, citations):
+            return [
+                {
+                    "claim_id": "claim-1",
+                    "support_status": "overreach",
+                    "finding_code": "llm_overreach",
+                    "rationale": "The quote discusses beamforming performance, not clinical patient outcomes.",
+                }
+            ]
+
+    audit = await audit_evidence_claims_with_semantic_auditor(
+        answer_content="1. LEO beamforming proves clinical safety outcomes. [paper-1:Results:4]",
+        citations=[
+            ResearchCitation(
+                evidence_id=17,
+                chunk_id="chunk-17",
+                paper_id="paper-1",
+                title="LEO Beamforming",
+                section="Results",
+                page_start=4,
+                page_end=4,
+                quote="LEO beamforming improves satellite communication throughput.",
+                citation_label="[paper-1:Results:4]",
+            )
+        ],
+        auditor=FakeAuditor(),
+        model="fake-auditor",
+    )
+
+    payload = audit.to_dict()
+    claim = payload["claims"][0]
+
+    assert payload["semantic_auditor"]["mode"] == "llm_enhanced"
+    assert payload["semantic_auditor"]["model"] == "fake-auditor"
+    assert payload["semantic_auditor"]["overreach_count"] == 1
+    assert claim["support_status"] == "overreach"
+    assert claim["finding_code"] == "llm_overreach"
+    assert claim["deterministic_support_status"] == "unsupported"
+    assert claim["llm_support_status"] == "overreach"
+    assert "clinical patient outcomes" in claim["llm_rationale"]
+
+
+@pytest.mark.asyncio
+async def test_llm_semantic_auditor_invalid_json_safely_degrades_to_deterministic():
+    class BadAuditor:
+        async def audit_claims(self, *, deterministic_audit, citations):
+            return [{"claim_id": "claim-1", "support_status": "invented"}]
+
+    audit = await audit_evidence_claims_with_semantic_auditor(
+        answer_content="1. Hybrid retrieval improves recall. [paper-1:Results:4]",
+        citations=[
+            ResearchCitation(
+                evidence_id=17,
+                chunk_id="chunk-17",
+                paper_id="paper-1",
+                title="Hybrid Retrieval",
+                section="Results",
+                page_start=4,
+                page_end=4,
+                quote="Hybrid retrieval improves recall.",
+                citation_label="[paper-1:Results:4]",
+            )
+        ],
+        auditor=BadAuditor(),
+        model="fake-auditor",
+    )
+
+    payload = audit.to_dict()
+
+    assert audit.status == "approved"
+    assert payload["claims"][0]["support_status"] == "supported"
+    assert payload["semantic_auditor"]["mode"] == "llm_failed"
+    assert payload["semantic_auditor"]["llm_auditor_status"].startswith("invalid_output")
