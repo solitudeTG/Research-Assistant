@@ -24,9 +24,22 @@ class EvidenceAuditClaim:
     evidence_ids: list[int]
     notes: list[str]
     support_score: float = 0.0
+    claim_id: str = ""
+    support_status: str = ""
+    semantic_relevance_score: float = 0.0
+    source_quality_score: float = 0.0
+    cited_evidence: list[dict] | None = None
+    rationale: str = ""
+    finding_code: str | None = None
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        payload = asdict(self)
+        payload["support_status"] = self.support_status or _support_status_for_legacy_status(self.status)
+        payload["semantic_relevance_score"] = self.semantic_relevance_score or self.support_score
+        payload["source_quality_score"] = self.source_quality_score
+        payload["cited_evidence"] = self.cited_evidence or []
+        payload["rationale"] = self.rationale or " ".join(self.notes)
+        return payload
 
 
 @dataclass(frozen=True)
@@ -78,7 +91,10 @@ def audit_evidence_claims(
     if not claim_texts:
         claim_texts = [answer_content.strip()] if answer_content.strip() else ["No answer content."]
 
-    claims = [_audit_claim(claim_text, citation_list) for claim_text in claim_texts]
+    claims = [
+        _with_claim_id(_audit_claim(claim_text, citation_list), index)
+        for index, claim_text in enumerate(claim_texts, start=1)
+    ]
     return EvidenceAudit(
         status=_overall_status(claims),
         claims=claims,
@@ -97,6 +113,11 @@ def _audit_claim(claim_text: str, citations: list[CitationLike]) -> EvidenceAudi
             evidence_ids=[],
             notes=["No citation evidence was attached to this claim."],
             support_score=0.0,
+            support_status=_insufficient_support_status(claim_text),
+            semantic_relevance_score=0.0,
+            source_quality_score=0.0,
+            cited_evidence=[],
+            finding_code=_no_citation_finding_code(claim_text),
         )
 
     claim_body = _claim_body_for_support(claim_text, citations)
@@ -104,6 +125,7 @@ def _audit_claim(claim_text: str, citations: list[CitationLike]) -> EvidenceAudi
     labeled_citations = [citation for citation in citations if getattr(citation, "citation_label", "")]
     if labeled_citations and not cited_labels:
         nearest_evidence_id, nearest_score = _nearest_citation_support(claim_body, citations)
+        nearest_citations = _citations_by_evidence_ids(citations, [nearest_evidence_id] if nearest_evidence_id else [])
         notes = []
         if nearest_evidence_id is not None and nearest_score > 0:
             notes.append(f"Nearest citation evidence: {nearest_evidence_id} with lexical support {nearest_score:.2f}.")
@@ -114,6 +136,11 @@ def _audit_claim(claim_text: str, citations: list[CitationLike]) -> EvidenceAudi
             evidence_ids=[],
             notes=notes,
             support_score=nearest_score,
+            support_status="unsupported",
+            semantic_relevance_score=nearest_score,
+            source_quality_score=1.0 if nearest_citations else 0.0,
+            cited_evidence=_cited_evidence_dicts(nearest_citations),
+            finding_code="semantic_support_missing",
         )
 
     citation_candidates = [
@@ -127,6 +154,11 @@ def _audit_claim(claim_text: str, citations: list[CitationLike]) -> EvidenceAudi
         if citation.source_type not in CITATION_EVIDENCE_TYPES
     ]
     if invalid_sources:
+        finding_code = (
+            "context_only_source_used_as_citation"
+            if any(source_type in CONTEXT_ONLY_TYPES for source_type in invalid_sources)
+            else "invalid_citation_source_type"
+        )
         return EvidenceAuditClaim(
             claim_text=claim_text,
             status="invalid_source",
@@ -136,6 +168,29 @@ def _audit_claim(claim_text: str, citations: list[CitationLike]) -> EvidenceAudi
                 for source_type in sorted(set(invalid_sources))
             ],
             support_score=0.0,
+            support_status="source_mismatch",
+            semantic_relevance_score=0.0,
+            source_quality_score=0.0,
+            cited_evidence=_cited_evidence_dicts(citation_candidates),
+            finding_code=finding_code,
+        )
+
+    missing_quote = [
+        citation for citation in citation_candidates
+        if not str(getattr(citation, "quote", "") or "").strip()
+    ]
+    if missing_quote:
+        return EvidenceAuditClaim(
+            claim_text=claim_text,
+            status="unsupported",
+            evidence_ids=[citation.evidence_id for citation in missing_quote],
+            notes=["A cited source is missing the quote needed for semantic audit."],
+            support_score=0.0,
+            support_status="insufficient_evidence",
+            semantic_relevance_score=0.0,
+            source_quality_score=0.0,
+            cited_evidence=_cited_evidence_dicts(missing_quote),
+            finding_code="source_quote_missing",
         )
 
     matching = [
@@ -150,6 +205,13 @@ def _audit_claim(claim_text: str, citations: list[CitationLike]) -> EvidenceAudi
             evidence_ids=matching,
             notes=[],
             support_score=1.0,
+            support_status="supported",
+            semantic_relevance_score=1.0,
+            source_quality_score=1.0,
+            cited_evidence=_cited_evidence_dicts(
+                [citation for citation in citation_candidates if citation.evidence_id in matching]
+            ),
+            finding_code=None,
         )
 
     joint_matching = _jointly_supporting_citation_ids(claim_body, citation_candidates)
@@ -160,14 +222,23 @@ def _audit_claim(claim_text: str, citations: list[CitationLike]) -> EvidenceAudi
             evidence_ids=joint_matching,
             notes=["Multiple cited evidence records jointly support this claim."],
             support_score=1.0,
+            support_status="supported",
+            semantic_relevance_score=1.0,
+            source_quality_score=1.0,
+            cited_evidence=_cited_evidence_dicts(
+                [citation for citation in citation_candidates if citation.evidence_id in joint_matching]
+            ),
+            finding_code=None,
         )
 
     nearest_evidence_id, nearest_score = _nearest_citation_support(claim_body, citation_candidates)
     if (
         cited_labels
-        and _sentence_count(claim_body) <= 1
         and nearest_evidence_id is not None
-        and nearest_score >= PARTIAL_SUPPORT_THRESHOLD
+        and (
+            nearest_score >= 0.9
+            or (_sentence_count(claim_body) <= 1 and nearest_score >= PARTIAL_SUPPORT_THRESHOLD)
+        )
     ):
         return EvidenceAuditClaim(
             claim_text=claim_text,
@@ -175,6 +246,13 @@ def _audit_claim(claim_text: str, citations: list[CitationLike]) -> EvidenceAudi
             evidence_ids=[nearest_evidence_id],
             notes=["Cited evidence partially supports this synthesized claim."],
             support_score=nearest_score,
+            support_status="partial",
+            semantic_relevance_score=nearest_score,
+            source_quality_score=1.0,
+            cited_evidence=_cited_evidence_dicts(
+                [citation for citation in citation_candidates if citation.evidence_id == nearest_evidence_id]
+            ),
+            finding_code="semantic_support_partial",
         )
 
     nearest_evidence_id, nearest_score = _nearest_citation_support(claim_body, citations)
@@ -188,7 +266,82 @@ def _audit_claim(claim_text: str, citations: list[CitationLike]) -> EvidenceAudi
         evidence_ids=[],
         notes=notes,
         support_score=nearest_score,
+        support_status="unsupported",
+        semantic_relevance_score=nearest_score,
+        source_quality_score=1.0 if citation_candidates else 0.0,
+        cited_evidence=_cited_evidence_dicts(citation_candidates),
+        finding_code="semantic_support_mismatch" if cited_labels else "semantic_support_missing",
     )
+
+
+def _with_claim_id(claim: EvidenceAuditClaim, index: int) -> EvidenceAuditClaim:
+    return EvidenceAuditClaim(
+        claim_text=claim.claim_text,
+        status=claim.status,
+        evidence_ids=claim.evidence_ids,
+        notes=claim.notes,
+        support_score=claim.support_score,
+        claim_id=claim.claim_id or f"claim-{index}",
+        support_status=claim.support_status,
+        semantic_relevance_score=claim.semantic_relevance_score,
+        source_quality_score=claim.source_quality_score,
+        cited_evidence=claim.cited_evidence,
+        rationale=claim.rationale,
+        finding_code=claim.finding_code,
+    )
+
+
+def _support_status_for_legacy_status(status: str) -> str:
+    if status == "approved":
+        return "supported"
+    if status == "invalid_source":
+        return "source_mismatch"
+    if status in {"partial", "unsupported"}:
+        return status
+    return "insufficient_evidence"
+
+
+def _insufficient_support_status(claim_text: str) -> str:
+    return "insufficient_evidence" if _looks_like_refusal(claim_text) else "unsupported"
+
+
+def _no_citation_finding_code(claim_text: str) -> str:
+    return "insufficient_evidence_should_refuse" if _looks_like_refusal(claim_text) else "semantic_support_missing"
+
+
+def _looks_like_refusal(claim_text: str) -> bool:
+    normalized = claim_text.casefold()
+    return any(
+        marker in normalized
+        for marker in (
+            "insufficient citation evidence",
+            "no citation evidence",
+            "cannot answer it as a cited research claim",
+            "no evidence",
+        )
+    )
+
+
+def _cited_evidence_dicts(citations: list[CitationLike]) -> list[dict]:
+    return [
+        {
+            "evidence_id": getattr(citation, "evidence_id", None),
+            "source_type": getattr(citation, "source_type", ""),
+            "paper_id": getattr(citation, "paper_id", ""),
+            "title": getattr(citation, "title", ""),
+            "section": getattr(citation, "section", ""),
+            "page_start": getattr(citation, "page_start", None),
+            "page_end": getattr(citation, "page_end", None),
+            "chunk_id": getattr(citation, "chunk_id", ""),
+            "quote": getattr(citation, "quote", ""),
+        }
+        for citation in citations
+    ]
+
+
+def _citations_by_evidence_ids(citations: list[CitationLike], evidence_ids: list[int | None]) -> list[CitationLike]:
+    id_set = {evidence_id for evidence_id in evidence_ids if evidence_id is not None}
+    return [citation for citation in citations if getattr(citation, "evidence_id", None) in id_set]
 
 
 def _overall_status(claims: list[EvidenceAuditClaim]) -> str:

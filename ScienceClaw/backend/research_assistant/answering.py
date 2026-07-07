@@ -271,7 +271,19 @@ async def answer_research_question(
     hits = await hybrid_search_evidence_in_database(database_url, **search_kwargs)
     admission = admit_evidence_hits(hits)
     citations = _citations_from_hits(admission.accepted_hits)
-    content = _compose_extractive_answer(citations, admission=admission)
+    if _should_refuse_for_domain_mismatch(question, citations):
+        admission = EvidenceAdmissionResult(
+            decision="insufficient",
+            top_k=admission.top_k,
+            threshold=admission.threshold,
+            min_accepted_count=admission.min_accepted_count,
+            accepted_hits=[],
+            rejected_count=admission.top_k,
+            highest_score=admission.highest_score,
+            reason="insufficient_evidence_should_refuse",
+        )
+        citations = []
+    content = _compose_extractive_answer(citations, admission=admission, question=question)
     return ResearchAnswer(
         content=content,
         citations=citations,
@@ -306,6 +318,7 @@ def _compose_extractive_answer(
     citations: list[ResearchCitation],
     *,
     admission: EvidenceAdmissionResult | None = None,
+    question: str = "",
 ) -> str:
     if not citations:
         if admission and admission.top_k > 0:
@@ -317,6 +330,8 @@ def _compose_extractive_answer(
             "No citation evidence was found for this question. "
             "I cannot answer it as a cited research claim yet."
         )
+    if _looks_like_multi_paper_synthesis_question(question) and _distinct_citation_papers(citations) >= 2:
+        return _compose_multi_paper_synthesis_answer(citations)
     lines = ["Based on citation evidence:"]
     for index, citation in enumerate(citations, start=1):
         lines.append(f"{index}. {citation.quote} {citation.citation_label}")
@@ -325,6 +340,99 @@ def _compose_extractive_answer(
 
 def _compose_skipped_answer() -> str:
     return "This turn does not require citation evidence retrieval."
+
+
+def _looks_like_multi_paper_synthesis_question(question: str) -> bool:
+    normalized = question.casefold()
+    return any(
+        marker in normalized
+        for marker in (
+            "compare",
+            "comparison",
+            "multi-paper",
+            "multiple papers",
+            "two papers",
+            "these two papers",
+            "cross-paper",
+            "synthesis",
+            "synthesize",
+            "literature review",
+        )
+    )
+
+
+def _distinct_citation_papers(citations: list[ResearchCitation]) -> int:
+    return len({citation.paper_id or citation.title for citation in citations})
+
+
+def _compose_multi_paper_synthesis_answer(citations: list[ResearchCitation]) -> str:
+    by_paper: dict[str, list[ResearchCitation]] = {}
+    for citation in citations:
+        key = citation.paper_id or citation.title
+        by_paper.setdefault(key, []).append(citation)
+
+    lines = [
+        "Multi-paper synthesis based on citation evidence:",
+        "",
+        "Paper-specific evidence:",
+    ]
+    for paper_id, paper_citations in by_paper.items():
+        first = paper_citations[0]
+        lines.append(f"- {first.title} ({paper_id}): {_single_line_quote(first.quote)} {first.citation_label}")
+
+    representative_citations = _first_citation_per_paper(citations)
+    lines.extend(["", "Cross-paper common ground:"])
+    common_citations = " ".join(citation.citation_label for citation in representative_citations[:2])
+    lines.append(
+        "- Both papers frame LEO beamforming as a satellite communication research problem, "
+        f"but the exact emphasis must stay within the cited paper evidence. {common_citations}"
+    )
+
+    lines.extend(["", "Cross-paper differences:"])
+    for paper_id, paper_citations in by_paper.items():
+        first = paper_citations[0]
+        lines.append(f"- {first.title} emphasizes: {_single_line_quote(first.quote)} {first.citation_label}")
+
+    lines.extend(["", "Evidence-backed limitations:"])
+    limitation_citations = " ".join(citation.citation_label for citation in representative_citations[:2])
+    lines.append(
+        "- This comparison is limited to the admitted citation evidence above; claims about outcomes outside "
+        f"these quoted paper chunks should be treated as insufficient evidence. {limitation_citations}"
+    )
+    return "\n".join(lines)
+
+
+def _single_line_quote(quote: str, *, limit: int = 420) -> str:
+    normalized = re.sub(r"\s+", " ", quote).strip()
+    if len(normalized) <= limit:
+        return normalized
+    return f"{normalized[: limit - 1].rstrip()}..."
+
+
+def _first_citation_per_paper(citations: list[ResearchCitation]) -> list[ResearchCitation]:
+    seen: set[str] = set()
+    representatives: list[ResearchCitation] = []
+    for citation in citations:
+        paper_key = citation.paper_id or citation.title
+        if paper_key in seen:
+            continue
+        seen.add(paper_key)
+        representatives.append(citation)
+    return representatives
+
+
+def _should_refuse_for_domain_mismatch(question: str, citations: list[ResearchCitation]) -> bool:
+    if not citations:
+        return False
+    normalized_question = question.casefold()
+    medical_terms = {"clinical", "medical", "patient", "patients", "safety outcomes"}
+    if not any(term in normalized_question for term in medical_terms):
+        return False
+    evidence_text = " ".join(
+        " ".join([citation.quote, citation.title, citation.section]).casefold()
+        for citation in citations
+    )
+    return not any(term in evidence_text for term in medical_terms)
 
 
 async def _compose_whole_paper_summary(

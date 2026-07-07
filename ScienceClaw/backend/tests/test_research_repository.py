@@ -17,6 +17,7 @@ from backend.research_assistant.storage.repository import (
     create_research_project,
     ensure_subagent_definitions,
     get_session_research_project,
+    list_reader_scope_evidence,
     list_recent_subagent_runs,
     list_subagent_definitions,
     list_project_paper_assets,
@@ -27,6 +28,8 @@ from backend.research_assistant.storage.repository import (
     persist_web_evidence_source,
     persist_ingestion_result,
     persist_report_evidence_map,
+    rollback_subagent_definition,
+    set_subagent_validation_status,
     update_subagent_definition,
     upsert_session_research_project,
 )
@@ -149,7 +152,7 @@ async def test_list_subagent_definitions_returns_enabled_registry_rows():
             "can_write_artifacts": False,
             "enabled": True,
             "version": 1,
-            "validation_status": "valid",
+            "validation_status": "passed",
             "citation_evidence": False,
             "metadata": '{"ui_order":2}',
         }
@@ -169,6 +172,39 @@ async def test_list_subagent_definitions_returns_enabled_registry_rows():
     assert definitions[0].allowed_tools == ["read_research_evidence"]
     assert definitions[0].input_boundaries == {"requires": ["material_package"]}
     assert definitions[0].metadata == {"ui_order": 2}
+
+
+@pytest.mark.asyncio
+async def test_list_subagent_definitions_auto_disables_unvalidated_legacy_custom_rows():
+    connection = RecordingConnection()
+    connection.fetch_result = [
+        {
+            "name": "paper_reader_worker",
+            "display_name": "Reader Worker",
+            "agent_type": "custom",
+            "source": "registry",
+            "editable": True,
+            "description": "Read scoped papers.",
+            "system_prompt": "You are a scoped Reader Worker.",
+            "skill_refs": '["research-paper-reading"]',
+            "allowed_tools": '["read_research_evidence"]',
+            "input_boundaries": '{"requires":["material_package"]}',
+            "output_boundary": "context_only",
+            "can_answer_user": False,
+            "can_write_artifacts": False,
+            "enabled": True,
+            "version": 3,
+            "validation_status": "draft",
+            "citation_evidence": False,
+            "metadata": '{"ui_order":2}',
+        }
+    ]
+
+    definitions = await list_subagent_definitions(connection, enabled_only=False)
+
+    assert definitions[0].enabled is False
+    assert definitions[0].validation_status == "draft"
+    assert definitions[0].metadata["auto_disabled_reason"] == "custom_agent_requires_passed_validation"
 
 
 @pytest.mark.asyncio
@@ -224,6 +260,104 @@ async def test_update_subagent_definition_persists_custom_agent_changes():
     assert definition.version == 2
     assert definition.enabled is False
     assert definition.metadata == {"edited_by": "test"}
+
+
+@pytest.mark.asyncio
+async def test_update_subagent_definition_rejects_enabling_unvalidated_draft():
+    connection = RecordingConnection()
+
+    with pytest.raises(ValueError, match="validation"):
+        await update_subagent_definition(
+            connection,
+            name="paper_reader_worker",
+            updates={
+                "display_name": "Reader Worker Updated",
+                "description": "Read scoped materials carefully.",
+                "system_prompt": "You are a scoped Reader Worker. Return context-only notes.",
+                "skill_refs": ["research-paper-reading"],
+                "allowed_tools": ["read_research_evidence"],
+                "input_boundaries": {"requires": ["material_package"]},
+                "output_boundary": "context_only",
+                "enabled": True,
+                "metadata": {"edited_by": "test"},
+            },
+        )
+
+
+@pytest.mark.asyncio
+async def test_set_subagent_validation_status_persists_passed_and_allows_enablement():
+    connection = RecordingConnection()
+    connection.fetchrow_result = {
+        "name": "paper_reader_worker",
+        "display_name": "Reader Worker",
+        "agent_type": "custom",
+        "source": "registry",
+        "editable": True,
+        "description": "Read scoped papers.",
+        "system_prompt": "You are a scoped Reader Worker.",
+        "skill_refs": '["research-paper-reading"]',
+        "allowed_tools": '["read_research_evidence"]',
+        "input_boundaries": '{"requires":["material_package"]}',
+        "output_boundary": "context_only",
+        "can_answer_user": False,
+        "can_write_artifacts": False,
+        "enabled": True,
+        "version": 3,
+        "validation_status": "passed",
+        "citation_evidence": False,
+        "metadata": '{"validation":{"status":"passed"}}',
+    }
+
+    definition = await set_subagent_validation_status(
+        connection,
+        name="paper_reader_worker",
+        status="passed",
+        validation={"status": "passed"},
+        enable=True,
+    )
+
+    sql, args = connection.fetchrow_calls[0]
+    assert "update research_subagent_definitions" in sql.lower()
+    assert "validation_status = $1" in sql.lower()
+    assert "enabled = $3" in sql.lower()
+    assert args[0] == "passed"
+    assert args[2] is True
+    assert definition.validation_status == "passed"
+    assert definition.enabled is True
+
+
+@pytest.mark.asyncio
+async def test_rollback_subagent_definition_restores_previous_metadata_snapshot():
+    connection = RecordingConnection()
+    connection.fetchrow_result = {
+        "name": "paper_reader_worker",
+        "display_name": "Reader Worker Previous",
+        "agent_type": "custom",
+        "source": "registry",
+        "editable": True,
+        "description": "Previous description.",
+        "system_prompt": "You are a scoped Reader Worker.",
+        "skill_refs": '["research-paper-reading"]',
+        "allowed_tools": '["read_research_evidence"]',
+        "input_boundaries": '{"requires":["material_package"]}',
+        "output_boundary": "context_only",
+        "can_answer_user": False,
+        "can_write_artifacts": False,
+        "enabled": False,
+        "version": 4,
+        "validation_status": "draft",
+        "citation_evidence": False,
+        "metadata": '{"rolled_back_from_version":3}',
+    }
+
+    definition = await rollback_subagent_definition(connection, name="paper_reader_worker")
+
+    sql, args = connection.fetchrow_calls[0]
+    assert "previous_version" in sql.lower()
+    assert "rollback_snapshot" in sql.lower()
+    assert args == ("paper_reader_worker",)
+    assert definition.display_name == "Reader Worker Previous"
+    assert definition.validation_status == "draft"
 
 
 @pytest.mark.asyncio
@@ -300,6 +434,60 @@ async def test_list_recent_subagent_runs_returns_preview_rows():
             "completed_at": "2026-07-03T10:00:05Z",
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_list_reader_scope_evidence_returns_multi_paper_material_records():
+    connection = RecordingConnection()
+    connection.fetch_result = [
+        {
+            "evidence_id": 17,
+            "chunk_id": "chunk-a",
+            "paper_id": "paper-a",
+            "title": "Paper A",
+            "section": "Methods",
+            "page_start": 1,
+            "page_end": 1,
+            "quote": "Paper A uses retrieval.",
+            "evidence_type": "paper",
+            "source_identity": '{"paper_id":"paper-a"}',
+            "evidence_scope": "project",
+            "paper_order": 1,
+            "paper_evidence_order": 1,
+        },
+        {
+            "evidence_id": 18,
+            "chunk_id": "chunk-b",
+            "paper_id": "paper-b",
+            "title": "Paper B",
+            "section": "Results",
+            "page_start": 2,
+            "page_end": 2,
+            "quote": "Paper B uses reranking.",
+            "evidence_type": "paper",
+            "source_identity": '{"paper_id":"paper-b"}',
+            "evidence_scope": "project",
+            "paper_order": 2,
+            "paper_evidence_order": 1,
+        },
+    ]
+
+    records = await list_reader_scope_evidence(
+        connection,
+        session_id="session-1",
+        project_id="project-1",
+        limit=8,
+        per_paper_limit=2,
+    )
+
+    sql, args = connection.fetch_calls[0]
+    assert "research_evidence_records" in sql.lower()
+    assert "partition by c.paper_id" in sql.lower()
+    assert args == ("session-1", "project-1", 8, 2)
+    assert records[0]["paper_id"] == "paper-a"
+    assert records[1]["paper_id"] == "paper-b"
+    assert records[0]["evidence_id"] == 17
+    assert records[1]["source_type"] == "paper"
 
 
 @pytest.mark.asyncio

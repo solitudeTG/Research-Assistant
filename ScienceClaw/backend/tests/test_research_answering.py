@@ -73,6 +73,123 @@ async def test_answer_research_question_uses_only_citation_evidence(monkeypatch)
 
 
 @pytest.mark.asyncio
+async def test_answer_research_question_formats_multi_paper_synthesis_when_two_papers_are_admitted(monkeypatch):
+    async def fake_search(*args, **kwargs):
+        return [
+            EvidenceHit(
+                evidence_id=11,
+                chunk_id="space-time-intro",
+                paper_id="paper-space-time",
+                title="Space-Time Beamforming",
+                source_type="paper",
+                section="Introduction",
+                page_start=1,
+                page_end=1,
+                quote="Space-time beamforming frames LEO satellite communication as extremely narrow beam control.",
+                rank_score=0.9,
+                source_identity={"paper_id": "paper-space-time"},
+            ),
+            EvidenceHit(
+                evidence_id=21,
+                chunk_id="ican-intro",
+                paper_id="paper-ican",
+                title="Integrated Communication and Navigation",
+                source_type="paper",
+                section="Introduction",
+                page_start=2,
+                page_end=2,
+                quote="Integrated communication and navigation frames LEO beamforming as joint service and satellite selection.",
+                rank_score=0.8,
+                source_identity={"paper_id": "paper-ican"},
+            ),
+        ]
+
+    async def fake_list_memory(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.hybrid_search_evidence_in_database",
+        fake_search,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_memory_entries_from_database",
+        fake_list_memory,
+    )
+
+    answer = await answer_research_question(
+        database_url="postgresql://test",
+        session_id="session-1",
+        question="Compare how these two papers frame beamforming as a LEO satellite research problem.",
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=5,
+    )
+
+    assert answer.to_dict()["task_route"]["route"] == "evidence_qa"
+    assert answer.citation_count == 2
+    assert "Paper-specific evidence:" in answer.content
+    assert "Cross-paper common ground:" in answer.content
+    assert "Cross-paper differences:" in answer.content
+    assert "Evidence-backed limitations:" in answer.content
+    assert "[paper-space-time:Introduction:1]" in answer.content
+    assert "[paper-ican:Introduction:2]" in answer.content
+    common_ground_line = next(line for line in answer.content.splitlines() if line.startswith("- Both papers"))
+    assert "[paper-space-time:Introduction:1]" in common_ground_line
+    assert "[paper-ican:Introduction:2]" in common_ground_line
+    assert {citation.paper_id for citation in answer.citations} == {"paper-space-time", "paper-ican"}
+    assert answer.audit.unsupported_claim_count / answer.audit.claim_count <= 0.6
+    assert all(claim.cited_evidence for claim in answer.audit.claims if claim.support_status != "insufficient_evidence")
+
+
+@pytest.mark.asyncio
+async def test_answer_research_question_refuses_clinical_safety_claim_when_admitted_papers_lack_domain_evidence(monkeypatch):
+    async def fake_search(*args, **kwargs):
+        return [
+            EvidenceHit(
+                evidence_id=11,
+                chunk_id="space-time-intro",
+                paper_id="paper-space-time",
+                title="Space-Time Beamforming",
+                source_type="paper",
+                section="Introduction",
+                page_start=1,
+                page_end=1,
+                quote="Space-time beamforming frames LEO satellite communication as extremely narrow beam control.",
+                rank_score=0.9,
+            )
+        ]
+
+    async def fake_list_memory(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.hybrid_search_evidence_in_database",
+        fake_search,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_memory_entries_from_database",
+        fake_list_memory,
+    )
+
+    answer = await answer_research_question(
+        database_url="postgresql://test",
+        session_id="session-1",
+        question="Do these papers prove clinical safety outcomes for medical patients? Provide citations.",
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=5,
+    )
+
+    payload = answer.to_dict()
+
+    assert answer.citation_count == 0
+    assert payload["evidence_admission"]["decision"] == "insufficient"
+    assert payload["evidence_admission"]["reason"] == "insufficient_evidence_should_refuse"
+    assert "insufficient citation evidence" in answer.content
+    assert payload["audit"]["claims"][0]["finding_code"] == "insufficient_evidence_should_refuse"
+
+
+@pytest.mark.asyncio
 async def test_answer_research_question_passes_project_id_to_retrieval(monkeypatch):
     captured = {}
 

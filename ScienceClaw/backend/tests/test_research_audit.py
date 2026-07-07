@@ -220,6 +220,37 @@ def test_audit_evidence_claims_rejects_claim_without_explicit_citation_label():
     assert "No explicit citation label was attached to this claim." in audit.claims[1].notes
 
 
+def test_audit_evidence_claims_keeps_nearest_evidence_on_unlabeled_claim():
+    audit = audit_evidence_claims(
+        answer_content=(
+            "Based on uploaded paper evidence:\n"
+            "1. Hybrid retrieval improves recall. [paper-1:Results:4]\n"
+            "2. Hybrid retrieval improves recall."
+        ),
+        citations=[
+            ResearchCitation(
+                evidence_id=17,
+                chunk_id="chunk-17",
+                paper_id="paper-1",
+                title="Hybrid Retrieval",
+                section="Results",
+                page_start=4,
+                page_end=4,
+                quote="Hybrid retrieval improves recall.",
+                citation_label="[paper-1:Results:4]",
+            ),
+        ],
+    )
+
+    claim = audit.to_dict()["claims"][1]
+
+    assert claim["support_status"] == "unsupported"
+    assert claim["finding_code"] == "semantic_support_missing"
+    assert claim["semantic_relevance_score"] == 1.0
+    assert claim["source_quality_score"] == 1.0
+    assert claim["cited_evidence"][0]["evidence_id"] == 17
+
+
 def test_audit_evidence_claims_marks_answer_without_citations_as_unsupported():
     audit = audit_evidence_claims(
         answer_content="No citation evidence was found for this question.",
@@ -342,3 +373,78 @@ def test_audit_evidence_claims_marks_cited_synthesis_with_incomplete_support_as_
     assert audit.claims[0].evidence_ids == [17]
     assert 0 < audit.claims[0].support_score < 1
     assert "Cited evidence partially supports this synthesized claim." in audit.claims[0].notes
+
+
+def test_semantic_audit_claims_expose_support_status_scores_evidence_and_finding_codes():
+    audit = audit_evidence_claims(
+        answer_content=(
+            "1. Hybrid retrieval improves recall. [paper-1:Results:4]\n"
+            "2. Hybrid retrieval proves clinical safety outcomes. [paper-1:Results:4]\n"
+            "3. Prior memory proves the same claim. [memory-1]"
+        ),
+        citations=[
+            ResearchCitation(
+                evidence_id=17,
+                chunk_id="chunk-17",
+                paper_id="paper-1",
+                title="Hybrid Retrieval",
+                section="Results",
+                page_start=4,
+                page_end=4,
+                quote="Hybrid retrieval improves recall.",
+                citation_label="[paper-1:Results:4]",
+            ),
+            ResearchCitation(
+                evidence_id=91,
+                chunk_id="memory-1",
+                paper_id="memory",
+                title="Session memory",
+                section="Memory",
+                page_start=None,
+                page_end=None,
+                quote="Prior memory proves the same claim.",
+                citation_label="[memory-1]",
+                source_type="memory",
+            ),
+        ],
+    )
+
+    payload = audit.to_dict()
+    claims = payload["claims"]
+
+    assert claims[0]["claim_id"] == "claim-1"
+    assert claims[0]["support_status"] == "supported"
+    assert claims[0]["semantic_relevance_score"] == 1.0
+    assert claims[0]["source_quality_score"] == 1.0
+    assert claims[0]["finding_code"] is None
+    assert claims[0]["cited_evidence"][0] == {
+        "evidence_id": 17,
+        "source_type": "paper",
+        "paper_id": "paper-1",
+        "title": "Hybrid Retrieval",
+        "section": "Results",
+        "page_start": 4,
+        "page_end": 4,
+        "chunk_id": "chunk-17",
+        "quote": "Hybrid retrieval improves recall.",
+    }
+
+    assert claims[1]["support_status"] == "unsupported"
+    assert claims[1]["finding_code"] == "semantic_support_mismatch"
+    assert "No attached citation quote directly supports this claim." in claims[1]["rationale"]
+
+    assert claims[2]["support_status"] == "source_mismatch"
+    assert claims[2]["finding_code"] == "context_only_source_used_as_citation"
+    assert claims[2]["source_quality_score"] == 0.0
+
+
+def test_semantic_audit_marks_no_citation_answer_as_insufficient_evidence_refusal():
+    audit = audit_evidence_claims(
+        answer_content="Insufficient citation evidence was found for this question. I cannot answer it as a cited research claim yet.",
+        citations=[],
+    )
+
+    claim = audit.to_dict()["claims"][0]
+
+    assert claim["support_status"] == "insufficient_evidence"
+    assert claim["finding_code"] == "insufficient_evidence_should_refuse"

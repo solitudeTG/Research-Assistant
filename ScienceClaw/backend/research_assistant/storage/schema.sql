@@ -178,7 +178,7 @@ CREATE TABLE IF NOT EXISTS research_subagent_definitions (
     can_write_artifacts BOOLEAN NOT NULL DEFAULT false,
     enabled BOOLEAN NOT NULL DEFAULT true,
     version INTEGER NOT NULL DEFAULT 1,
-    validation_status TEXT NOT NULL CHECK (validation_status IN ('valid', 'invalid', 'draft', 'system_managed')),
+    validation_status TEXT NOT NULL CHECK (validation_status IN ('passed', 'failed', 'draft', 'disabled', 'system_managed')),
     citation_evidence BOOLEAN NOT NULL DEFAULT false CHECK (citation_evidence = false),
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -193,6 +193,44 @@ ALTER TABLE research_subagent_definitions
     ADD COLUMN IF NOT EXISTS editable BOOLEAN NOT NULL DEFAULT true;
 ALTER TABLE research_subagent_definitions
     ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+DO $$
+DECLARE
+    constraint_name text;
+BEGIN
+    SELECT conname INTO constraint_name
+    FROM pg_constraint
+    WHERE conrelid = 'research_subagent_definitions'::regclass
+      AND contype = 'c'
+      AND pg_get_constraintdef(oid) LIKE '%validation_status%';
+
+    IF constraint_name IS NOT NULL THEN
+        EXECUTE format('ALTER TABLE research_subagent_definitions DROP CONSTRAINT %I', constraint_name);
+    END IF;
+
+END $$;
+
+UPDATE research_subagent_definitions
+SET validation_status = CASE validation_status
+    WHEN 'valid' THEN 'passed'
+    WHEN 'invalid' THEN 'failed'
+    ELSE validation_status
+END
+WHERE validation_status IN ('valid', 'invalid');
+
+UPDATE research_subagent_definitions
+SET enabled = false,
+    metadata = metadata || jsonb_build_object(
+        'auto_disabled_reason',
+        'custom_agent_requires_passed_validation'
+    )
+WHERE agent_type = 'custom'
+  AND enabled IS TRUE
+  AND validation_status <> 'passed';
+
+ALTER TABLE research_subagent_definitions
+    ADD CONSTRAINT research_subagent_definitions_validation_status_check
+    CHECK (validation_status IN ('passed', 'failed', 'draft', 'disabled', 'system_managed'));
 
 CREATE INDEX IF NOT EXISTS research_subagent_definitions_enabled_idx
     ON research_subagent_definitions (enabled, name);

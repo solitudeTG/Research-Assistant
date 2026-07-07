@@ -1,0 +1,86 @@
+{
+  "answer_id": "golden-evidence-qa-001",
+  "content": "The answer cites the paper evidence for narrow-beam LEO satellite communication claims.",
+  "citations": [
+    {
+      "evidence_id": 11,
+      "chunk_id": "chunk-11",
+      "paper_id": "paper-space-time",
+      "title": "Space-Time Beamforming for LEO Satellite Communications Enabling Extremely Narrow Beams",
+      "section": "Results",
+      "page_start": 5,
+      "page_end": 5,
+      "quote": "The result section reports beamforming behavior in a LEO satellite communication scenario.",
+      "citation_label": "paper-space-time:Results:5",
+      "source_type": "paper",
+      "source_identity": {"paper_id": "paper-space-time"},
+      "evidence_scope": "project"
+    }
+  ],
+  "citation_count": 1,
+  "context_boundaries": {
+    "citation_evidence": ["paper", "web", "database"],
+    "context_only_memory": ["memory"],
+    "process_trace": ["tool_logs", "runtime_results", "agent_lifecycle"],
+    "model_reasoning": ["model_reasoning"]
+  },
+  "summary_synthesis": {},
+  "evidence_admission": {"decision": "accepted"},
+  "task_route": {"route": "evidence_qa"},
+  "audit": {
+    "status": "approved",
+    "claim_count": 2,
+    "approved_claim_count": 2,
+    "partial_claim_count": 0,
+    "unsupported_claim_count": 0,
+    "invalid_source_count": 0,
+    "claims": [
+      {
+        "claim_id": "claim-1",
+        "claim_text": "The answer cites the paper evidence for narrow-beam LEO satellite communication claims.",
+        "status": "approved",
+        "support_status": "supported",
+        "semantic_relevance_score": 1.0,
+        "source_quality_score": 1.0,
+        "evidence_ids": [11],
+        "cited_evidence": [
+          {
+            "source_type": "paper",
+            "paper_id": "paper-space-time",
+            "title": "Space-Time Beamforming for LEO Satellite Communications Enabling Extremely Narrow Beams",
+            "section": "Results",
+            "page_start": 5,
+            "page_end": 5,
+            "chunk_id": "chunk-11",
+            "quote": "The result section reports beamforming behavior in a LEO satellite communication scenario."
+          }
+        ],
+        "rationale": "The cited paper quote directly supports the LEO beamforming evidence claim.",
+        "finding_code": null
+      },
+      {
+        "claim_id": "claim-2",
+        "claim_text": "The result section reports beamforming behavior in a LEO satellite communication scenario.",
+        "status": "approved",
+        "support_status": "supported",
+        "semantic_relevance_score": 1.0,
+        "source_quality_score": 1.0,
+        "evidence_ids": [11],
+        "cited_evidence": [
+          {
+            "source_type": "paper",
+            "paper_id": "paper-space-time",
+            "title": "Space-Time Beamforming for LEO Satellite Communications Enabling Extremely Narrow Beams",
+            "section": "Results",
+            "page_start": 5,
+            "page_end": 5,
+            "chunk_id": "chunk-11",
+            "quote": "The result section reports beamforming behavior in a LEO satellite communication scenario."
+          }
+        ],
+        "rationale": "The claim restates the cited quote.",
+        "finding_code": null
+      }
+    ]
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "answer_id": "golden-partial-001",
+  "content": "The paper provides partial evidence about deployment limitations for narrow LEO beams.",
+  "citations": [
+    {
+      "evidence_id": 41,
+      "chunk_id": "chunk-41",
+      "paper_id": "paper-space-time",
+      "title": "Space-Time Beamforming for LEO Satellite Communications Enabling Extremely Narrow Beams",
+      "section": "Discussion",
+      "page_start": 6,
+      "page_end": 6,
+      "quote": "The discussion notes practical constraints for extremely narrow LEO beams.",
+      "citation_label": "paper-space-time:Discussion:6",
+      "source_type": "paper",
+      "source_identity": {"paper_id": "paper-space-time"},
+      "evidence_scope": "project"
+    }
+  ],
+  "citation_count": 1,
+  "context_boundaries": {
+    "citation_evidence": ["paper", "web", "database"],
+    "context_only_memory": ["memory"],
+    "process_trace": ["tool_logs", "runtime_results", "agent_lifecycle"],
+    "model_reasoning": ["model_reasoning"]
+  },
+  "summary_synthesis": {},
+  "evidence_admission": {"decision": "accepted"},
+  "task_route": {"route": "evidence_qa"},
+  "audit": {
+    "status": "partial",
+    "claim_count": 1,
+    "approved_claim_count": 0,
+    "partial_claim_count": 1,
+    "unsupported_claim_count": 0,
+    "invalid_source_count": 0,
+    "claims": [
+      {
+        "claim_id": "claim-1",
+        "claim_text": "The paper provides partial evidence about deployment limitations for narrow LEO beams.",
+        "status": "partial",
+        "support_status": "partial",
+        "semantic_relevance_score": 0.57,
+        "source_quality_score": 1.0,
+        "evidence_ids": [41],
+        "cited_evidence": [
+          {
+            "source_type": "paper",
+            "paper_id": "paper-space-time",
+            "title": "Space-Time Beamforming for LEO Satellite Communications Enabling Extremely Narrow Beams",
+            "section": "Discussion",
+            "page_start": 6,
+            "page_end": 6,
+            "chunk_id": "chunk-41",
+            "quote": "The discussion notes practical constraints for extremely narrow LEO beams."
+          }
+        ],
+        "rationale": "The quote is relevant to constraints but does not fully establish all deployment limitations.",
+        "finding_code": "semantic_support_partial"
+      }
+    ]
+  }
+}

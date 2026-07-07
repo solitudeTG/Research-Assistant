@@ -329,6 +329,10 @@ async def update_subagent_definition(
     name: str,
     updates: dict[str, Any],
 ) -> SubagentDefinition:
+    validation_status = str(updates.get("validation_status") or "draft")
+    if bool(updates["enabled"]) and validation_status != "passed":
+        raise ValueError("custom Research Agent must pass validation before enablement")
+
     candidate = SubagentDefinition(
         name=name,
         display_name=str(updates["display_name"]),
@@ -345,7 +349,7 @@ async def update_subagent_definition(
         can_write_artifacts=False,
         enabled=bool(updates["enabled"]),
         version=1,
-        validation_status="draft",
+        validation_status=validation_status,
         citation_evidence=False,
         metadata=dict(updates.get("metadata") or {}),
     )
@@ -364,9 +368,23 @@ async def update_subagent_definition(
             output_boundary = $7,
             enabled = $8,
             validation_status = $9,
-            metadata = $10::jsonb,
             citation_evidence = $11,
             version = version + 1,
+            metadata = $10::jsonb || jsonb_build_object(
+                'previous_version', version,
+                'rollback_snapshot', jsonb_build_object(
+                    'display_name', display_name,
+                    'description', description,
+                    'system_prompt', system_prompt,
+                    'skill_refs', skill_refs,
+                    'allowed_tools', allowed_tools,
+                    'input_boundaries', input_boundaries,
+                    'output_boundary', output_boundary,
+                    'enabled', enabled,
+                    'validation_status', validation_status,
+                    'metadata', metadata
+                )
+            ),
             updated_at = now()
         WHERE name = $12
           AND agent_type = 'custom'
@@ -406,6 +424,125 @@ async def update_subagent_definition(
     )
     if row is None:
         raise ValueError("editable custom Research Agent not found")
+    definition = _subagent_definition_from_row(row)
+    validate_subagent_definition(definition)
+    return definition
+
+
+async def set_subagent_validation_status(
+    connection: Any,
+    *,
+    name: str,
+    status: str,
+    validation: dict[str, Any],
+    enable: bool = False,
+) -> SubagentDefinition:
+    if status not in {"passed", "failed", "draft", "disabled"}:
+        raise ValueError("validation status is invalid")
+    if enable and status != "passed":
+        raise ValueError("custom Research Agent can only be enabled after passed validation")
+    row = await connection.fetchrow(
+        """
+        UPDATE research_subagent_definitions
+        SET
+            validation_status = $1,
+            metadata = metadata || jsonb_build_object('validation', $2::jsonb),
+            enabled = $3,
+            updated_at = now()
+        WHERE name = $4
+          AND agent_type = 'custom'
+          AND editable = true
+        RETURNING
+            name,
+            display_name,
+            agent_type,
+            source,
+            editable,
+            description,
+            system_prompt,
+            skill_refs,
+            allowed_tools,
+            input_boundaries,
+            output_boundary,
+            can_answer_user,
+            can_write_artifacts,
+            enabled,
+            version,
+            validation_status,
+            citation_evidence,
+            metadata
+        """,
+        status,
+        _json(validation),
+        enable,
+        name,
+    )
+    if row is None:
+        raise ValueError("editable custom Research Agent not found")
+    definition = _subagent_definition_from_row(row)
+    validate_subagent_definition(definition)
+    return definition
+
+
+async def rollback_subagent_definition(
+    connection: Any,
+    *,
+    name: str,
+) -> SubagentDefinition:
+    row = await connection.fetchrow(
+        """
+        WITH current_agent AS (
+            SELECT
+                name,
+                metadata->'rollback_snapshot' AS rollback_snapshot,
+                version AS previous_version
+            FROM research_subagent_definitions
+            WHERE name = $1
+              AND agent_type = 'custom'
+              AND editable = true
+              AND metadata ? 'rollback_snapshot'
+        )
+        UPDATE research_subagent_definitions target
+        SET
+            display_name = current_agent.rollback_snapshot->>'display_name',
+            description = current_agent.rollback_snapshot->>'description',
+            system_prompt = current_agent.rollback_snapshot->>'system_prompt',
+            skill_refs = current_agent.rollback_snapshot->'skill_refs',
+            allowed_tools = current_agent.rollback_snapshot->'allowed_tools',
+            input_boundaries = current_agent.rollback_snapshot->'input_boundaries',
+            output_boundary = current_agent.rollback_snapshot->>'output_boundary',
+            enabled = false,
+            validation_status = 'draft',
+            metadata = coalesce(current_agent.rollback_snapshot->'metadata', '{}'::jsonb)
+                || jsonb_build_object('rolled_back_from_version', current_agent.previous_version),
+            version = target.version + 1,
+            updated_at = now()
+        FROM current_agent
+        WHERE target.name = current_agent.name
+        RETURNING
+            target.name,
+            target.display_name,
+            target.agent_type,
+            target.source,
+            target.editable,
+            target.description,
+            target.system_prompt,
+            target.skill_refs,
+            target.allowed_tools,
+            target.input_boundaries,
+            target.output_boundary,
+            target.can_answer_user,
+            target.can_write_artifacts,
+            target.enabled,
+            target.version,
+            target.validation_status,
+            target.citation_evidence,
+            target.metadata
+        """,
+        name,
+    )
+    if row is None:
+        raise ValueError("rollback snapshot not found for editable custom Research Agent")
     definition = _subagent_definition_from_row(row)
     validate_subagent_definition(definition)
     return definition
@@ -507,6 +644,71 @@ async def list_recent_subagent_runs(
         bounded_limit,
     )
     return [_subagent_run_from_row(row) for row in rows]
+
+
+async def list_reader_scope_evidence(
+    connection: Any,
+    *,
+    session_id: str,
+    project_id: str | None = None,
+    limit: int = 12,
+    per_paper_limit: int = 3,
+) -> list[dict[str, Any]]:
+    rows = await connection.fetch(
+        """
+        WITH scoped_evidence AS (
+            SELECT
+                er.evidence_id,
+                er.chunk_id,
+                er.evidence_type,
+                c.paper_id,
+                p.title,
+                er.section,
+                er.page_start,
+                er.page_end,
+                er.quote,
+                er.source_identity,
+                CASE WHEN p.project_id IS NULL THEN 'session' ELSE 'project' END AS evidence_scope,
+                dense_rank() OVER (ORDER BY p.updated_at DESC, p.paper_id) AS paper_order,
+                row_number() OVER (
+                    PARTITION BY c.paper_id
+                    ORDER BY COALESCE(er.page_start, c.page_start, 2147483647), er.evidence_id
+                ) AS paper_evidence_order
+            FROM research_evidence_records er
+            JOIN research_chunks c ON c.chunk_id = er.chunk_id
+            JOIN research_papers p ON p.paper_id = c.paper_id
+            WHERE (p.session_id = $1 OR ($2::text IS NOT NULL AND p.project_id = $2))
+              AND er.evidence_type IN ('paper', 'web', 'database')
+        )
+        SELECT *
+        FROM scoped_evidence
+        WHERE paper_evidence_order <= $4
+        ORDER BY paper_order, paper_evidence_order, evidence_id
+        LIMIT $3
+        """,
+        session_id,
+        project_id,
+        max(1, int(limit)),
+        max(1, int(per_paper_limit)),
+    )
+    records: list[dict[str, Any]] = []
+    for row in rows:
+        records.append(
+            {
+                "evidence_id": int(row["evidence_id"]),
+                "chunk_id": str(row["chunk_id"]),
+                "paper_id": str(row["paper_id"]),
+                "title": str(row["title"]),
+                "section": str(row["section"]),
+                "page_start": _row_get(row, "page_start"),
+                "page_end": _row_get(row, "page_end"),
+                "quote": str(row["quote"]),
+                "source_type": str(row["evidence_type"]),
+                "source_identity": _json_value(_row_get(row, "source_identity"), default={}),
+                "evidence_scope": str(_row_get(row, "evidence_scope", "session") or "session"),
+            }
+        )
+    return records
 
 
 async def list_research_projects(
@@ -1542,10 +1744,20 @@ def _project_from_row(row: Any) -> ResearchProject:
 
 
 def _subagent_definition_from_row(row: Any) -> SubagentDefinition:
+    validation_status = _normalize_validation_status(str(row["validation_status"]))
+    agent_type = str(_row_get(row, "agent_type", "custom"))
+    metadata = _json_value(_row_get(row, "metadata", None), default={})
+    enabled = bool(row["enabled"])
+    if agent_type == "custom" and enabled and validation_status != "passed":
+        enabled = False
+        metadata = {
+            **metadata,
+            "auto_disabled_reason": "custom_agent_requires_passed_validation",
+        }
     return SubagentDefinition(
         name=str(row["name"]),
         display_name=str(row["display_name"]),
-        agent_type=str(_row_get(row, "agent_type", "custom")),
+        agent_type=agent_type,
         source=str(_row_get(row, "source", "registry")),
         editable=bool(_row_get(row, "editable", True)),
         description=str(row["description"]),
@@ -1556,12 +1768,19 @@ def _subagent_definition_from_row(row: Any) -> SubagentDefinition:
         output_boundary=str(row["output_boundary"]),
         can_answer_user=bool(row["can_answer_user"]),
         can_write_artifacts=bool(row["can_write_artifacts"]),
-        enabled=bool(row["enabled"]),
+        enabled=enabled,
         version=int(row["version"] or 1),
-        validation_status=str(row["validation_status"]),
+        validation_status=validation_status,
         citation_evidence=bool(row["citation_evidence"]),
-        metadata=_json_value(_row_get(row, "metadata", None), default={}),
+        metadata=metadata,
     )
+
+
+def _normalize_validation_status(value: str) -> str:
+    return {
+        "valid": "passed",
+        "invalid": "failed",
+    }.get(value, value)
 
 
 def _iso_datetime(value: Any) -> Any:

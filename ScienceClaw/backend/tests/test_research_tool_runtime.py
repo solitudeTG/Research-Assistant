@@ -388,6 +388,68 @@ def test_supervisor_guard_lifecycle_uses_explicit_decision_source(monkeypatch):
     assert lifecycle["delegation_decision"]["trigger"] == "boundary_audit_or_trust_check"
 
 
+@pytest.mark.asyncio
+async def test_runner_builds_reader_scope_from_session_project_evidence(monkeypatch):
+    from backend.deepagent import runner
+
+    calls = []
+
+    async def fake_get_project(database_url, *, session_id, user_id):
+        calls.append(("project", database_url, session_id, user_id))
+        return type("Project", (), {"project_id": "project-1"})()
+
+    async def fake_list_scope(database_url, *, session_id, project_id, limit, per_paper_limit):
+        calls.append(("scope", database_url, session_id, project_id, limit, per_paper_limit))
+        return [
+            {
+                "evidence_id": 17,
+                "chunk_id": "chunk-a",
+                "paper_id": "paper-a",
+                "title": "Paper A",
+                "section": "Methods",
+                "quote": "Paper A uses retrieval.",
+                "source_type": "paper",
+            },
+            {
+                "evidence_id": 18,
+                "chunk_id": "chunk-b",
+                "paper_id": "paper-b",
+                "title": "Paper B",
+                "section": "Results",
+                "quote": "Paper B uses reranking.",
+                "source_type": "paper",
+            },
+        ]
+
+    monkeypatch.setattr(runner, "get_session_research_project_from_database", fake_get_project)
+    monkeypatch.setattr(runner, "list_reader_scope_evidence_from_database", fake_list_scope)
+
+    session = type("Session", (), {"session_id": "session-1", "user_id": "user-1"})()
+
+    package = await runner._reader_material_package_for_session(
+        session=session,
+        query="请综合项目中的两篇论文并审计证据边界",
+    )
+
+    assert calls[0][0] == "project"
+    assert calls[1] == (
+        "scope",
+        runner.settings.research_database_url,
+        "session-1",
+        "project-1",
+        12,
+        3,
+    )
+    assert package["reading_scope"] == {
+        "scope_type": "session_or_project_evidence",
+        "session_id": "session-1",
+        "project_id": "project-1",
+        "record_count": 2,
+        "paper_count": 2,
+    }
+    assert package["records"][0]["paper_id"] == "paper-a"
+
+
 def test_runner_task_calling_lifecycle_fallback_labels_deepagents_task(monkeypatch):
     async def unused_get_task_settings(*args, **kwargs):
         return SimpleNamespace()
@@ -533,6 +595,79 @@ async def test_deep_agent_uses_enabled_registry_subagent_definitions(monkeypatch
     subagents = captured["kwargs"]["subagents"]
     assert [subagent["name"] for subagent in subagents] == ["research_auditor"]
     assert subagents[0]["description"] == "Edited auditor description from registry."
+
+
+@pytest.mark.asyncio
+async def test_deep_agent_exposes_bound_external_tool_to_registry_subagent(monkeypatch, tmp_path):
+    captured = {}
+    paper_lookup = SimpleNamespace(
+        name="paper_lookup",
+        description="Look up paper metadata.",
+        metadata={"tool_pack": {"id": "literature", "label": "Literature"}},
+    )
+
+    class FakeSandbox:
+        def __init__(self, *, session_id: str, base_dir: str, **kwargs):
+            self.workspace = str(tmp_path / session_id)
+            (tmp_path / session_id).mkdir(parents=True, exist_ok=True)
+
+        async def get_context(self):
+            return {"success": False}
+
+    async def fake_list_subagents(database_url, *, enabled_only):
+        assert enabled_only is True
+        return [
+            SubagentDefinition(
+                name="methods_mapper",
+                display_name="Methods Mapper",
+                description="Map methods with a bound literature lookup tool.",
+                system_prompt="Use only bound tools.",
+                skill_refs=[],
+                allowed_tools=["paper_lookup"],
+                input_boundaries={"requires": ["question"]},
+                output_boundary="process_trace",
+                can_answer_user=False,
+                can_write_artifacts=False,
+                enabled=True,
+                validation_status="passed",
+            )
+        ]
+
+    def fake_create_deep_agent(**kwargs):
+        captured["kwargs"] = kwargs
+        return "compiled-agent"
+
+    monkeypatch.setattr(agent, "FullSandboxBackend", FakeSandbox)
+    monkeypatch.setattr(agent, "get_llm_model", lambda *args, **kwargs: SimpleNamespace(profile={"max_input_tokens": 4096}))
+    monkeypatch.setattr(agent, "_collect_tools", lambda **kwargs: [])
+    monkeypatch.setattr(agent, "_build_backend", lambda *args, **kwargs: "backend")
+    monkeypatch.setattr(agent, "create_deep_agent", fake_create_deep_agent)
+    monkeypatch.setattr(agent, "ensure_subagent_definitions_in_database", lambda database_url: None)
+    monkeypatch.setattr(agent, "list_subagent_definitions_from_database", fake_list_subagents)
+    monkeypatch.setattr(agent, "reload_external_tools", lambda force=False: [paper_lookup])
+    monkeypatch.setattr(agent, "_WORKSPACE_DIR", str(tmp_path))
+    monkeypatch.setattr(agent, "_BUILTIN_SKILLS_DIR", str(tmp_path / "missing-builtin"))
+    monkeypatch.setattr(agent, "_EXTERNAL_SKILLS_DIR", str(tmp_path / "missing-external"))
+    monkeypatch.setattr(agent._dir_watcher, "has_changed", lambda path: False)
+    monkeypatch.setitem(
+        sys.modules,
+        "backend.task_settings",
+        types.SimpleNamespace(TaskSettings=lambda: None),
+    )
+
+    await agent.deep_agent(
+        session_id="session-1",
+        task_settings=SimpleNamespace(
+            max_tokens=2048,
+            sandbox_exec_timeout=30,
+            max_output_chars=8000,
+        ),
+        active_tool_packs=set(),
+    )
+
+    subagents = captured["kwargs"]["subagents"]
+    assert [subagent["name"] for subagent in subagents] == ["methods_mapper"]
+    assert subagents[0]["tools"] == [paper_lookup]
 
 
 def test_chat_active_tool_packs_accept_only_research_packs(monkeypatch):

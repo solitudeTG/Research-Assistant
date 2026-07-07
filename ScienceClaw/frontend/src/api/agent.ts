@@ -309,9 +309,30 @@ export interface ResearchAgentDefinition {
   can_write_artifacts: boolean;
   enabled: boolean;
   version: number;
-  validation_status: 'valid' | 'invalid' | 'draft' | string;
+  validation_status: 'passed' | 'failed' | 'draft' | 'disabled' | 'system_managed' | string;
   citation_evidence: boolean;
   metadata: Record<string, unknown>;
+}
+
+export interface ResearchAgentCapabilityItem {
+  name: string;
+  description: string;
+  source: 'builtin_skill' | 'external_skill' | 'research_builtin' | 'external_tool' | string;
+  available: boolean;
+  blocked: boolean;
+  builtin?: boolean;
+  files?: string[];
+  file?: string;
+  tool_pack?: {
+    id: string;
+    label?: string;
+    research_workflow?: string;
+  };
+}
+
+export interface ResearchAgentCapabilities {
+  skills: ResearchAgentCapabilityItem[];
+  tools: ResearchAgentCapabilityItem[];
 }
 
 export interface ResearchAgentRun {
@@ -339,6 +360,7 @@ export interface ResearchAgentValidationResult {
   example_result?: unknown;
   validated_at: string;
   errors: string[];
+  published?: ResearchAgentDefinition;
 }
 
 export interface ResearchAgentUpdateRequest {
@@ -570,6 +592,13 @@ export async function listResearchAgents(): Promise<ResearchAgentDefinition[]> {
   return response.data.data.agents;
 }
 
+export async function listResearchAgentCapabilities(): Promise<ResearchAgentCapabilities> {
+  const response = await apiClient.get<ApiResponse<ResearchAgentCapabilities>>(
+    `/sessions/research/agents/capabilities`,
+  );
+  return response.data.data;
+}
+
 export async function listResearchAgentRuns(agentName: string, limit: number = 5): Promise<ResearchAgentRun[]> {
   const response = await apiClient.get<ApiResponse<{ agent_name: string; runs: ResearchAgentRun[] }>>(
     `/sessions/research/agents/${encodeURIComponent(agentName)}/runs`,
@@ -592,6 +621,13 @@ export async function updateResearchAgent(
   const response = await apiClient.patch<ApiResponse<{ agent: ResearchAgentDefinition }>>(
     `/sessions/research/agents/${encodeURIComponent(agentName)}`,
     payload,
+  );
+  return response.data.data.agent;
+}
+
+export async function rollbackResearchAgent(agentName: string): Promise<ResearchAgentDefinition> {
+  const response = await apiClient.post<ApiResponse<{ agent: ResearchAgentDefinition }>>(
+    `/sessions/research/agents/${encodeURIComponent(agentName)}/rollback`,
   );
   return response.data.data.agent;
 }

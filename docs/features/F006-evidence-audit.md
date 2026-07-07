@@ -65,6 +65,7 @@ Evidence Audit can classify answer/report claims against eligible citation evide
 ### Evidence
 
 - [EV-001 Feature Governance Split Validation](../evidence/EV-001-feature-governance-split-validation.md)
+- [EV-023 Semantic Audit Multi-paper Verification](../evidence/EV-023-semantic-audit-multi-paper-verification.md)
 - Historical verification currently recorded in [F001](F001-project-vision-and-scope.md).
 
 ### Decisions / ADRs
@@ -119,6 +120,17 @@ Evidence Audit can classify answer/report claims against eligible citation evide
 | --- | --- | --- | --- | --- | --- | --- |
 | F006.1 | 2026-06-29 | `f18d0cf` | Evidence Audit appeared as a large block below each answer, making the Chat stream carry process/audit data. | Audit display was coupled to the answer component instead of the ScienceClaw ActivityPanel semantics. | Frontend contract requires `证据审计` to be rendered through ActivityPanel research sidecar and absent from ChatMessage answer cards. | verified |
 | F006.2 | 2026-06-29 | `d2d986a` | ActivityPanel rendered every audit claim by default, so long answers could display dozens of unsupported claim rows. | Claim-level audit data was technically correct but lacked a progressive disclosure boundary. | Frontend contract requires approved claims to render by default while unsupported/invalid claims are collapsed behind `unsupportedAuditClaimsExpanded`. | verified |
+| F006.3 | 2026-07-07 | pending | Interview-facing workflow needed claim-level semantic audit fields and stable finding codes beyond the MVP counters. | The MVP audit payload exposed support counters but not enough machine-checkable rationale, source quality, semantic relevance, or cited-evidence details per claim. | F022 adds backward-compatible `support_status`, semantic/source quality scores, `cited_evidence`, rationale, and finding codes; focused audit/evaluation/golden tests verify the contract. | pending |
+
+## Patch Churn Review
+
+F006 reached three patch rows because the audit surface has evolved from MVP support counters into calibrated ActivityPanel display and now semantic claim-level payloads. The patches converge on one invariant: claim support must be inspectable without turning context, process, or model output into citation evidence.
+
+- F006.1 moved audit detail out of Chat answer cards and into ActivityPanel.
+- F006.2 added progressive disclosure for noisy unsupported/invalid rows.
+- F006.3 adds machine-checkable semantic fields and stable finding codes while preserving the old counters for compatibility.
+
+Current judgment: F006.3 is still aligned with F006 because it strengthens the audit contract rather than adding a separate source-acquisition or peer-review truth feature. Further changes that introduce LLM entailment judging or source-quality modeling should be split into a new Feature or ADR.
 
 ## Evidence
 

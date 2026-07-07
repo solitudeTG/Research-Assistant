@@ -4,7 +4,7 @@ doc_kind: feature
 status: completed
 owner: solitudeTG
 created: 2026-06-30
-updated: 2026-06-30
+updated: 2026-07-06
 ---
 
 # F019: Research Quality Evaluation Harness
@@ -41,7 +41,11 @@ updated: 2026-06-30
 
 ## Current Status
 
-Completed for the first evaluation-harness slice. The backend now has a reusable quality gate module, three default gate profiles, a CLI validator for answer JSON, and focused tests proving pass/fail behavior.
+Completed for the F019.1 golden eval follow-up. The backend has a reusable quality gate module, default gate profiles, a CLI validator for answer JSON, deterministic payload golden cases, and live UI golden eval support.
+
+F019.1 extends the first slice into a real-paper golden eval harness with payload mode and live UI mode. Payload mode passes 5/5 deterministic cases. Final live UI mode completes login, session creation, UI upload, indexing wait, answer/report generation, trace/file collection, artifact export, machine-readable result parsing, and the stricter whole-paper summary quality gate.
+
+F019.2 expands the demo/benchmark loop without changing the ScienceClaw workbench shell. The golden cases now make the interview-facing coverage explicit: evidence QA, whole-paper summary, multi-paper synthesis, and insufficient evidence. The runner writes stable `results.json`, `summary.md`, case payload snapshots, and failure summaries; each failed finding is decorated with owning module hints such as F005 retrieval, F006 audit, F011 admission, F017 synthesis, F018 calibration, F019 harness, and F020 multi-agent when applicable. Payload mode is the reliable benchmark path; live UI remains a higher-cost partial path with one real-paper whole-paper summary case.
 
 ## Decision Context
 
@@ -65,6 +69,9 @@ Research Assistant 的核心价值不是更多入口，而是可信工作流。F
 ### Evidence
 
 - [EV-010 F019 Research Quality Evaluation Harness Verification](../evidence/EV-010-f019-research-quality-evaluation-harness-verification.md)
+- [EV-018 F019 Golden Eval Live UI E2E](../evidence/EV-018-f019-golden-eval-live-ui-e2e.md)
+- [EV-022 F019 Golden Eval Benchmark Expansion](../evidence/EV-022-f019-golden-eval-benchmark-expansion.md)
+- [EV-023 Semantic Audit Multi-paper Verification](../evidence/EV-023-semantic-audit-multi-paper-verification.md)
 
 ### Decisions / ADRs
 
@@ -74,9 +81,15 @@ Research Assistant 的核心价值不是更多入口，而是可信工作流。F
 
 - None yet.
 
+### External Context
+
+- Local live UI services at `http://127.0.0.1:5173` and proxied API `http://127.0.0.1:5173/api/v1` were used for EV-018.
+- Real paper fixtures are local files under `paper_data/`.
+
 ### Specs / Plans
 
-- None.
+- [2026-07-04 Research Golden Eval Live UI Design](../superpowers/specs/2026-07-04-research-golden-eval-live-ui-design.md)
+- [2026-07-04 Research Golden Eval Live UI Plan](../superpowers/plans/2026-07-04-research-golden-eval-live-ui.md)
 
 ### Related Features
 
@@ -92,6 +105,15 @@ Research Assistant 的核心价值不是更多入口，而是可信工作流。F
 - [x] Evidence QA quality gate rejects context-only sources such as memory as citations.
 - [x] Non-evidence turn quality gate accepts skipped retrieval and zero citations.
 - [x] CLI returns non-zero when a saved answer JSON fails the selected quality gate.
+- [x] Golden eval case file defines deterministic payload cases and a live UI case against real paper fixtures.
+- [x] Payload golden eval writes JSON/Markdown run summaries and passes the deterministic seed set.
+- [x] Live UI golden eval drives a real browser session through login, chat session creation, UI PDF upload, indexing wait, answer/report generation, trace/file collection, and artifact export.
+- [x] Live UI golden eval maps quality findings back to likely owning modules such as F017 and F006.
+- [x] Live whole-paper golden case passes the stricter `llm_section_global` and unsupported-claim quality gate.
+- [x] Golden eval cases explicitly cover evidence QA, whole-paper summary, multi-paper synthesis/comparison, and insufficient evidence.
+- [x] Payload runner emits machine-readable owner module hints per failed finding and per case.
+- [x] Payload runner can write case-level answer snapshots and failed-case Markdown summaries while continuing after individual failures.
+- [x] CLI supports an interview-friendly command shape with `--payload-dir` and `--output-dir` while retaining the prior `--output` path.
 
 ## Acceptance Map
 
@@ -100,6 +122,10 @@ Research Assistant 的核心价值不是更多入口，而是可信工作流。F
 | Quality gate is reusable. | `evaluate_research_answer` accepts `ResearchAnswer.to_dict()`-shaped mappings and returns structured metrics/findings. | EV-010 focused tests. | Passed |
 | Citation boundary is guarded. | Memory source in citations fails the evidence QA gate. | EV-010 focused tests. | Passed |
 | Route-specific expectations are explicit. | Whole-paper, evidence QA, and non-evidence turn gates encode different expectations. | EV-010 focused tests and CLI test. | Passed |
+| Golden eval is runnable outside hand inspection. | CLI can run payload and live UI modes and emit parseable `results.json`, `summary.md`, and case artifacts. | EV-018 payload/live commands. | Passed |
+| Live UI quality is currently acceptable for the seed case. | Live whole-paper summary should use `llm_section_global` and keep unsupported claim ratio under threshold. | EV-018 final live run. | Passed |
+| Interview benchmark covers the major research-quality modes. | Payload golden cases cover evidence QA, whole-paper summary, multi-paper synthesis, and insufficient evidence with explicit citation/context boundaries. | EV-022 payload command and focused tests. | Passed |
+| Failures are attributable. | Failed findings include stable codes and owner module hints; failed cases write Markdown summaries. | EV-022 focused tests. | Passed |
 
 ## State Timeline
 
@@ -107,22 +133,43 @@ Research Assistant 的核心价值不是更多入口，而是可信工作流。F
 | --- | --- | --- | --- | --- |
 | 2026-06-30 | active | User approved F019 after current capability audit | This Feature | Created to own quality evaluation rather than another UI/product surface. |
 | 2026-06-30 | completed | First harness implementation verified | EV-010 | Evaluation module, default gates, CLI, and tests landed. |
+| 2026-07-04 | completed | User chose plan B with real live UI E2E | EV-018 | Golden eval now has payload/live modes; final live chain and quality gate pass for the seed whole-paper case. |
+| 2026-07-06 | completed | User requested interview-facing benchmark expansion | EV-022 | Payload golden eval now has explicit coverage and failure attribution; live UI boundary remains documented. |
 
 ## Patch History
 
-None yet.
+| Patch | Date | Commit | Symptom | Root Cause | Protection | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| F019.1 | 2026-07-04 | pending | F019 could validate saved answer JSON but could not run real-paper golden eval through live UI. | The first slice stopped at structural answer payload validation; no golden cases or live UI artifact capture existed. | Added golden eval module, CLI, deterministic payload fixtures, live UI bridge, answer/report artifact export, EV-018. | Completed for seed golden set. |
+| F019.2 | 2026-07-06 | pending | Golden eval coverage and failure attribution were still too seed/demo-oriented for interview demonstration. | The F019.1 runner could pass seed payload/live cases, but case intent and owner-module attribution were not fully machine-readable. | Added explicit insufficient-evidence and multi-paper thresholds, owner hints in `results.json`, failed-case summaries, CLI aliases, focused tests, and EV-022. | Completed for payload benchmark expansion. |
+| F019.3 | 2026-07-06 | pending | Review found payload mode could pass with missing declared paper fixtures or missing required report artifacts. | Payload evaluation treated `paper_paths` and `required_outputs` as descriptive metadata instead of preflighted case contract. | Added payload preflight findings for missing paper fixtures and required report artifacts, copied report payload snapshots when present, and added negative regression tests. | Completed review hardening. |
+| F019.4 | 2026-07-07 | pending | Golden eval needed to verify semantic audit statuses/finding codes and live UI needed a two-paper synthesis/refusal A/B runner. | The F019.3 harness enforced structural payload contracts but did not assert claim-level semantic fields or run the requested multi-paper live path. | F022 adds semantic audit field checks, expected support/finding-code thresholds, expanded payload cases, and semantic multi-paper live UI script assertions. | pending |
+
+## Patch Churn Review
+
+F019 has three follow-up rows because the first slice deliberately started as a small quality gate, then grew into an interview-facing golden eval loop. The patches are converging on one invariant rather than adding unrelated scenario branches:
+
+- F019.1 moved from saved answer JSON validation to runnable real-paper golden eval artifacts.
+- F019.2 made case coverage and failure attribution explicit for payload benchmark demonstration.
+- F019.3 moved validation upstream from answer-only evaluation into case preflight, so declared fixtures and required artifacts are enforced before a case can pass.
+
+Current judgment: another local patch is still acceptable only if it strengthens the same case-contract boundary. If future fixes add more ad hoc per-case rules, stop and consider splitting a new evaluation-schema Feature or ADR. The protection is now automated through focused regression tests for missing paper fixtures, missing required report payloads, multi-paper citation coverage, insufficient-evidence citation refusal, and owner-module attribution.
 
 ## Evidence
 
-[EV-010 F019 Research Quality Evaluation Harness Verification](../evidence/EV-010-f019-research-quality-evaluation-harness-verification.md)
+- [EV-010 F019 Research Quality Evaluation Harness Verification](../evidence/EV-010-f019-research-quality-evaluation-harness-verification.md)
+- [EV-018 F019 Golden Eval Live UI E2E](../evidence/EV-018-f019-golden-eval-live-ui-e2e.md)
+- [EV-022 F019 Golden Eval Benchmark Expansion](../evidence/EV-022-f019-golden-eval-benchmark-expansion.md)
 
 ## Recovery Snapshot
 
 - Read first: this Feature, F004, F011, F017, F018.
-- Current capability: quality gates can now fail route mismatches, weak citation count, invalid citation source type, wrong summary synthesis mode, context-boundary drift, invalid-source claims, and noisy unsupported ratio.
-- Known risks: This is still a structural/contract quality gate, not a semantic truth judge. Real-paper golden cases and LLM entailment judging remain future work.
-- Next safe action: Use this harness against live UI/API answer JSON from `paper_data` and then tune F017 prompt or F011 thresholds based on measured failures.
+- Current capability: quality gates can fail route mismatches, weak citation count, excessive citation count in insufficient-evidence cases, invalid citation source type, wrong summary synthesis mode, context-boundary drift, invalid-source claims, noisy unsupported ratio, missing multi-paper citation coverage, missing declared paper fixtures, missing required report artifacts, and now live UI golden eval regressions.
+- Known risks: This is still a structural/contract quality gate, not a semantic truth judge. Only 2 real PDFs are currently available in `paper_data`; the third-paper golden case remains future work. Payload mode is deterministic and currently the recommended interview benchmark. Live UI still covers only one whole-paper case and should be treated as a higher-cost smoke/e2e path rather than the full benchmark.
+- Latest live state: final execution chain passed and quality gate passed with `summary_mode=llm_section_global`, `citation_count=19`, and `unsupported_claim_ratio=0.3333`.
+- Latest payload benchmark state: 2026-07-06 F019.3 review-hardening run passed 5/5 payload cases and emitted `.pytest_tmp/f0192-review-golden-output/results.json` plus `.pytest_tmp/f0192-review-golden-output/summary.md`.
+- Next safe action: Add a third real paper and extend live UI coverage to at least one evidence-QA or multi-paper case before presenting live mode as representative of the whole benchmark.
 
 ## Next Step
 
-Create a small real-paper golden eval set and wire live UI/API answer export into the quality CLI.
+Add a third real paper, add at least one live evidence-QA or multi-paper case, and measure repeated-run stability without weakening citation evidence boundaries.

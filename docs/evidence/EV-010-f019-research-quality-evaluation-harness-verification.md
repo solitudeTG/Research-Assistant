@@ -28,7 +28,7 @@ Not covered:
 - Live UI answer JSON export integration.
 - Automatic threshold tuning.
 
-## Commands
+## Checks
 
 ```powershell
 $env:PYTHONPATH='E:\Self-Project\Research-Assistant\ScienceClaw;E:\Self-Project\Research-Assistant'; pytest ScienceClaw/backend/tests/test_research_evaluation.py -q --basetemp=.pytest_tmp\f019-eval

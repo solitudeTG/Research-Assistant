@@ -28,7 +28,7 @@ Not covered:
 - Multi-paper synthesis or Multi-Agent workflow.
 - Source-quality scoring beyond F004/F006 identity and audit boundaries.
 
-## Commands
+## Checks
 
 ```powershell
 $env:PYTHONPATH='E:\Self-Project\Research-Assistant;E:\Self-Project\Research-Assistant\ScienceClaw'; pytest ScienceClaw/backend/tests/test_research_audit.py ScienceClaw/backend/tests/test_research_reports.py ScienceClaw/backend/tests/test_research_frontend_contracts.py ScienceClaw/backend/tests/test_research_repository.py ScienceClaw/backend/tests/test_research_database.py -q --basetemp=.pytest_tmp\f018-focused2
