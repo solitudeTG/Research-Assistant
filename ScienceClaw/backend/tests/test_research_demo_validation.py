@@ -221,6 +221,68 @@ def test_reused_llm_artifact_records_path_and_metrics(tmp_path):
     assert case_c["artifact_paths"]["reused_results_path"].endswith("results.json")
 
 
+def test_full_chain_can_pass_when_reused_case_c_artifact_is_llm_enhanced(tmp_path):
+    artifact_dir = tmp_path / "case-c-accepted"
+    artifact_dir.mkdir()
+    (artifact_dir / "results.json").write_text(
+        json.dumps(
+            {
+                "session_id": "session-c",
+                "artifact_paths": {"answer_payload_path": str(artifact_dir / "case-c-answer.json")},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (artifact_dir / "case-c-answer.json").write_text(
+        json.dumps(
+            {
+                "audit": {
+                    "semantic_auditor": {"mode": "llm_enhanced", "model": "qwen3.7-plus"},
+                    "claims": [{"finding_code": "llm_insufficient_evidence"}],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    case_d_dir = tmp_path / "case-d"
+    case_d_dir.mkdir()
+    (case_d_dir / "results.json").write_text(
+        json.dumps(
+            {
+                "session_id": "session-d",
+                "citation_count": 53,
+                "quality_reports": {"literature_review": {"passed": True}},
+                "evidence_matrix_metrics": {"paper_count": 7, "theme_count": 4, "linked_cell_count": 28},
+                "artifact_paths": {
+                    "literature_review_path": str(case_d_dir / "literature-review.md"),
+                    "evidence_matrix_path": str(case_d_dir / "evidence-matrix.json"),
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    case_c_step, case_c = demo.reuse_llm_artifact_step(artifact_dir)
+    case_d_step = demo.StepResult(
+        name="case-d-literature-review-7paper",
+        status="pass",
+        output_path=str(case_d_dir),
+    )
+    results = demo.build_results(
+        run_id="run-1",
+        mode="full",
+        started_at="2026-07-07T00:00:00Z",
+        completed_at="2026-07-07T00:00:01Z",
+        steps=[case_c_step, case_d_step],
+        llm_case_c_policy="optional",
+        case_c=case_c,
+    )
+
+    assert results["overall_status"] == "pass"
+    assert results["case_c"]["semantic_auditor_mode"] == "llm_enhanced"
+    assert results["case_d"]["paper_count"] == 7
+
+
 def _fake_runner(results):
     def run(command, cwd, timeout_ms, output_dir):
         return results[command[0]]
