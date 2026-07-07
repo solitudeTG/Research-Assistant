@@ -73,6 +73,7 @@ Research Assistant 的核心价值不是更多入口，而是可信工作流。F
 - [EV-022 F019 Golden Eval Benchmark Expansion](../evidence/EV-022-f019-golden-eval-benchmark-expansion.md)
 - [EV-023 Semantic Audit Multi-paper Verification](../evidence/EV-023-semantic-audit-multi-paper-verification.md)
 - [EV-024 LLM Semantic Auditor Verification](../evidence/EV-024-llm-semantic-auditor-verification.md)
+- [EV-026 Reproducible Demo Validation Chain Verification](../evidence/EV-026-reproducible-demo-validation-chain-verification.md)
 
 ### Decisions / ADRs
 

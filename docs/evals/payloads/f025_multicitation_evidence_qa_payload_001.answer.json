@@ -1,0 +1,76 @@
+{
+  "answer_id": "f025-multicitation-evidence-qa-001",
+  "content": "Two paper citations support that the corpus discusses LEO beamforming as both narrow-beam communication and integrated communication/navigation design.",
+  "citations": [
+    {
+      "evidence_id": 201,
+      "chunk_id": "f025-chunk-201",
+      "paper_id": "paper-space-time",
+      "title": "Space-Time Beamforming for LEO Satellite Communications",
+      "section": "Introduction",
+      "page_start": 1,
+      "page_end": 1,
+      "quote": "Space-time beamforming is studied for narrow LEO satellite communication beams.",
+      "citation_label": "paper-space-time:Introduction:1",
+      "source_type": "paper",
+      "source_identity": {"paper_id": "paper-space-time"},
+      "evidence_scope": "project"
+    },
+    {
+      "evidence_id": 202,
+      "chunk_id": "f025-chunk-202",
+      "paper_id": "paper-comm-nav",
+      "title": "Joint Beamforming Design and Satellite Selection for Integrated Communication and Navigation in LEO Satellite Networks",
+      "section": "Introduction",
+      "page_start": 1,
+      "page_end": 1,
+      "quote": "Beamforming design and satellite selection are studied for integrated communication and navigation in LEO satellite networks.",
+      "citation_label": "paper-comm-nav:Introduction:1",
+      "source_type": "paper",
+      "source_identity": {"paper_id": "paper-comm-nav"},
+      "evidence_scope": "project"
+    }
+  ],
+  "citation_count": 2,
+  "context_boundaries": {
+    "citation_evidence": ["paper", "web", "database"],
+    "context_only_memory": ["memory"],
+    "process_trace": ["tool_logs", "runtime_results", "agent_lifecycle"],
+    "model_reasoning": ["model_reasoning"]
+  },
+  "summary_synthesis": {},
+  "evidence_admission": {"decision": "accepted"},
+  "task_route": {"route": "evidence_qa"},
+  "audit": {
+    "status": "approved",
+    "claim_count": 2,
+    "approved_claim_count": 2,
+    "partial_claim_count": 0,
+    "unsupported_claim_count": 0,
+    "invalid_source_count": 0,
+    "claims": [
+      {
+        "claim_id": "claim-1",
+        "claim_text": "The first citation supports narrow-beam LEO communication.",
+        "support_status": "supported",
+        "semantic_relevance_score": 1.0,
+        "source_quality_score": 1.0,
+        "evidence_ids": [201],
+        "cited_evidence": [{"source_type": "paper", "paper_id": "paper-space-time", "section": "Introduction", "chunk_id": "f025-chunk-201", "quote": "Space-time beamforming is studied for narrow LEO satellite communication beams."}],
+        "rationale": "The claim restates citation evidence.",
+        "finding_code": null
+      },
+      {
+        "claim_id": "claim-2",
+        "claim_text": "The second citation supports integrated communication/navigation beamforming.",
+        "support_status": "supported",
+        "semantic_relevance_score": 1.0,
+        "source_quality_score": 1.0,
+        "evidence_ids": [202],
+        "cited_evidence": [{"source_type": "paper", "paper_id": "paper-comm-nav", "section": "Introduction", "chunk_id": "f025-chunk-202", "quote": "Beamforming design and satellite selection are studied for integrated communication and navigation in LEO satellite networks."}],
+        "rationale": "The claim restates citation evidence.",
+        "finding_code": null
+      }
+    ]
+  }
+}

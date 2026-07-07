@@ -58,6 +58,9 @@ class GoldenEvalCase:
     mode: GoldenEvalMode
     paper_paths: list[str]
     question: str
+    expected_result: Literal["pass", "fail"] = "pass"
+    owner_module_hints: list[str] = field(default_factory=list)
+    failure_hint: str | None = None
     quality_thresholds: GoldenEvalThresholds = field(default_factory=GoldenEvalThresholds)
     required_outputs: GoldenEvalRequiredOutputs = field(default_factory=GoldenEvalRequiredOutputs)
     answer_payload_path: str | None = None
@@ -99,6 +102,8 @@ class GoldenEvalCaseResult:
     mode: str
     passed: bool
     quality: dict[str, Any]
+    expected_result: str = "pass"
+    failure_hint: str | None = None
     answer_payload_path: str | None = None
     report_payload_path: str | None = None
     answer_payload: dict[str, Any] | None = None
@@ -174,17 +179,20 @@ def evaluate_payload_cases(
             answer_payload = json.loads(answer_path.read_text(encoding="utf-8"))
             quality = evaluate_research_answer(answer_payload, case.to_quality_requirement())
             quality_dict = _quality_dict_with_case_checks(case, answer_payload, quality, extra_findings=preflight_findings)
+            passed = _case_passed_for_expected_result(case, quality_dict)
             report_path = _resolve_payload_path(root_path, payload_path, case.report_payload_path) if case.report_payload_path else None
             results.append(
                 GoldenEvalCaseResult(
                     case_id=case.case_id,
                     task_type=case.task_type,
                     mode=case.mode,
-                    passed=bool(quality_dict.get("passed")),
+                    passed=passed,
                     quality=quality_dict,
+                    expected_result=case.expected_result,
+                    failure_hint=case.failure_hint,
                     answer_payload_path=str(answer_path),
                     report_payload_path=str(report_path) if report_path else None,
-                    owner_module_hints=owner_module_hints_for_quality(quality_dict),
+                    owner_module_hints=sorted(set(case.owner_module_hints) | set(owner_module_hints_for_quality(quality_dict))),
                 )
             )
         except Exception as exc:  # Batch eval must preserve failed cases.
@@ -196,6 +204,8 @@ def evaluate_payload_cases(
                     mode=case.mode,
                     passed=False,
                     quality=quality_dict,
+                    expected_result=case.expected_result,
+                    failure_hint=case.failure_hint,
                     owner_module_hints=owner_module_hints_for_quality(quality_dict),
                     error=str(exc),
                 )
@@ -212,15 +222,18 @@ def evaluate_live_ui_case(
     assert_live_golden_eval_result(ui_result, require_report=case.required_outputs.report)
     quality = evaluate_research_answer(ui_result.answer_payload, case.to_quality_requirement())
     quality_dict = _quality_dict_with_case_checks(case, ui_result.answer_payload, quality)
+    passed = _case_passed_for_expected_result(case, quality_dict)
     result = GoldenEvalCaseResult(
         case_id=case.case_id,
         task_type=case.task_type,
         mode="live_ui",
-        passed=bool(quality_dict.get("passed")),
+        passed=passed,
         quality=quality_dict,
+        expected_result=case.expected_result,
+        failure_hint=case.failure_hint,
         answer_payload=ui_result.answer_payload,
         report_payload=ui_result.report_payload,
-        owner_module_hints=owner_module_hints_for_quality(quality_dict),
+        owner_module_hints=sorted(set(case.owner_module_hints) | set(owner_module_hints_for_quality(quality_dict))),
     )
     return GoldenEvalRunResult(run_id=run_id or f"live-ui-{uuid.uuid4().hex[:8]}", mode="live-ui", cases=[result])
 
@@ -313,6 +326,11 @@ def render_markdown_summary(run_result: GoldenEvalRunResult) -> str:
         )
         if case.error:
             lines.append(f"- Error: {case.error}")
+        if case.expected_result == "fail":
+            lines.append("- Expected result: `fail` (negative gate case)")
+            lines.append(f"- Actual quality passed: `{case.quality.get('actual_quality_passed')}`")
+        if case.failure_hint:
+            lines.append(f"- Failure hint: {case.failure_hint}")
         findings = case.quality.get("findings", []) if isinstance(case.quality, Mapping) else []
         if findings:
             lines.append("- Findings:")
@@ -418,6 +436,9 @@ def _parse_case(raw_case: Any) -> GoldenEvalCase:
         mode=_required_str(raw_case, "mode"),  # type: ignore[arg-type]
         paper_paths=[str(path) for path in raw_case.get("paper_paths", [])],
         question=_required_str(raw_case, "question"),
+        expected_result=str(raw_case.get("expected_result") or "pass"),  # type: ignore[arg-type]
+        owner_module_hints=[str(hint) for hint in raw_case.get("owner_module_hints", [])],
+        failure_hint=raw_case.get("failure_hint"),
         answer_payload_path=raw_case.get("answer_payload_path"),
         report_payload_path=raw_case.get("report_payload_path"),
         quality_thresholds=GoldenEvalThresholds(
@@ -597,8 +618,30 @@ def _quality_dict_with_case_checks(
     decorated_findings = [_decorate_finding(finding) for finding in findings]
     quality_dict["findings"] = decorated_findings
     quality_dict["owner_module_hints"] = owner_module_hints_for_quality(quality_dict)
-    quality_dict["passed"] = not any(finding.get("severity", "error") == "error" for finding in decorated_findings)
+    actual_passed = not any(finding.get("severity", "error") == "error" for finding in decorated_findings)
+    quality_dict["actual_quality_passed"] = actual_passed
+    if case.expected_result == "fail":
+        quality_dict["expected_failure_observed"] = not actual_passed
+        if actual_passed:
+            decorated = _decorate_finding(
+                _finding_dict(
+                    "expected_failure_not_observed",
+                    "Case declares expected_result='fail' but the quality gate passed.",
+                    "expected_result",
+                )
+            )
+            decorated_findings.append(decorated)
+            quality_dict["findings"] = decorated_findings
+            quality_dict["expected_failure_observed"] = False
+    quality_dict["passed"] = _case_passed_for_expected_result(case, quality_dict)
     return quality_dict
+
+
+def _case_passed_for_expected_result(case: GoldenEvalCase, quality_dict: Mapping[str, Any]) -> bool:
+    actual_passed = bool(quality_dict.get("actual_quality_passed", quality_dict.get("passed")))
+    if case.expected_result == "fail":
+        return not actual_passed and bool(quality_dict.get("expected_failure_observed", True))
+    return actual_passed
 
 
 def _exception_quality(case: GoldenEvalCase, exc: Exception) -> dict[str, Any]:

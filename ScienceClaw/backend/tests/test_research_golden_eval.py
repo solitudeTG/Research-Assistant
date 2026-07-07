@@ -451,6 +451,84 @@ def test_payload_golden_eval_accepts_required_report_payload(tmp_path):
     assert (output_dir / "cases" / "with-report.report.json").exists()
 
 
+def test_payload_golden_eval_expected_failure_requires_actual_gate_failure(tmp_path):
+    from backend.research_assistant.golden_eval import evaluate_payload_cases, load_golden_cases
+
+    _write_paper_fixtures(tmp_path, *[f"p{index}.pdf" for index in range(1, 8)])
+    payload = _literature_review_payload()
+    payload["evidence_matrix"] = {}
+    payload["citations"][0]["source_type"] = "memory"
+    (tmp_path / "bad-literature.answer.json").write_text(json.dumps(payload), encoding="utf-8")
+    (tmp_path / "bad-literature.report.json").write_text(json.dumps({"report_id": "bad"}), encoding="utf-8")
+    case = _case("bad-literature", "bad-literature.answer.json", min_citations=7)
+    case["task_type"] = "literature_review"
+    case["paper_paths"] = [f"paper_data/p{index}.pdf" for index in range(1, 8)]
+    case["report_payload_path"] = "bad-literature.report.json"
+    case["required_outputs"]["report"] = True
+    case["expected_result"] = "fail"
+    case["failure_hint"] = "Missing matrix and context-only citation must be rejected by F024/F004 gates."
+    case["quality_thresholds"].update(
+        {
+            "min_distinct_cited_papers": 7,
+            "min_evidence_matrix_papers": 7,
+            "min_evidence_matrix_themes": 4,
+            "min_theme_paper_cells": 5,
+            "min_evidence_linked_cells": 10,
+            "required_report_sections": ["Evidence Matrix", "Cross-paper synthesis"],
+        }
+    )
+    cases_path = tmp_path / "cases.json"
+    cases_path.write_text(json.dumps({"cases": [case]}), encoding="utf-8")
+
+    run_result = evaluate_payload_cases(load_golden_cases(cases_path), root=tmp_path)
+
+    assert run_result.passed
+    result = run_result.cases[0]
+    assert result.expected_result == "fail"
+    assert result.quality["actual_quality_passed"] is False
+    assert result.quality["expected_failure_observed"] is True
+    assert "evidence_matrix_paper_count_too_low" in {finding["code"] for finding in result.quality["findings"]}
+
+
+def test_payload_golden_eval_expected_failure_fails_when_bad_case_accidentally_passes(tmp_path):
+    from backend.research_assistant.golden_eval import evaluate_payload_cases, load_golden_cases
+
+    _write_paper_fixtures(tmp_path, *[f"p{index}.pdf" for index in range(1, 8)])
+    payload = _literature_review_payload()
+    (tmp_path / "good-literature.answer.json").write_text(json.dumps(payload), encoding="utf-8")
+    (tmp_path / "good-literature.report.json").write_text(json.dumps({"report_id": "good"}), encoding="utf-8")
+    case = _case("good-literature", "good-literature.answer.json", min_citations=7)
+    case["task_type"] = "literature_review"
+    case["paper_paths"] = [f"paper_data/p{index}.pdf" for index in range(1, 8)]
+    case["report_payload_path"] = "good-literature.report.json"
+    case["required_outputs"]["report"] = True
+    case["expected_result"] = "fail"
+    case["quality_thresholds"].update(
+        {
+            "min_distinct_cited_papers": 7,
+            "min_evidence_matrix_papers": 7,
+            "min_evidence_matrix_themes": 4,
+            "min_theme_paper_cells": 5,
+            "min_evidence_linked_cells": 10,
+            "required_report_sections": [
+                "Evidence Matrix",
+                "Cross-paper synthesis",
+                "Agreements",
+                "Disagreements / gaps",
+                "Limitations",
+            ],
+        }
+    )
+    cases_path = tmp_path / "cases.json"
+    cases_path.write_text(json.dumps({"cases": [case]}), encoding="utf-8")
+
+    run_result = evaluate_payload_cases(load_golden_cases(cases_path), root=tmp_path)
+
+    assert not run_result.passed
+    assert run_result.cases[0].quality["actual_quality_passed"] is True
+    assert run_result.cases[0].quality["findings"][0]["code"] == "expected_failure_not_observed"
+
+
 def test_assert_live_golden_eval_result_rejects_missing_answer_payload():
     from backend.research_assistant.golden_eval import assert_live_golden_eval_result
 

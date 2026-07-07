@@ -68,6 +68,7 @@ Completed. Backend audit/answer/evaluation/golden/live E2E script changes have b
 ### Evidence
 
 - [EV-024 LLM Semantic Auditor Verification](../evidence/EV-024-llm-semantic-auditor-verification.md)
+- [EV-026 Reproducible Demo Validation Chain Verification](../evidence/EV-026-reproducible-demo-validation-chain-verification.md)
 
 ### Decisions / ADRs
 

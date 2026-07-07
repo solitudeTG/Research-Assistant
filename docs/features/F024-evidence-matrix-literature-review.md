@@ -70,6 +70,7 @@ Completed. Latest accepted live UI session: `fbStXYrymmqCgeRnZUeKQ2`; `paper_cou
 ### Evidence
 
 - [EV-025 Evidence Matrix Literature Review Verification](../evidence/EV-025-evidence-matrix-literature-review-verification.md)
+- [EV-026 Reproducible Demo Validation Chain Verification](../evidence/EV-026-reproducible-demo-validation-chain-verification.md)
 
 ### Decisions / ADRs
 
