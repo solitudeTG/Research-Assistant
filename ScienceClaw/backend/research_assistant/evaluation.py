@@ -32,6 +32,13 @@ class ResearchQualityRequirement:
     require_context_boundaries: bool = True
     require_original_evidence_citations: bool = True
     require_semantic_audit_fields: bool = True
+    require_llm_semantic_audit: bool = False
+    allowed_semantic_auditor_modes: set[str] = field(default_factory=lambda: {"llm_enhanced"})
+    min_evidence_matrix_papers: int | None = None
+    min_evidence_matrix_themes: int | None = None
+    min_theme_paper_cells: int | None = None
+    min_evidence_linked_cells: int | None = None
+    required_report_sections: set[str] = field(default_factory=set)
 
 
 @dataclass(frozen=True)
@@ -77,6 +84,28 @@ def evidence_qa_quality_gate(*, max_unsupported_claim_ratio: float = 0.5) -> Res
     )
 
 
+def literature_review_quality_gate(*, max_unsupported_claim_ratio: float = 0.65) -> ResearchQualityRequirement:
+    return ResearchQualityRequirement(
+        case_id="literature_review",
+        expected_route="evidence_qa",
+        expected_admission="accepted",
+        min_citation_count=7,
+        required_summary_mode="evidence_matrix_literature_review",
+        max_unsupported_claim_ratio=max_unsupported_claim_ratio,
+        min_evidence_matrix_papers=7,
+        min_evidence_matrix_themes=4,
+        min_theme_paper_cells=5,
+        min_evidence_linked_cells=10,
+        required_report_sections={
+            "Evidence Matrix",
+            "Cross-paper synthesis",
+            "Agreements",
+            "Disagreements / gaps",
+            "Limitations",
+        },
+    )
+
+
 def non_evidence_turn_quality_gate() -> ResearchQualityRequirement:
     return ResearchQualityRequirement(
         case_id="non_evidence_turn",
@@ -99,6 +128,7 @@ def evaluate_research_answer(
     admission = _as_mapping(answer_payload.get("evidence_admission"))
     summary = _as_mapping(answer_payload.get("summary_synthesis"))
     boundaries = _as_mapping(answer_payload.get("context_boundaries"))
+    evidence_matrix = _as_mapping(answer_payload.get("evidence_matrix"))
 
     claim_count = _as_int(audit.get("claim_count"))
     unsupported_count = _as_int(audit.get("unsupported_claim_count"))
@@ -132,6 +162,11 @@ def evaluate_research_answer(
                 if isinstance(claim, Mapping) and claim.get("support_status")
             }
         ),
+        "semantic_auditor_mode": _as_mapping(audit.get("semantic_auditor")).get("mode"),
+        "semantic_auditor_status": _as_mapping(audit.get("semantic_auditor")).get("llm_auditor_status"),
+        "evidence_matrix_paper_count": _as_int(evidence_matrix.get("paper_count")),
+        "evidence_matrix_theme_count": len(_as_sequence(evidence_matrix.get("themes"))),
+        "evidence_matrix_linked_cell_count": _evidence_matrix_linked_cell_count(evidence_matrix),
     }
 
     _check_equals(findings, "route", route.get("route"), requirement.expected_route, "task_route.route")
@@ -182,6 +217,10 @@ def evaluate_research_answer(
     _check_citations(findings, citations, requirement)
     if requirement.require_semantic_audit_fields:
         _check_semantic_audit_claims(findings, audit)
+    if requirement.require_llm_semantic_audit:
+        _check_llm_semantic_auditor(findings, audit, requirement)
+    _check_evidence_matrix(findings, evidence_matrix, requirement)
+    _check_literature_review_report(findings, answer_payload, requirement)
 
     passed = not any(finding.severity == "error" for finding in findings)
     return ResearchQualityReport(
@@ -314,6 +353,7 @@ def _check_semantic_audit_claims(findings: list[ResearchQualityFinding], audit: 
         "supported",
         "partial",
         "unsupported",
+        "overreach",
         "source_mismatch",
         "insufficient_evidence",
     }
@@ -370,6 +410,156 @@ def _check_semantic_audit_claims(findings: list[ResearchQualityFinding], audit: 
                     path=f"audit.claims[{index}].cited_evidence",
                 )
             )
+
+
+def _check_llm_semantic_auditor(
+    findings: list[ResearchQualityFinding],
+    audit: Mapping[str, Any],
+    requirement: ResearchQualityRequirement,
+) -> None:
+    metadata = _as_mapping(audit.get("semantic_auditor"))
+    mode = str(metadata.get("mode") or "")
+    if not metadata:
+        findings.append(
+            ResearchQualityFinding(
+                code="llm_semantic_auditor_missing",
+                message="Audit payload is missing semantic_auditor metadata required by this case.",
+                path="audit.semantic_auditor",
+            )
+        )
+        return
+    if mode not in requirement.allowed_semantic_auditor_modes:
+        findings.append(
+            ResearchQualityFinding(
+                code="llm_semantic_auditor_mode_invalid",
+                message=f"Expected semantic auditor mode in {sorted(requirement.allowed_semantic_auditor_modes)!r}, got {mode!r}.",
+                path="audit.semantic_auditor.mode",
+            )
+        )
+    for index, claim in enumerate(_as_sequence(audit.get("claims"))):
+        if not isinstance(claim, Mapping):
+            continue
+        if not str(claim.get("deterministic_support_status") or "").strip():
+            findings.append(
+                ResearchQualityFinding(
+                    code="llm_semantic_audit_deterministic_status_missing",
+                    message=f"Audit claim {claim.get('claim_id') or index} is missing deterministic_support_status.",
+                    path=f"audit.claims[{index}].deterministic_support_status",
+                )
+            )
+        if not str(claim.get("llm_support_status") or "").strip():
+            findings.append(
+                ResearchQualityFinding(
+                    code="llm_semantic_audit_status_missing",
+                    message=f"Audit claim {claim.get('claim_id') or index} is missing llm_support_status.",
+                    path=f"audit.claims[{index}].llm_support_status",
+                )
+            )
+        if not str(claim.get("llm_rationale") or "").strip():
+            findings.append(
+                ResearchQualityFinding(
+                    code="llm_semantic_audit_rationale_missing",
+                    message=f"Audit claim {claim.get('claim_id') or index} is missing llm_rationale.",
+                    path=f"audit.claims[{index}].llm_rationale",
+                )
+            )
+
+
+def _check_evidence_matrix(
+    findings: list[ResearchQualityFinding],
+    evidence_matrix: Mapping[str, Any],
+    requirement: ResearchQualityRequirement,
+) -> None:
+    if requirement.min_evidence_matrix_papers is None and requirement.min_evidence_matrix_themes is None:
+        return
+    paper_count = _as_int(evidence_matrix.get("paper_count"))
+    themes = _as_sequence(evidence_matrix.get("themes"))
+    if paper_count < (requirement.min_evidence_matrix_papers or 0):
+        findings.append(
+            ResearchQualityFinding(
+                code="evidence_matrix_paper_count_too_low",
+                message=f"Expected evidence_matrix.paper_count >= {requirement.min_evidence_matrix_papers}, got {paper_count}.",
+                path="evidence_matrix.paper_count",
+            )
+        )
+    if len(themes) < (requirement.min_evidence_matrix_themes or 0):
+        findings.append(
+            ResearchQualityFinding(
+                code="evidence_matrix_theme_count_too_low",
+                message=f"Expected at least {requirement.min_evidence_matrix_themes} evidence matrix themes, got {len(themes)}.",
+                path="evidence_matrix.themes",
+            )
+        )
+    min_cells = requirement.min_theme_paper_cells or 0
+    for index, theme in enumerate(themes):
+        if not isinstance(theme, Mapping):
+            continue
+        cells = _as_sequence(theme.get("paper_cells"))
+        distinct_papers = {
+            str(cell.get("paper_id"))
+            for cell in cells
+            if isinstance(cell, Mapping) and str(cell.get("paper_id") or "").strip()
+        }
+        if len(distinct_papers) < min_cells:
+            findings.append(
+                ResearchQualityFinding(
+                    code="evidence_matrix_theme_coverage_too_low",
+                    message=f"Theme {theme.get('theme_id') or index} covers {len(distinct_papers)} papers; expected at least {min_cells}.",
+                    path=f"evidence_matrix.themes[{index}].paper_cells",
+                )
+            )
+    linked_cells = _evidence_matrix_linked_cell_count(evidence_matrix)
+    if linked_cells < (requirement.min_evidence_linked_cells or 0):
+        findings.append(
+            ResearchQualityFinding(
+                code="evidence_matrix_linked_cell_count_too_low",
+                message=f"Expected at least {requirement.min_evidence_linked_cells} cells with evidence ids or citation labels, got {linked_cells}.",
+                path="evidence_matrix.themes.paper_cells",
+            )
+        )
+
+
+def _check_literature_review_report(
+    findings: list[ResearchQualityFinding],
+    answer_payload: Mapping[str, Any],
+    requirement: ResearchQualityRequirement,
+) -> None:
+    if not requirement.required_report_sections:
+        return
+    report = _as_mapping(answer_payload.get("report"))
+    content = str(answer_payload.get("content") or "")
+    sections = {str(section) for section in _as_sequence(report.get("sections"))}
+    if not report.get("artifact"):
+        findings.append(
+            ResearchQualityFinding(
+                code="literature_review_report_missing",
+                message="Literature review requires a report artifact or answer report metadata.",
+                path="report.artifact",
+            )
+        )
+    for section in sorted(requirement.required_report_sections):
+        if section in sections or section in content:
+            continue
+        findings.append(
+            ResearchQualityFinding(
+                code="literature_review_report_section_missing",
+                message=f"Literature review report is missing required section {section!r}.",
+                path="report.sections",
+            )
+        )
+
+
+def _evidence_matrix_linked_cell_count(evidence_matrix: Mapping[str, Any]) -> int:
+    count = 0
+    for theme in _as_sequence(evidence_matrix.get("themes")):
+        if not isinstance(theme, Mapping):
+            continue
+        for cell in _as_sequence(theme.get("paper_cells")):
+            if not isinstance(cell, Mapping):
+                continue
+            if _as_sequence(cell.get("evidence_ids")) or _as_sequence(cell.get("citation_labels")):
+                count += 1
+    return count
 
 
 def _as_mapping(value: Any) -> Mapping[str, Any]:

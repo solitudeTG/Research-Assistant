@@ -195,6 +195,210 @@
         "report": false,
         "markdown_summary": true
       }
+    },
+    {
+      "case_id": "leo_llm_overreach_payload_001",
+      "task_type": "evidence_qa",
+      "mode": "payload",
+      "paper_paths": [
+        "paper_data/Space-Time_Beamforming_for_LEO_Satellite_Communications_Enabling_Extremely_Narrow_Beams(1).pdf"
+      ],
+      "question": "Does this LEO beamforming paper prove hospital patient safety outcomes?",
+      "answer_payload_path": "payloads/leo_llm_overreach_payload_001.answer.json",
+      "quality_thresholds": {
+        "min_citation_count": 1,
+        "max_unsupported_claim_ratio": 1.0,
+        "max_invalid_claims": 0,
+        "expected_support_statuses": ["overreach"],
+        "expected_finding_codes": ["llm_overreach"],
+        "require_llm_semantic_audit": true,
+        "allowed_semantic_auditor_modes": ["llm_enhanced"]
+      },
+      "required_outputs": {
+        "answer": true,
+        "report": false,
+        "markdown_summary": true
+      }
+    },
+    {
+      "case_id": "leo_llm_unsupported_payload_001",
+      "task_type": "evidence_qa",
+      "mode": "payload",
+      "paper_paths": [
+        "paper_data/Beamforming_Design_and_Satellite_Selection_for_Realizing_the_Integrated_Communication_and_Navigation_in_LEO_Satellite_Networks.pdf"
+      ],
+      "question": "Does this LEO beamforming citation support randomized clinical trial results?",
+      "answer_payload_path": "payloads/leo_llm_unsupported_payload_001.answer.json",
+      "quality_thresholds": {
+        "min_citation_count": 1,
+        "max_unsupported_claim_ratio": 1.0,
+        "max_invalid_claims": 0,
+        "expected_support_statuses": ["unsupported"],
+        "expected_finding_codes": ["llm_unsupported"],
+        "require_llm_semantic_audit": true,
+        "allowed_semantic_auditor_modes": ["llm_enhanced"]
+      },
+      "required_outputs": {
+        "answer": true,
+        "report": false,
+        "markdown_summary": true
+      }
+    },
+    {
+      "case_id": "f024_literature_review_7paper_payload_001",
+      "task_type": "literature_review",
+      "mode": "payload",
+      "paper_paths": [
+        "paper_data/f024_7paper_corpus/01-space-time-beamforming-leo.pdf",
+        "paper_data/f024_7paper_corpus/02-joint-beamforming-satellite-selection-ican.pdf",
+        "paper_data/f024_7paper_corpus/03-scalable-distributed-beamforming-networked-leo.pdf",
+        "paper_data/f024_7paper_corpus/04-direct-leo-satellite-to-smartphone-distributed-beamforming.pdf",
+        "paper_data/f024_7paper_corpus/05-hybrid-beamforming-massive-mimo-leo.pdf",
+        "paper_data/f024_7paper_corpus/06-isac-enabled-leo-satellite-systems.pdf",
+        "paper_data/f024_7paper_corpus/07-llm-channel-prediction-predictive-beamforming-leo.pdf"
+      ],
+      "question": "Build a literature review across these papers. Compare the main methods, evidence strength, agreements, disagreements, limitations, and open research gaps. Include an evidence matrix.",
+      "answer_payload_path": "payloads/f024_literature_review_7paper_payload_001.answer.json",
+      "report_payload_path": "payloads/f024_literature_review_7paper_payload_001.report.json",
+      "quality_thresholds": {
+        "min_citation_count": 7,
+        "min_distinct_cited_papers": 7,
+        "min_evidence_matrix_papers": 7,
+        "min_evidence_matrix_themes": 4,
+        "min_theme_paper_cells": 5,
+        "min_evidence_linked_cells": 10,
+        "required_summary_mode": "evidence_matrix_literature_review",
+        "required_report_sections": [
+          "Evidence Matrix",
+          "Cross-paper synthesis",
+          "Agreements",
+          "Disagreements / gaps",
+          "Limitations"
+        ],
+        "max_unsupported_claim_ratio": 0.65,
+        "max_invalid_claims": 0
+      },
+      "required_outputs": {
+        "answer": true,
+        "report": true,
+        "markdown_summary": true
+      }
+    },
+    {
+      "case_id": "f025_method_limitation_summary_payload_001",
+      "task_type": "whole_paper_summary",
+      "mode": "payload",
+      "paper_paths": [
+        "paper_data/Space-Time_Beamforming_for_LEO_Satellite_Communications_Enabling_Extremely_Narrow_Beams(1).pdf"
+      ],
+      "question": "Summarize the paper's method and limitations without overclaiming deployment success.",
+      "answer_payload_path": "payloads/f025_method_limitation_summary_payload_001.answer.json",
+      "owner_module_hints": ["F017 synthesis", "F019 golden eval", "F022 semantic audit"],
+      "quality_thresholds": {
+        "min_citation_count": 2,
+        "max_unsupported_claim_ratio": 0.5,
+        "max_invalid_claims": 0,
+        "required_summary_mode": "llm_section_global",
+        "expected_support_statuses": ["supported", "partial"],
+        "expected_finding_codes": ["semantic_support_partial"]
+      },
+      "required_outputs": {
+        "answer": true,
+        "report": false,
+        "markdown_summary": true
+      }
+    },
+    {
+      "case_id": "f025_multicitation_evidence_qa_payload_001",
+      "task_type": "evidence_qa",
+      "mode": "payload",
+      "paper_paths": [
+        "paper_data/Space-Time_Beamforming_for_LEO_Satellite_Communications_Enabling_Extremely_Narrow_Beams(1).pdf",
+        "paper_data/Beamforming_Design_and_Satellite_Selection_for_Realizing_the_Integrated_Communication_and_Navigation_in_LEO_Satellite_Networks.pdf"
+      ],
+      "question": "Use multiple citations to explain how LEO beamforming is framed across these papers.",
+      "answer_payload_path": "payloads/f025_multicitation_evidence_qa_payload_001.answer.json",
+      "owner_module_hints": ["F004 citation boundary", "F005 retrieval", "F019 golden eval"],
+      "quality_thresholds": {
+        "min_citation_count": 2,
+        "min_distinct_cited_papers": 2,
+        "max_unsupported_claim_ratio": 0.5,
+        "max_invalid_claims": 0,
+        "expected_support_statuses": ["supported"]
+      },
+      "required_outputs": {
+        "answer": true,
+        "report": false,
+        "markdown_summary": true
+      }
+    },
+    {
+      "case_id": "f025_insufficient_refusal_no_fabricated_citation_payload_001",
+      "task_type": "no_evidence_or_insufficient_evidence",
+      "mode": "payload",
+      "paper_paths": [
+        "paper_data/f024_7paper_corpus/01-space-time-beamforming-leo.pdf"
+      ],
+      "question": "Do these LEO beamforming papers prove clinical safety outcomes for medical patients?",
+      "answer_payload_path": "payloads/f025_insufficient_refusal_no_fabricated_citation_payload_001.answer.json",
+      "owner_module_hints": ["F004 citation boundary", "F011 admission", "F022 semantic audit"],
+      "quality_thresholds": {
+        "min_citation_count": 0,
+        "max_citation_count": 0,
+        "allowed_admission_decisions": ["rejected", "insufficient", "no_evidence"],
+        "max_unsupported_claim_ratio": 1.0,
+        "max_invalid_claims": 0,
+        "expected_support_statuses": ["insufficient_evidence"],
+        "expected_finding_codes": ["insufficient_evidence_should_refuse"]
+      },
+      "required_outputs": {
+        "answer": true,
+        "report": false,
+        "markdown_summary": true
+      }
+    },
+    {
+      "case_id": "f025_literature_review_matrix_negative_payload_001",
+      "task_type": "literature_review",
+      "mode": "payload",
+      "expected_result": "fail",
+      "failure_hint": "Missing/underpowered matrix and context-only citation must fail F024/F004 quality gates.",
+      "paper_paths": [
+        "paper_data/f024_7paper_corpus/01-space-time-beamforming-leo.pdf",
+        "paper_data/f024_7paper_corpus/02-joint-beamforming-satellite-selection-ican.pdf",
+        "paper_data/f024_7paper_corpus/03-scalable-distributed-beamforming-networked-leo.pdf",
+        "paper_data/f024_7paper_corpus/04-direct-leo-satellite-to-smartphone-distributed-beamforming.pdf",
+        "paper_data/f024_7paper_corpus/05-hybrid-beamforming-massive-mimo-leo.pdf",
+        "paper_data/f024_7paper_corpus/06-isac-enabled-leo-satellite-systems.pdf",
+        "paper_data/f024_7paper_corpus/07-llm-channel-prediction-predictive-beamforming-leo.pdf"
+      ],
+      "question": "Negative gate: reject a literature review with missing matrix, fewer than 7 papers, or context-only citation.",
+      "answer_payload_path": "payloads/f025_literature_review_matrix_negative_payload_001.answer.json",
+      "report_payload_path": "payloads/f025_literature_review_matrix_negative_payload_001.report.json",
+      "owner_module_hints": ["F004 citation boundary", "F019 golden eval", "F024 evidence matrix literature review"],
+      "quality_thresholds": {
+        "min_citation_count": 7,
+        "min_distinct_cited_papers": 7,
+        "min_evidence_matrix_papers": 7,
+        "min_evidence_matrix_themes": 4,
+        "min_theme_paper_cells": 5,
+        "min_evidence_linked_cells": 10,
+        "required_summary_mode": "evidence_matrix_literature_review",
+        "required_report_sections": [
+          "Evidence Matrix",
+          "Cross-paper synthesis",
+          "Agreements",
+          "Disagreements / gaps",
+          "Limitations"
+        ],
+        "max_unsupported_claim_ratio": 1.0,
+        "max_invalid_claims": 0
+      },
+      "required_outputs": {
+        "answer": true,
+        "report": true,
+        "markdown_summary": true
+      }
     }
   ]
 }

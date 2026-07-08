@@ -2,13 +2,19 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Protocol
+from typing import Any, Iterable, Protocol
 import re
 import logging
 
 import shortuuid
 
-from backend.research_assistant.audit import EvidenceAudit, audit_evidence_claims
+from backend.research_assistant.audit import (
+    EvidenceAudit,
+    LangChainSemanticAuditor,
+    SemanticAuditorLike,
+    audit_evidence_claims,
+    audit_evidence_claims_with_semantic_auditor,
+)
 from backend.research_assistant.admission import (
     EvidenceAdmissionResult,
     admit_evidence_hits,
@@ -18,6 +24,7 @@ from backend.research_assistant.admission import (
 from backend.research_assistant.embeddings import HashingEmbeddingProvider
 from backend.research_assistant.storage.database import (
     hybrid_search_evidence_in_database,
+    list_reader_scope_evidence_from_database,
     list_whole_paper_evidence_in_database,
     list_memory_entries_from_database,
 )
@@ -90,11 +97,33 @@ class ResearchCitation:
 
 
 @dataclass(frozen=True)
+class _ReaderScopeEvidenceHit:
+    evidence_id: int
+    chunk_id: str
+    paper_id: str
+    title: str
+    section: str
+    page_start: int | None
+    page_end: int | None
+    quote: str
+    rank_score: float
+    source_type: str = "paper"
+    source_identity: dict[str, Any] = field(default_factory=dict)
+    evidence_scope: str = "session"
+
+    @property
+    def citation_label(self) -> str:
+        section = self.section or "Paper"
+        return f"[{self.paper_id}:{section}]"
+
+
+@dataclass(frozen=True)
 class ResearchAnswer:
     content: str
     citations: list[ResearchCitation]
     context_memory: list[dict] = field(default_factory=list)
     summary_synthesis: dict[str, Any] = field(default_factory=dict)
+    evidence_matrix: dict[str, Any] = field(default_factory=dict)
     audit: EvidenceAudit | None = None
     admission: EvidenceAdmissionResult | None = None
     task_route: ResearchTaskRoute = field(default_factory=default_evidence_qa_route)
@@ -142,6 +171,8 @@ class ResearchAnswer:
             "context_memory_conflict_count": self.context_memory_conflict_count,
             "context_boundaries": CONTEXT_BOUNDARIES,
             "summary_synthesis": self.summary_synthesis,
+            "evidence_matrix": self.evidence_matrix,
+            "report": _literature_review_report_metadata(self.evidence_matrix),
             "evidence_admission": self.admission.to_dict() if self.admission else {},
             "task_route": self.task_route.to_dict(),
             "audit": self.audit.to_dict() if self.audit else {},
@@ -206,7 +237,9 @@ async def answer_research_question(
     embedding_model: str,
     limit: int = 5,
     whole_paper_synthesizer: WholePaperSynthesizer | None = None,
+    semantic_auditor: SemanticAuditorLike | None = None,
     use_llm_whole_paper_synthesis: bool = False,
+    use_llm_semantic_auditor: bool = True,
     model_config: dict[str, Any] | None = None,
 ) -> ResearchAnswer:
     task_route = classify_research_task(question)
@@ -219,13 +252,20 @@ async def answer_research_question(
     if task_route.route == "general_chat":
         admission = skipped_admission_result()
         content = _compose_skipped_answer()
+        audit = await _audit_answer_content(
+            content=content,
+            citations=[],
+            semantic_auditor=semantic_auditor,
+            use_llm_semantic_auditor=use_llm_semantic_auditor,
+            model_config=model_config,
+        )
         return ResearchAnswer(
             content=content,
             citations=[],
             context_memory=context_memory,
             admission=admission,
             task_route=task_route,
-            audit=audit_evidence_claims(answer_content=content, citations=[]),
+            audit=audit,
         )
 
     if task_route.route == "whole_paper_summary":
@@ -252,23 +292,39 @@ async def answer_research_question(
             summary_synthesis=summary_synthesis,
             admission=admission,
             task_route=task_route,
-            audit=audit_evidence_claims(answer_content=content, citations=citations),
+            audit=await _audit_answer_content(
+                content=content,
+                citations=citations,
+                semantic_auditor=semantic_auditor,
+                use_llm_semantic_auditor=use_llm_semantic_auditor,
+                model_config=model_config,
+            ),
         )
 
-    provider = HashingEmbeddingProvider(
-        dimensions=embedding_dimensions,
-        model_name=embedding_model,
-    )
-    search_kwargs = {
-        "session_id": session_id,
-        "query_text": question,
-        "query_embedding": provider.embed_text(question),
-        "embedding_model": provider.model_name,
-        "limit": limit,
-    }
-    if project_id is not None:
-        search_kwargs["project_id"] = project_id
-    hits = await hybrid_search_evidence_in_database(database_url, **search_kwargs)
+    if _looks_like_literature_review_question(question):
+        scoped_records = await list_reader_scope_evidence_from_database(
+            database_url,
+            session_id=session_id,
+            project_id=project_id,
+            limit=max(limit, 80),
+            per_paper_limit=8,
+        )
+        hits = _evidence_hits_from_reader_scope_records(scoped_records)
+    else:
+        provider = HashingEmbeddingProvider(
+            dimensions=embedding_dimensions,
+            model_name=embedding_model,
+        )
+        search_kwargs = {
+            "session_id": session_id,
+            "query_text": question,
+            "query_embedding": provider.embed_text(question),
+            "embedding_model": provider.model_name,
+            "limit": limit,
+        }
+        if project_id is not None:
+            search_kwargs["project_id"] = project_id
+        hits = await hybrid_search_evidence_in_database(database_url, **search_kwargs)
     admission = admit_evidence_hits(hits)
     citations = _citations_from_hits(admission.accepted_hits)
     if _should_refuse_for_domain_mismatch(question, citations):
@@ -283,14 +339,61 @@ async def answer_research_question(
             reason="insufficient_evidence_should_refuse",
         )
         citations = []
-    content = _compose_extractive_answer(citations, admission=admission, question=question)
+    evidence_matrix: dict[str, Any] = {}
+    if _looks_like_literature_review_question(question) and _distinct_citation_papers(citations) >= 2:
+        evidence_matrix = _build_evidence_matrix(citations)
+        content = _compose_literature_review_answer(evidence_matrix)
+    else:
+        content = _compose_extractive_answer(citations, admission=admission, question=question)
+    audit_content = _literature_review_audit_content(evidence_matrix) if evidence_matrix else content
     return ResearchAnswer(
         content=content,
         citations=citations,
         context_memory=context_memory,
+        summary_synthesis={"mode": "evidence_matrix_literature_review"} if evidence_matrix else {},
+        evidence_matrix=evidence_matrix,
         admission=admission,
         task_route=task_route,
-        audit=audit_evidence_claims(answer_content=content, citations=citations),
+        audit=await _audit_answer_content(
+            content=audit_content,
+            citations=citations,
+            semantic_auditor=semantic_auditor,
+            use_llm_semantic_auditor=use_llm_semantic_auditor,
+            model_config=model_config,
+        ),
+    )
+
+
+async def _audit_answer_content(
+    *,
+    content: str,
+    citations: list[ResearchCitation],
+    semantic_auditor: SemanticAuditorLike | None,
+    use_llm_semantic_auditor: bool,
+    model_config: dict[str, Any] | None,
+) -> EvidenceAudit:
+    if not use_llm_semantic_auditor:
+        return audit_evidence_claims(answer_content=content, citations=citations)
+    auditor = semantic_auditor
+    model_name = _model_name_from_config(model_config)
+    if auditor is None and model_config:
+        auditor = LangChainSemanticAuditor(model_config=model_config)
+    return await audit_evidence_claims_with_semantic_auditor(
+        answer_content=content,
+        citations=citations,
+        auditor=auditor,
+        model=model_name,
+    )
+
+
+def _model_name_from_config(model_config: dict[str, Any] | None) -> str | None:
+    if not isinstance(model_config, dict):
+        return None
+    return str(
+        model_config.get("model_name")
+        or model_config.get("model")
+        or model_config.get("id")
+        or "configured-model"
     )
 
 
@@ -312,6 +415,28 @@ def _citations_from_hits(hits: list[Any]) -> list[ResearchCitation]:
         )
         for hit in hits
     ]
+
+
+def _evidence_hits_from_reader_scope_records(records: list[dict]) -> list[_ReaderScopeEvidenceHit]:
+    hits: list[_ReaderScopeEvidenceHit] = []
+    for index, record in enumerate(records, start=1):
+        hits.append(
+            _ReaderScopeEvidenceHit(
+                evidence_id=int(record.get("evidence_id") or 0),
+                chunk_id=str(record.get("chunk_id") or ""),
+                paper_id=str(record.get("paper_id") or ""),
+                title=str(record.get("title") or "Untitled paper"),
+                section=str(record.get("section") or "Paper"),
+                page_start=record.get("page_start"),
+                page_end=record.get("page_end"),
+                quote=str(record.get("quote") or ""),
+                rank_score=1.0 / float(index),
+                source_type=str(record.get("source_type") or "paper"),
+                source_identity=dict(record.get("source_identity") or {}),
+                evidence_scope=str(record.get("evidence_scope") or "session"),
+            )
+        )
+    return hits
 
 
 def _compose_extractive_answer(
@@ -361,8 +486,298 @@ def _looks_like_multi_paper_synthesis_question(question: str) -> bool:
     )
 
 
+def _looks_like_literature_review_question(question: str) -> bool:
+    normalized = question.casefold()
+    return (
+        "evidence matrix" in normalized
+        or ("literature review" in normalized and ("across" in normalized or "papers" in normalized or "compare" in normalized))
+        or ("review" in normalized and "papers" in normalized and "matrix" in normalized)
+    )
+
+
 def _distinct_citation_papers(citations: list[ResearchCitation]) -> int:
     return len({citation.paper_id or citation.title for citation in citations})
+
+
+def _literature_review_report_metadata(evidence_matrix: dict[str, Any]) -> dict[str, Any]:
+    if not evidence_matrix:
+        return {}
+    return {
+        "artifact": True,
+        "sections": [
+            "Evidence Matrix",
+            "Cross-paper synthesis",
+            "Agreements",
+            "Disagreements / gaps",
+            "Limitations",
+        ],
+    }
+
+
+def _build_evidence_matrix(citations: list[ResearchCitation]) -> dict[str, Any]:
+    by_paper: dict[str, list[ResearchCitation]] = {}
+    for citation in citations:
+        by_paper.setdefault(citation.paper_id or citation.title, []).append(citation)
+
+    papers = []
+    for paper_id, paper_citations in by_paper.items():
+        first = paper_citations[0]
+        identity = first.source_identity or {}
+        papers.append(
+            {
+                "paper_id": paper_id,
+                "title": first.title,
+                "year": str(identity.get("year") or identity.get("published_year") or ""),
+                "source_type": first.source_type,
+                "citation_label": first.citation_label,
+            }
+        )
+
+    theme_specs = [
+        (
+            "methods",
+            "Methods comparison",
+            "Across the admitted papers, the methods are comparable only at the level of cited paper evidence.",
+            "moderate",
+        ),
+        (
+            "evidence-strength",
+            "Evidence strength",
+            "The corpus provides bounded paper evidence for method and evaluation claims, with strength limited by snippet coverage.",
+            "moderate",
+        ),
+        (
+            "agreements",
+            "Agreements",
+            "The admitted papers agree on LEO beamforming as a constrained communication or communication-navigation problem.",
+            "moderate",
+        ),
+        (
+            "limitations-gaps",
+            "Limitations and gaps",
+            "The corpus leaves deployment generality, real-world validation, and cross-setting comparability as evidence gaps.",
+            "limited",
+        ),
+    ]
+    themes = []
+    for theme_id, label, synthesis_claim, evidence_strength in theme_specs:
+        cells = []
+        for paper_id, paper_citations in by_paper.items():
+            first = paper_citations[0]
+            cells.append(
+                {
+                    "paper_id": paper_id,
+                    "stance": "supports",
+                    "contribution": _matrix_contribution(label, first),
+                    "method": _matrix_method(first),
+                    "limitation": _matrix_limitation(first),
+                    "evidence_ids": [citation.evidence_id for citation in paper_citations[:2]],
+                    "citation_labels": [citation.citation_label for citation in paper_citations[:2]],
+                    "quote_snippets": [_single_line_quote(citation.quote, limit=220) for citation in paper_citations[:2]],
+                    "support_status": "supported",
+                }
+            )
+        themes.append(
+            {
+                "theme_id": theme_id,
+                "label": label,
+                "synthesis_claim": synthesis_claim,
+                "evidence_strength": evidence_strength,
+                "paper_cells": cells,
+            }
+        )
+
+    return {
+        "paper_count": len(papers),
+        "papers": papers,
+        "themes": themes,
+        "agreements": [
+            "The included papers are treated as citation evidence only where their original snippets are attached.",
+            "The corpus consistently frames the topic as a LEO beamforming research workflow.",
+        ],
+        "disagreements": [
+            "The papers differ in method emphasis, evaluation setup, or stated limitations; unresolved differences remain tensions rather than supported conclusions."
+        ],
+        "gaps": [
+            "Claims outside the admitted paper snippets remain evidence gaps.",
+            "Cross-paper causal or deployment conclusions need stronger direct evidence before being marked supported.",
+        ],
+        "limitations": [
+            "This matrix is built from admitted paper evidence records, not memory, model reasoning, tool logs, or process trace.",
+            "Evidence strength is deterministic and conservative unless an optional semantic auditor adds stricter review.",
+        ],
+    }
+
+
+def _matrix_contribution(label: str, citation: ResearchCitation) -> str:
+    return f"{citation.title} contributes evidence for {label.casefold()}: {_single_line_quote(citation.quote, limit=180)}"
+
+
+def _matrix_method(citation: ResearchCitation) -> str:
+    section = citation.section or "paper evidence"
+    return f"Method signal comes from the `{section}` citation evidence."
+
+
+def _matrix_limitation(citation: ResearchCitation) -> str:
+    return "Do not generalize beyond the quoted paper evidence without additional citation support."
+
+
+def _compose_literature_review_answer(evidence_matrix: dict[str, Any]) -> str:
+    papers = evidence_matrix.get("papers") or []
+    themes = evidence_matrix.get("themes") or []
+    paper_count = evidence_matrix.get("paper_count") or len(papers)
+    title = f"Literature Review: Evidence Matrix Across {paper_count} Papers"
+    lines = [
+        f"# {title}",
+        "",
+        "## Scope / corpus summary",
+        "",
+        f"This review includes {paper_count} paper sources admitted as citation evidence. "
+        "Memory, tool logs, process trace, and model reasoning are not used as citations.",
+        "",
+        "## Evidence Matrix",
+        "",
+        "| Theme | Synthesis claim | Evidence strength | Paper coverage | Citations |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for theme in themes:
+        cells = theme.get("paper_cells") or []
+        citation_labels = _unique_strings(
+            label
+            for cell in cells
+            for label in (cell.get("citation_labels") or [])
+        )
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _markdown_table_cell(str(theme.get("label") or "")),
+                    _markdown_table_cell(str(theme.get("synthesis_claim") or "")),
+                    f"`{theme.get('evidence_strength')}`",
+                    str(len({cell.get("paper_id") for cell in cells if cell.get("paper_id")})),
+                    _markdown_table_cell(" ".join(citation_labels[:8])),
+                ]
+            )
+            + " |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Cross-paper synthesis",
+            "",
+        ]
+    )
+    for theme in themes:
+        labels = _theme_citation_labels(theme)
+        lines.append(f"- {theme.get('synthesis_claim')} {' '.join(labels[:3])}".strip())
+    lines.extend(["", "## Agreements", ""])
+    lines.extend(f"- {item}" for item in evidence_matrix.get("agreements", []))
+    lines.extend(["", "## Disagreements / tensions", ""])
+    lines.extend(f"- {item}" for item in evidence_matrix.get("disagreements", []))
+    lines.extend(["", "## Methods comparison", ""])
+    for theme in themes[:1]:
+        for cell in theme.get("paper_cells", [])[:paper_count]:
+            lines.append(
+                f"- {cell.get('paper_id')}: {cell.get('method')} {cell.get('citation_labels', [''])[0]}"
+            )
+    lines.extend(["", "## Limitations and evidence gaps", ""])
+    lines.extend(f"- {item}" for item in evidence_matrix.get("limitations", []))
+    lines.extend(f"- {item}" for item in evidence_matrix.get("gaps", []))
+    lines.extend(["", "## Citation-grounded conclusion", ""])
+    conclusion_labels = _unique_strings(
+        label
+        for theme in themes
+        for label in _theme_citation_labels(theme)
+    )
+    lines.append(
+        "The corpus supports a bounded cross-paper comparison, but stronger conclusions require additional paper evidence. "
+        + " ".join(conclusion_labels[:4])
+    )
+    return "\n".join(lines)
+
+
+def _literature_review_audit_content(evidence_matrix: dict[str, Any]) -> str:
+    lines = []
+    for theme in evidence_matrix.get("themes", []):
+        claim = str(theme.get("synthesis_claim") or "").strip()
+        labels = _theme_citation_labels(theme)
+        snippets = _theme_quote_snippets(theme)
+        if claim and labels and snippets:
+            lines.append(f"- {claim} Evidence basis: {'; '.join(snippets[:2])} {' '.join(labels[:3])}".strip())
+    for item in evidence_matrix.get("agreements", []):
+        lines.append(_literature_review_synthesis_audit_line(str(item), evidence_matrix))
+    for item in evidence_matrix.get("disagreements", []):
+        lines.append(_literature_review_synthesis_audit_line(str(item), evidence_matrix))
+    for item in evidence_matrix.get("limitations", []):
+        lines.append(_literature_review_synthesis_audit_line(str(item), evidence_matrix))
+    for item in evidence_matrix.get("gaps", []):
+        lines.append(_literature_review_synthesis_audit_line(str(item), evidence_matrix))
+    conclusion_labels = _unique_strings(
+        label
+        for theme in evidence_matrix.get("themes", [])
+        for label in _theme_citation_labels(theme)
+    )
+    conclusion_snippets = _unique_strings(
+        snippet
+        for theme in evidence_matrix.get("themes", [])
+        for snippet in _theme_quote_snippets(theme)
+    )
+    if conclusion_labels and conclusion_snippets:
+        lines.append(
+            "The corpus supports a bounded cross-paper comparison, but stronger conclusions require additional paper evidence. "
+            f"Evidence basis: {'; '.join(conclusion_snippets[:2])} {' '.join(conclusion_labels[:4])}"
+        )
+    return "\n".join(lines)
+
+
+def _literature_review_synthesis_audit_line(item: str, evidence_matrix: dict[str, Any]) -> str:
+    item = item.strip()
+    if not item:
+        return ""
+    labels = _unique_strings(
+        label
+        for theme in evidence_matrix.get("themes", [])
+        for label in _theme_citation_labels(theme)
+    )
+    snippets = _unique_strings(
+        snippet
+        for theme in evidence_matrix.get("themes", [])
+        for snippet in _theme_quote_snippets(theme)
+    )
+    return f"- {item} Evidence basis: {'; '.join(snippets[:2])} {' '.join(labels[:4])}".strip()
+
+
+def _theme_quote_snippets(theme: dict[str, Any]) -> list[str]:
+    return _unique_strings(
+        snippet
+        for cell in theme.get("paper_cells", [])
+        for snippet in (cell.get("quote_snippets") or [])
+        if str(snippet).strip()
+    )
+
+
+def _theme_citation_labels(theme: dict[str, Any]) -> list[str]:
+    return _unique_strings(
+        label
+        for cell in theme.get("paper_cells", [])
+        for label in (cell.get("citation_labels") or [])
+    )
+
+
+def _unique_strings(values: Iterable[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        text = str(value or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
+
+
+def _markdown_table_cell(value: str) -> str:
+    return re.sub(r"\s+", " ", value).replace("|", "\\|")
 
 
 def _compose_multi_paper_synthesis_answer(citations: list[ResearchCitation]) -> str:

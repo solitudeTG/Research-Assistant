@@ -7,6 +7,87 @@ from backend.research_assistant.retrieval import EvidenceHit
 
 
 @pytest.mark.asyncio
+async def test_answer_research_question_builds_literature_review_evidence_matrix_for_seven_papers(monkeypatch):
+    async def fake_search(*args, **kwargs):
+        return [
+            {
+                "evidence_id": index,
+                "chunk_id": f"paper-{index}:method",
+                "paper_id": f"paper-{index}",
+                "title": f"LEO Beamforming Study {index}",
+                "source_type": "paper",
+                "section": "Method",
+                "page_start": index,
+                "page_end": index,
+                "quote": (
+                    f"Study {index} evaluates LEO beamforming methods with simulation metrics, "
+                    "reports throughput or interference results, and notes deployment limitations."
+                ),
+                "source_identity": {"paper_id": f"paper-{index}", "year": str(2020 + index)},
+                "evidence_scope": "session",
+            }
+            for index in range(1, 8)
+        ]
+
+    async def fake_list_memory(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_whole_paper_evidence_in_database",
+        fake_search,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_reader_scope_evidence_from_database",
+        fake_search,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_memory_entries_from_database",
+        fake_list_memory,
+    )
+
+    answer = await answer_research_question(
+        database_url="postgresql://test",
+        session_id="session-1",
+        question=(
+            "Build a literature review across these papers. Compare the main methods, evidence strength, "
+            "agreements, disagreements, limitations, and open research gaps. Include an evidence matrix."
+        ),
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=7,
+    )
+
+    payload = answer.to_dict()
+    matrix = payload["evidence_matrix"]
+
+    assert matrix["paper_count"] == 7
+    assert len(matrix["papers"]) == 7
+    assert len(matrix["themes"]) >= 4
+    assert all(theme["synthesis_claim"] for theme in matrix["themes"])
+    assert all(len(theme["paper_cells"]) >= 5 for theme in matrix["themes"])
+    linked_cells = [
+        cell
+        for theme in matrix["themes"]
+        for cell in theme["paper_cells"]
+        if cell["evidence_ids"] or cell["citation_labels"]
+    ]
+    assert len(linked_cells) >= 10
+    assert matrix["agreements"]
+    assert matrix["disagreements"]
+    assert matrix["gaps"]
+    assert matrix["limitations"]
+    assert "Evidence Matrix" in answer.content
+    assert "Cross-paper synthesis" in answer.content
+    audit_claim_text = "\n".join(
+        str(claim.get("claim_text") or "")
+        for claim in payload["audit"]["claims"]
+    )
+    assert "The included papers are treated as citation evidence only" in audit_claim_text
+    assert "Cross-paper causal or deployment conclusions need stronger direct evidence" in audit_claim_text
+    assert {paper["source_type"] for paper in matrix["papers"]} == {"paper"}
+
+
+@pytest.mark.asyncio
 async def test_answer_research_question_uses_only_citation_evidence(monkeypatch):
     async def fake_search(database_url, *, session_id, query_text, query_embedding, embedding_model, limit):
         assert database_url == "postgresql://test"
@@ -187,6 +268,108 @@ async def test_answer_research_question_refuses_clinical_safety_claim_when_admit
     assert payload["evidence_admission"]["reason"] == "insufficient_evidence_should_refuse"
     assert "insufficient citation evidence" in answer.content
     assert payload["audit"]["claims"][0]["finding_code"] == "insufficient_evidence_should_refuse"
+
+
+@pytest.mark.asyncio
+async def test_answer_research_question_uses_injected_llm_semantic_auditor(monkeypatch):
+    async def fake_search(*args, **kwargs):
+        return [
+            EvidenceHit(
+                evidence_id=11,
+                chunk_id="space-time-intro",
+                paper_id="paper-space-time",
+                title="Space-Time Beamforming",
+                source_type="paper",
+                section="Introduction",
+                page_start=1,
+                page_end=1,
+                quote="Space-time beamforming frames LEO satellite communication as extremely narrow beam control.",
+                rank_score=0.9,
+            )
+        ]
+
+    async def fake_list_memory(*args, **kwargs):
+        return []
+
+    class FakeSemanticAuditor:
+        async def audit_claims(self, *, deterministic_audit, citations):
+            return [
+                {
+                    "claim_id": "claim-1",
+                    "support_status": "overreach",
+                    "finding_code": "llm_overreach",
+                    "rationale": "The evidence is about satellite communications, not earthquake prediction outcomes.",
+                }
+            ]
+
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.hybrid_search_evidence_in_database",
+        fake_search,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_memory_entries_from_database",
+        fake_list_memory,
+    )
+
+    answer = await answer_research_question(
+        database_url="postgresql://test",
+        session_id="session-1",
+        question="Does LEO beamforming prove earthquake prediction outcomes?",
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=5,
+        semantic_auditor=FakeSemanticAuditor(),
+        model_config={"model_name": "fake-auditor"},
+    )
+
+    payload = answer.to_dict()
+
+    assert payload["audit"]["semantic_auditor"]["mode"] == "llm_enhanced"
+    assert payload["audit"]["semantic_auditor"]["overreach_count"] == 1
+    assert payload["audit"]["claims"][0]["finding_code"] == "llm_overreach"
+    assert payload["audit"]["claims"][0]["llm_support_status"] == "overreach"
+
+
+@pytest.mark.asyncio
+async def test_answer_research_question_marks_llm_auditor_unavailable_without_model_config(monkeypatch):
+    async def fake_search(*args, **kwargs):
+        return [
+            EvidenceHit(
+                evidence_id=11,
+                chunk_id="chunk-1",
+                paper_id="paper-1",
+                title="Hybrid Retrieval",
+                source_type="paper",
+                section="Results",
+                page_start=1,
+                page_end=1,
+                quote="Hybrid retrieval improves recall.",
+                rank_score=0.9,
+            )
+        ]
+
+    async def fake_list_memory(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.hybrid_search_evidence_in_database",
+        fake_search,
+    )
+    monkeypatch.setattr(
+        "backend.research_assistant.answering.list_memory_entries_from_database",
+        fake_list_memory,
+    )
+
+    answer = await answer_research_question(
+        database_url="postgresql://test",
+        session_id="session-1",
+        question="How does hybrid retrieval work?",
+        embedding_dimensions=8,
+        embedding_model="local-hashing-v1",
+        limit=5,
+    )
+
+    assert answer.to_dict()["audit"]["semantic_auditor"]["mode"] == "llm_unavailable"
 
 
 @pytest.mark.asyncio

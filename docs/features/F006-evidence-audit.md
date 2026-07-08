@@ -66,6 +66,7 @@ Evidence Audit can classify answer/report claims against eligible citation evide
 
 - [EV-001 Feature Governance Split Validation](../evidence/EV-001-feature-governance-split-validation.md)
 - [EV-023 Semantic Audit Multi-paper Verification](../evidence/EV-023-semantic-audit-multi-paper-verification.md)
+- [EV-024 LLM Semantic Auditor Verification](../evidence/EV-024-llm-semantic-auditor-verification.md)
 - Historical verification currently recorded in [F001](F001-project-vision-and-scope.md).
 
 ### Decisions / ADRs

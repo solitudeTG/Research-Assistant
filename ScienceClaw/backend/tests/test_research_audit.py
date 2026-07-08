@@ -1,4 +1,6 @@
-from backend.research_assistant.audit import audit_evidence_claims
+import pytest
+
+from backend.research_assistant.audit import audit_evidence_claims, audit_evidence_claims_with_semantic_auditor
 from backend.research_assistant.answering import ResearchCitation
 
 
@@ -375,6 +377,35 @@ def test_audit_evidence_claims_marks_cited_synthesis_with_incomplete_support_as_
     assert "Cited evidence partially supports this synthesized claim." in audit.claims[0].notes
 
 
+def test_audit_evidence_claims_marks_report_synthesis_with_quote_basis_as_partial():
+    audit = audit_evidence_claims(
+        answer_content=(
+            "- The corpus provides bounded paper evidence for method and evaluation claims. "
+            "Evidence basis: Hybrid retrieval combines lexical matching and vector search to improve recall. "
+            "[paper-1:Methods:2]"
+        ),
+        citations=[
+            ResearchCitation(
+                evidence_id=17,
+                chunk_id="chunk-17",
+                paper_id="paper-1",
+                title="Hybrid Retrieval",
+                section="Methods",
+                page_start=2,
+                page_end=2,
+                quote="Hybrid retrieval combines lexical matching and vector search to improve recall.",
+                citation_label="[paper-1:Methods:2]",
+            )
+        ],
+    )
+
+    assert audit.status == "partial"
+    assert audit.claims[0].status == "partial"
+    assert audit.claims[0].support_status == "partial"
+    assert audit.claims[0].evidence_ids == [17]
+    assert "Evidence basis partially supports this synthesized claim." in audit.claims[0].notes
+
+
 def test_semantic_audit_claims_expose_support_status_scores_evidence_and_finding_codes():
     audit = audit_evidence_claims(
         answer_content=(
@@ -448,3 +479,114 @@ def test_semantic_audit_marks_no_citation_answer_as_insufficient_evidence_refusa
 
     assert claim["support_status"] == "insufficient_evidence"
     assert claim["finding_code"] == "insufficient_evidence_should_refuse"
+
+
+@pytest.mark.asyncio
+async def test_llm_semantic_auditor_overlays_overreach_without_replacing_floor():
+    class FakeAuditor:
+        async def audit_claims(self, *, deterministic_audit, citations):
+            return [
+                {
+                    "claim_id": "claim-1",
+                    "support_status": "overreach",
+                    "finding_code": "llm_overreach",
+                    "rationale": "The quote discusses beamforming performance, not clinical patient outcomes.",
+                }
+            ]
+
+    audit = await audit_evidence_claims_with_semantic_auditor(
+        answer_content="1. LEO beamforming proves clinical safety outcomes. [paper-1:Results:4]",
+        citations=[
+            ResearchCitation(
+                evidence_id=17,
+                chunk_id="chunk-17",
+                paper_id="paper-1",
+                title="LEO Beamforming",
+                section="Results",
+                page_start=4,
+                page_end=4,
+                quote="LEO beamforming improves satellite communication throughput.",
+                citation_label="[paper-1:Results:4]",
+            )
+        ],
+        auditor=FakeAuditor(),
+        model="fake-auditor",
+    )
+
+    payload = audit.to_dict()
+    claim = payload["claims"][0]
+
+    assert payload["semantic_auditor"]["mode"] == "llm_enhanced"
+    assert payload["semantic_auditor"]["model"] == "fake-auditor"
+    assert payload["semantic_auditor"]["overreach_count"] == 1
+    assert claim["support_status"] == "overreach"
+    assert claim["finding_code"] == "llm_overreach"
+    assert claim["deterministic_support_status"] == "unsupported"
+    assert claim["llm_support_status"] == "overreach"
+    assert "clinical patient outcomes" in claim["llm_rationale"]
+
+
+@pytest.mark.asyncio
+async def test_llm_semantic_auditor_invalid_json_safely_degrades_to_deterministic():
+    class BadAuditor:
+        async def audit_claims(self, *, deterministic_audit, citations):
+            return [{"claim_id": "claim-1", "support_status": "invented"}]
+
+    audit = await audit_evidence_claims_with_semantic_auditor(
+        answer_content="1. Hybrid retrieval improves recall. [paper-1:Results:4]",
+        citations=[
+            ResearchCitation(
+                evidence_id=17,
+                chunk_id="chunk-17",
+                paper_id="paper-1",
+                title="Hybrid Retrieval",
+                section="Results",
+                page_start=4,
+                page_end=4,
+                quote="Hybrid retrieval improves recall.",
+                citation_label="[paper-1:Results:4]",
+            )
+        ],
+        auditor=BadAuditor(),
+        model="fake-auditor",
+    )
+
+    payload = audit.to_dict()
+
+    assert audit.status == "approved"
+    assert payload["claims"][0]["support_status"] == "supported"
+    assert payload["semantic_auditor"]["mode"] == "llm_failed"
+    assert payload["semantic_auditor"]["llm_auditor_status"].startswith("invalid_output")
+
+
+@pytest.mark.asyncio
+async def test_llm_semantic_auditor_normalizes_non_llm_finding_code():
+    class FakeAuditor:
+        async def audit_claims(self, *, deterministic_audit, citations):
+            return [
+                {
+                    "claim_id": "claim-1",
+                    "support_status": "insufficient_evidence",
+                    "finding_code": "insufficient_evidence_should_refuse",
+                    "rationale": "There is not enough cited evidence to support the claim.",
+                }
+            ]
+
+    audit = await audit_evidence_claims_with_semantic_auditor(
+        answer_content=(
+            "Insufficient citation evidence was found for this question. "
+            "I cannot answer it as a cited research claim yet."
+        ),
+        citations=[],
+        auditor=FakeAuditor(),
+        model="fake-auditor",
+    )
+
+    payload = audit.to_dict()
+    claim = payload["claims"][0]
+
+    assert payload["semantic_auditor"]["mode"] == "llm_enhanced"
+    assert claim["support_status"] == "insufficient_evidence"
+    assert claim["finding_code"] == "llm_insufficient_evidence"
+    assert claim["deterministic_support_status"] == "insufficient_evidence"
+    assert claim["llm_support_status"] == "insufficient_evidence"

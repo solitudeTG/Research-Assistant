@@ -1,0 +1,5 @@
+{
+  "report_id": "f025-literature-review-negative-report",
+  "sections": ["Evidence Matrix"],
+  "note": "Intentionally underpowered report payload for expected_result=fail negative golden case."
+}

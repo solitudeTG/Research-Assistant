@@ -1,0 +1,586 @@
+{
+  "report_id": "report-f024-fixture",
+  "evidence_matrix": {
+    "paper_count": 7,
+    "papers": [
+      {
+        "paper_id": "arxiv-f024-1",
+        "title": "F024 LEO Beamforming Paper 1",
+        "year": "2021",
+        "source_type": "paper",
+        "citation_label": "[arxiv-f024-1:Method:1]"
+      },
+      {
+        "paper_id": "arxiv-f024-2",
+        "title": "F024 LEO Beamforming Paper 2",
+        "year": "2022",
+        "source_type": "paper",
+        "citation_label": "[arxiv-f024-2:Method:2]"
+      },
+      {
+        "paper_id": "arxiv-f024-3",
+        "title": "F024 LEO Beamforming Paper 3",
+        "year": "2023",
+        "source_type": "paper",
+        "citation_label": "[arxiv-f024-3:Method:3]"
+      },
+      {
+        "paper_id": "arxiv-f024-4",
+        "title": "F024 LEO Beamforming Paper 4",
+        "year": "2024",
+        "source_type": "paper",
+        "citation_label": "[arxiv-f024-4:Method:4]"
+      },
+      {
+        "paper_id": "arxiv-f024-5",
+        "title": "F024 LEO Beamforming Paper 5",
+        "year": "2025",
+        "source_type": "paper",
+        "citation_label": "[arxiv-f024-5:Method:5]"
+      },
+      {
+        "paper_id": "arxiv-f024-6",
+        "title": "F024 LEO Beamforming Paper 6",
+        "year": "2026",
+        "source_type": "paper",
+        "citation_label": "[arxiv-f024-6:Method:6]"
+      },
+      {
+        "paper_id": "arxiv-f024-7",
+        "title": "F024 LEO Beamforming Paper 7",
+        "year": "2027",
+        "source_type": "paper",
+        "citation_label": "[arxiv-f024-7:Method:7]"
+      }
+    ],
+    "themes": [
+      {
+        "theme_id": "theme-1",
+        "label": "Methods comparison",
+        "synthesis_claim": "The 7-paper corpus supports a bounded synthesis claim about Methods comparison.",
+        "evidence_strength": "moderate",
+        "paper_cells": [
+          {
+            "paper_id": "arxiv-f024-1",
+            "stance": "supports",
+            "contribution": "arxiv-f024-1 contributes paper evidence for Methods comparison.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              1
+            ],
+            "citation_labels": [
+              "[arxiv-f024-1:Method:1]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          },
+          {
+            "paper_id": "arxiv-f024-2",
+            "stance": "supports",
+            "contribution": "arxiv-f024-2 contributes paper evidence for Methods comparison.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              2
+            ],
+            "citation_labels": [
+              "[arxiv-f024-2:Method:2]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          },
+          {
+            "paper_id": "arxiv-f024-3",
+            "stance": "supports",
+            "contribution": "arxiv-f024-3 contributes paper evidence for Methods comparison.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              3
+            ],
+            "citation_labels": [
+              "[arxiv-f024-3:Method:3]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          },
+          {
+            "paper_id": "arxiv-f024-4",
+            "stance": "supports",
+            "contribution": "arxiv-f024-4 contributes paper evidence for Methods comparison.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              4
+            ],
+            "citation_labels": [
+              "[arxiv-f024-4:Method:4]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          },
+          {
+            "paper_id": "arxiv-f024-5",
+            "stance": "supports",
+            "contribution": "arxiv-f024-5 contributes paper evidence for Methods comparison.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              5
+            ],
+            "citation_labels": [
+              "[arxiv-f024-5:Method:5]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          },
+          {
+            "paper_id": "arxiv-f024-6",
+            "stance": "supports",
+            "contribution": "arxiv-f024-6 contributes paper evidence for Methods comparison.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              6
+            ],
+            "citation_labels": [
+              "[arxiv-f024-6:Method:6]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          },
+          {
+            "paper_id": "arxiv-f024-7",
+            "stance": "supports",
+            "contribution": "arxiv-f024-7 contributes paper evidence for Methods comparison.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              7
+            ],
+            "citation_labels": [
+              "[arxiv-f024-7:Method:7]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          }
+        ]
+      },
+      {
+        "theme_id": "theme-2",
+        "label": "Evidence strength",
+        "synthesis_claim": "The 7-paper corpus supports a bounded synthesis claim about Evidence strength.",
+        "evidence_strength": "moderate",
+        "paper_cells": [
+          {
+            "paper_id": "arxiv-f024-1",
+            "stance": "supports",
+            "contribution": "arxiv-f024-1 contributes paper evidence for Evidence strength.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              1
+            ],
+            "citation_labels": [
+              "[arxiv-f024-1:Method:1]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          },
+          {
+            "paper_id": "arxiv-f024-2",
+            "stance": "supports",
+            "contribution": "arxiv-f024-2 contributes paper evidence for Evidence strength.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              2
+            ],
+            "citation_labels": [
+              "[arxiv-f024-2:Method:2]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          },
+          {
+            "paper_id": "arxiv-f024-3",
+            "stance": "supports",
+            "contribution": "arxiv-f024-3 contributes paper evidence for Evidence strength.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              3
+            ],
+            "citation_labels": [
+              "[arxiv-f024-3:Method:3]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          },
+          {
+            "paper_id": "arxiv-f024-4",
+            "stance": "supports",
+            "contribution": "arxiv-f024-4 contributes paper evidence for Evidence strength.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              4
+            ],
+            "citation_labels": [
+              "[arxiv-f024-4:Method:4]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          },
+          {
+            "paper_id": "arxiv-f024-5",
+            "stance": "supports",
+            "contribution": "arxiv-f024-5 contributes paper evidence for Evidence strength.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              5
+            ],
+            "citation_labels": [
+              "[arxiv-f024-5:Method:5]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          },
+          {
+            "paper_id": "arxiv-f024-6",
+            "stance": "supports",
+            "contribution": "arxiv-f024-6 contributes paper evidence for Evidence strength.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              6
+            ],
+            "citation_labels": [
+              "[arxiv-f024-6:Method:6]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          },
+          {
+            "paper_id": "arxiv-f024-7",
+            "stance": "supports",
+            "contribution": "arxiv-f024-7 contributes paper evidence for Evidence strength.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              7
+            ],
+            "citation_labels": [
+              "[arxiv-f024-7:Method:7]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          }
+        ]
+      },
+      {
+        "theme_id": "theme-3",
+        "label": "Agreements",
+        "synthesis_claim": "The 7-paper corpus supports a bounded synthesis claim about Agreements.",
+        "evidence_strength": "moderate",
+        "paper_cells": [
+          {
+            "paper_id": "arxiv-f024-1",
+            "stance": "supports",
+            "contribution": "arxiv-f024-1 contributes paper evidence for Agreements.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              1
+            ],
+            "citation_labels": [
+              "[arxiv-f024-1:Method:1]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          },
+          {
+            "paper_id": "arxiv-f024-2",
+            "stance": "supports",
+            "contribution": "arxiv-f024-2 contributes paper evidence for Agreements.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              2
+            ],
+            "citation_labels": [
+              "[arxiv-f024-2:Method:2]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          },
+          {
+            "paper_id": "arxiv-f024-3",
+            "stance": "supports",
+            "contribution": "arxiv-f024-3 contributes paper evidence for Agreements.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              3
+            ],
+            "citation_labels": [
+              "[arxiv-f024-3:Method:3]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          },
+          {
+            "paper_id": "arxiv-f024-4",
+            "stance": "supports",
+            "contribution": "arxiv-f024-4 contributes paper evidence for Agreements.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              4
+            ],
+            "citation_labels": [
+              "[arxiv-f024-4:Method:4]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          },
+          {
+            "paper_id": "arxiv-f024-5",
+            "stance": "supports",
+            "contribution": "arxiv-f024-5 contributes paper evidence for Agreements.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              5
+            ],
+            "citation_labels": [
+              "[arxiv-f024-5:Method:5]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          },
+          {
+            "paper_id": "arxiv-f024-6",
+            "stance": "supports",
+            "contribution": "arxiv-f024-6 contributes paper evidence for Agreements.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              6
+            ],
+            "citation_labels": [
+              "[arxiv-f024-6:Method:6]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          },
+          {
+            "paper_id": "arxiv-f024-7",
+            "stance": "supports",
+            "contribution": "arxiv-f024-7 contributes paper evidence for Agreements.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              7
+            ],
+            "citation_labels": [
+              "[arxiv-f024-7:Method:7]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          }
+        ]
+      },
+      {
+        "theme_id": "theme-4",
+        "label": "Limitations and gaps",
+        "synthesis_claim": "The 7-paper corpus supports a bounded synthesis claim about Limitations and gaps.",
+        "evidence_strength": "limited",
+        "paper_cells": [
+          {
+            "paper_id": "arxiv-f024-1",
+            "stance": "supports",
+            "contribution": "arxiv-f024-1 contributes paper evidence for Limitations and gaps.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              1
+            ],
+            "citation_labels": [
+              "[arxiv-f024-1:Method:1]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          },
+          {
+            "paper_id": "arxiv-f024-2",
+            "stance": "supports",
+            "contribution": "arxiv-f024-2 contributes paper evidence for Limitations and gaps.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              2
+            ],
+            "citation_labels": [
+              "[arxiv-f024-2:Method:2]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          },
+          {
+            "paper_id": "arxiv-f024-3",
+            "stance": "supports",
+            "contribution": "arxiv-f024-3 contributes paper evidence for Limitations and gaps.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              3
+            ],
+            "citation_labels": [
+              "[arxiv-f024-3:Method:3]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          },
+          {
+            "paper_id": "arxiv-f024-4",
+            "stance": "supports",
+            "contribution": "arxiv-f024-4 contributes paper evidence for Limitations and gaps.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              4
+            ],
+            "citation_labels": [
+              "[arxiv-f024-4:Method:4]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          },
+          {
+            "paper_id": "arxiv-f024-5",
+            "stance": "supports",
+            "contribution": "arxiv-f024-5 contributes paper evidence for Limitations and gaps.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              5
+            ],
+            "citation_labels": [
+              "[arxiv-f024-5:Method:5]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          },
+          {
+            "paper_id": "arxiv-f024-6",
+            "stance": "supports",
+            "contribution": "arxiv-f024-6 contributes paper evidence for Limitations and gaps.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              6
+            ],
+            "citation_labels": [
+              "[arxiv-f024-6:Method:6]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          },
+          {
+            "paper_id": "arxiv-f024-7",
+            "stance": "supports",
+            "contribution": "arxiv-f024-7 contributes paper evidence for Limitations and gaps.",
+            "method": "Simulation, analytical modeling, or predictive beamforming evaluation.",
+            "limitation": "Generalization is bounded by the cited paper evidence.",
+            "evidence_ids": [
+              7
+            ],
+            "citation_labels": [
+              "[arxiv-f024-7:Method:7]"
+            ],
+            "quote_snippets": [
+              "The paper reports LEO satellite beamforming methods and limitations."
+            ],
+            "support_status": "supported"
+          }
+        ]
+      }
+    ],
+    "agreements": [
+      "The papers agree that LEO beamforming needs bounded method and evaluation claims."
+    ],
+    "disagreements": [
+      "The papers differ in method emphasis, data assumptions, and evaluation setup."
+    ],
+    "gaps": [
+      "Real-world deployment validation remains an evidence gap."
+    ],
+    "limitations": [
+      "This fixture cites only paper evidence; memory/tool logs/trace are excluded from citations."
+    ]
+  },
+  "sections": [
+    "Evidence Matrix",
+    "Cross-paper synthesis",
+    "Agreements",
+    "Disagreements / gaps",
+    "Limitations"
+  ]
+}

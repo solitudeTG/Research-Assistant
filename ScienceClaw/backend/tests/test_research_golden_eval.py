@@ -259,6 +259,78 @@ def test_payload_golden_eval_checks_expected_semantic_statuses_and_finding_codes
     assert run_result.cases[0].quality["metrics"]["semantic_finding_codes"] == ["semantic_support_partial"]
 
 
+def test_payload_golden_eval_requires_llm_semantic_audit_when_declared(tmp_path):
+    from backend.research_assistant.golden_eval import evaluate_payload_cases, load_golden_cases
+
+    _write_paper_fixtures(tmp_path, "a.pdf")
+    payload = _answer_payload(
+        route="evidence_qa",
+        admission="accepted",
+        citation_count=1,
+        summary_mode="",
+        claim_count=1,
+        approved=1,
+        partial=0,
+        unsupported=0,
+    )
+    (tmp_path / "answer.json").write_text(json.dumps(payload), encoding="utf-8")
+    case = _case("llm-required", "answer.json", min_citations=1)
+    case["quality_thresholds"]["require_llm_semantic_audit"] = True
+    cases_path = tmp_path / "cases.json"
+    cases_path.write_text(json.dumps({"cases": [case]}), encoding="utf-8")
+
+    run_result = evaluate_payload_cases(load_golden_cases(cases_path), root=tmp_path)
+
+    assert not run_result.passed
+    finding_codes = {finding["code"] for finding in run_result.cases[0].quality["findings"]}
+    assert "llm_semantic_auditor_missing" in finding_codes
+    assert "F023 LLM semantic auditor" in run_result.cases[0].owner_module_hints
+
+
+def test_payload_golden_eval_checks_literature_review_matrix_contract(tmp_path):
+    from backend.research_assistant.golden_eval import evaluate_payload_cases, load_golden_cases
+
+    _write_paper_fixtures(tmp_path, *[f"p{index}.pdf" for index in range(1, 8)])
+    payload = _literature_review_payload()
+    (tmp_path / "literature.answer.json").write_text(json.dumps(payload), encoding="utf-8")
+    (tmp_path / "literature.report.json").write_text(
+        json.dumps({"report_id": "report-1", "evidence_matrix": payload["evidence_matrix"]}),
+        encoding="utf-8",
+    )
+    case = _case("literature-review", "literature.answer.json", min_citations=7)
+    case["task_type"] = "literature_review"
+    case["paper_paths"] = [f"paper_data/p{index}.pdf" for index in range(1, 8)]
+    case["report_payload_path"] = "literature.report.json"
+    case["required_outputs"]["report"] = True
+    case["quality_thresholds"].update(
+        {
+            "min_distinct_cited_papers": 7,
+            "min_evidence_matrix_papers": 7,
+            "min_evidence_matrix_themes": 4,
+            "min_theme_paper_cells": 5,
+            "min_evidence_linked_cells": 10,
+            "required_report_sections": [
+                "Evidence Matrix",
+                "Cross-paper synthesis",
+                "Agreements",
+                "Disagreements / gaps",
+                "Limitations",
+            ],
+        }
+    )
+    cases_path = tmp_path / "cases.json"
+    cases_path.write_text(json.dumps({"cases": [case]}), encoding="utf-8")
+
+    run_result = evaluate_payload_cases(load_golden_cases(cases_path), root=tmp_path)
+
+    assert run_result.passed
+    quality = run_result.cases[0].quality
+    assert quality["metrics"]["distinct_cited_paper_count"] == 7
+    assert quality["metrics"]["evidence_matrix_paper_count"] == 7
+    assert quality["metrics"]["evidence_matrix_theme_count"] == 4
+    assert quality["metrics"]["evidence_matrix_linked_cell_count"] >= 10
+
+
 def test_payload_golden_eval_rejects_fabricated_citation_for_insufficient_evidence(tmp_path):
     from backend.research_assistant.golden_eval import evaluate_payload_cases, load_golden_cases
 
@@ -377,6 +449,84 @@ def test_payload_golden_eval_accepts_required_report_payload(tmp_path):
     results = json.loads((output_dir / "results.json").read_text(encoding="utf-8"))
     assert results["cases"][0]["report_payload_path"].endswith("with-report.report.json")
     assert (output_dir / "cases" / "with-report.report.json").exists()
+
+
+def test_payload_golden_eval_expected_failure_requires_actual_gate_failure(tmp_path):
+    from backend.research_assistant.golden_eval import evaluate_payload_cases, load_golden_cases
+
+    _write_paper_fixtures(tmp_path, *[f"p{index}.pdf" for index in range(1, 8)])
+    payload = _literature_review_payload()
+    payload["evidence_matrix"] = {}
+    payload["citations"][0]["source_type"] = "memory"
+    (tmp_path / "bad-literature.answer.json").write_text(json.dumps(payload), encoding="utf-8")
+    (tmp_path / "bad-literature.report.json").write_text(json.dumps({"report_id": "bad"}), encoding="utf-8")
+    case = _case("bad-literature", "bad-literature.answer.json", min_citations=7)
+    case["task_type"] = "literature_review"
+    case["paper_paths"] = [f"paper_data/p{index}.pdf" for index in range(1, 8)]
+    case["report_payload_path"] = "bad-literature.report.json"
+    case["required_outputs"]["report"] = True
+    case["expected_result"] = "fail"
+    case["failure_hint"] = "Missing matrix and context-only citation must be rejected by F024/F004 gates."
+    case["quality_thresholds"].update(
+        {
+            "min_distinct_cited_papers": 7,
+            "min_evidence_matrix_papers": 7,
+            "min_evidence_matrix_themes": 4,
+            "min_theme_paper_cells": 5,
+            "min_evidence_linked_cells": 10,
+            "required_report_sections": ["Evidence Matrix", "Cross-paper synthesis"],
+        }
+    )
+    cases_path = tmp_path / "cases.json"
+    cases_path.write_text(json.dumps({"cases": [case]}), encoding="utf-8")
+
+    run_result = evaluate_payload_cases(load_golden_cases(cases_path), root=tmp_path)
+
+    assert run_result.passed
+    result = run_result.cases[0]
+    assert result.expected_result == "fail"
+    assert result.quality["actual_quality_passed"] is False
+    assert result.quality["expected_failure_observed"] is True
+    assert "evidence_matrix_paper_count_too_low" in {finding["code"] for finding in result.quality["findings"]}
+
+
+def test_payload_golden_eval_expected_failure_fails_when_bad_case_accidentally_passes(tmp_path):
+    from backend.research_assistant.golden_eval import evaluate_payload_cases, load_golden_cases
+
+    _write_paper_fixtures(tmp_path, *[f"p{index}.pdf" for index in range(1, 8)])
+    payload = _literature_review_payload()
+    (tmp_path / "good-literature.answer.json").write_text(json.dumps(payload), encoding="utf-8")
+    (tmp_path / "good-literature.report.json").write_text(json.dumps({"report_id": "good"}), encoding="utf-8")
+    case = _case("good-literature", "good-literature.answer.json", min_citations=7)
+    case["task_type"] = "literature_review"
+    case["paper_paths"] = [f"paper_data/p{index}.pdf" for index in range(1, 8)]
+    case["report_payload_path"] = "good-literature.report.json"
+    case["required_outputs"]["report"] = True
+    case["expected_result"] = "fail"
+    case["quality_thresholds"].update(
+        {
+            "min_distinct_cited_papers": 7,
+            "min_evidence_matrix_papers": 7,
+            "min_evidence_matrix_themes": 4,
+            "min_theme_paper_cells": 5,
+            "min_evidence_linked_cells": 10,
+            "required_report_sections": [
+                "Evidence Matrix",
+                "Cross-paper synthesis",
+                "Agreements",
+                "Disagreements / gaps",
+                "Limitations",
+            ],
+        }
+    )
+    cases_path = tmp_path / "cases.json"
+    cases_path.write_text(json.dumps({"cases": [case]}), encoding="utf-8")
+
+    run_result = evaluate_payload_cases(load_golden_cases(cases_path), root=tmp_path)
+
+    assert not run_result.passed
+    assert run_result.cases[0].quality["actual_quality_passed"] is True
+    assert run_result.cases[0].quality["findings"][0]["code"] == "expected_failure_not_observed"
 
 
 def test_assert_live_golden_eval_result_rejects_missing_answer_payload():
@@ -584,3 +734,73 @@ def _answer_payload(
             ],
         },
     }
+
+
+def _literature_review_payload():
+    payload = _answer_payload(
+        route="evidence_qa",
+        admission="accepted",
+        citation_count=14,
+        summary_mode="evidence_matrix_literature_review",
+        claim_count=4,
+        approved=3,
+        partial=1,
+        unsupported=0,
+    )
+    paper_ids = [f"paper-{index}" for index in range(1, 8)]
+    for index, citation in enumerate(payload["citations"]):
+        paper_id = paper_ids[index % len(paper_ids)]
+        citation["paper_id"] = paper_id
+        citation["source_identity"] = {"paper_id": paper_id}
+        citation["citation_label"] = f"[{paper_id}:Method:{index + 1}]"
+    payload["evidence_matrix"] = {
+        "paper_count": 7,
+        "papers": [
+            {
+                "paper_id": paper_id,
+                "title": f"LEO Beamforming Study {index}",
+                "year": str(2020 + index),
+                "source_type": "paper",
+                "citation_label": f"[{paper_id}:Method:{index}]",
+            }
+            for index, paper_id in enumerate(paper_ids, start=1)
+        ],
+        "themes": [
+            {
+                "theme_id": f"theme-{theme_index}",
+                "label": label,
+                "synthesis_claim": f"The corpus supports a cross-paper claim about {label}.",
+                "evidence_strength": "strong",
+                "paper_cells": [
+                    {
+                        "paper_id": paper_id,
+                        "stance": "supports",
+                        "contribution": f"{paper_id} contributes evidence for {label}.",
+                        "method": "Simulation and analytical comparison.",
+                        "limitation": "Deployment assumptions remain bounded.",
+                        "evidence_ids": [paper_index],
+                        "citation_labels": [f"[{paper_id}:Method:{paper_index}]"],
+                        "quote_snippets": [f"{paper_id} reports method evidence."],
+                        "support_status": "supported",
+                    }
+                    for paper_index, paper_id in enumerate(paper_ids, start=1)
+                ],
+            }
+            for theme_index, label in enumerate(["Methods", "Evidence strength", "Agreements", "Limitations"], start=1)
+        ],
+        "agreements": ["The papers agree on deployment trade-offs."],
+        "disagreements": ["The papers differ in method emphasis."],
+        "gaps": ["Real-world validation remains open."],
+        "limitations": ["Evidence comes from admitted snippets only."],
+    }
+    payload["report"] = {
+        "artifact": True,
+        "sections": [
+            "Evidence Matrix",
+            "Cross-paper synthesis",
+            "Agreements",
+            "Disagreements / gaps",
+            "Limitations",
+        ],
+    }
+    return payload

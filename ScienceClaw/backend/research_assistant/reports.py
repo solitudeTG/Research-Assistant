@@ -29,6 +29,7 @@ class MarkdownReportArtifact:
     evidence_map_path: str
     citation_count: int
     reader_summary: dict
+    evidence_matrix_path: str | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -60,6 +61,7 @@ async def generate_markdown_research_report(
     report_dir.mkdir(parents=True, exist_ok=True)
     markdown_path = report_dir / f"{report_id}.md"
     evidence_map_path = report_dir / f"{report_id}.evidence.json"
+    evidence_matrix_path = report_dir / f"{report_id}.evidence-matrix.json"
 
     markdown_path.write_text(
         _compose_markdown_report(
@@ -75,6 +77,13 @@ async def generate_markdown_research_report(
         json.dumps(evidence_map, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    matrix_path_value: str | None = None
+    if answer.evidence_matrix:
+        evidence_matrix_path.write_text(
+            json.dumps(answer.evidence_matrix, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        matrix_path_value = str(evidence_matrix_path)
     await persist_report_evidence_map_to_database(
         database_url,
         report_id=report_id,
@@ -102,6 +111,7 @@ async def generate_markdown_research_report(
         question=question,
         markdown_path=str(markdown_path),
         evidence_map_path=str(evidence_map_path),
+        evidence_matrix_path=matrix_path_value,
         citation_count=answer.citation_count,
         reader_summary=evidence_map["reader_summary"],
     )
@@ -138,6 +148,7 @@ def _compose_markdown_report(
         "",
         *_compose_audited_answer_lines(answer),
         "",
+        *_compose_literature_review_lines(answer),
         *_compose_evidence_gap_lines(answer),
         *_compose_limitation_lines(answer),
         "## Citation Evidence",
@@ -307,9 +318,71 @@ def _build_evidence_map(*, report_id: str, answer: ResearchAnswer) -> dict:
         "context_memory": answer.context_memory,
         "evidence_gaps": _build_evidence_gaps(answer),
         "limitations": _build_limitations(answer),
+        "evidence_matrix": answer.evidence_matrix,
         "audit": answer.audit.to_dict(),
         "evidence": _build_approved_claim_evidence_rows(answer, citations_by_id),
     }
+
+
+def _compose_literature_review_lines(answer: ResearchAnswer) -> list[str]:
+    if not answer.evidence_matrix:
+        return []
+    matrix = answer.evidence_matrix
+    lines = [
+        "## Evidence Matrix",
+        "",
+        f"- Paper count: {matrix.get('paper_count', 0)}",
+        f"- Theme count: {len(matrix.get('themes') or [])}",
+        "",
+        "| Theme | Evidence strength | Paper cells | Synthesis claim |",
+        "| --- | --- | --- | --- |",
+    ]
+    for theme in matrix.get("themes", []):
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _table_cell(str(theme.get("label") or "")),
+                    f"`{theme.get('evidence_strength')}`",
+                    str(len(theme.get("paper_cells") or [])),
+                    _table_cell(str(theme.get("synthesis_claim") or "")),
+                ]
+            )
+            + " |"
+        )
+    lines.extend(["", "## Cross-paper synthesis", ""])
+    for theme in matrix.get("themes", []):
+        labels = [
+            label
+            for cell in theme.get("paper_cells", [])
+            for label in (cell.get("citation_labels") or [])
+        ]
+        lines.append(f"- {theme.get('synthesis_claim')} {' '.join(labels[:3])}".strip())
+    lines.extend(["", "## Agreements", ""])
+    lines.extend(f"- {item}" for item in matrix.get("agreements", []))
+    lines.extend(["", "## Disagreements / gaps", ""])
+    lines.extend(f"- {item}" for item in matrix.get("disagreements", []))
+    lines.extend(f"- {item}" for item in matrix.get("gaps", []))
+    lines.extend(["", "## Methods comparison", ""])
+    for theme in (matrix.get("themes") or [])[:1]:
+        for cell in theme.get("paper_cells", []):
+            labels = cell.get("citation_labels") or []
+            lines.append(f"- {cell.get('paper_id')}: {cell.get('method')} {' '.join(labels[:1])}".strip())
+    lines.extend(["", "## Limitations", ""])
+    lines.extend(f"- {item}" for item in matrix.get("limitations", []))
+    lines.extend(["", "## Citation-grounded conclusion", ""])
+    conclusion_labels = []
+    for theme in matrix.get("themes", []):
+        for cell in theme.get("paper_cells", []):
+            for label in cell.get("citation_labels") or []:
+                if label not in conclusion_labels:
+                    conclusion_labels.append(label)
+    lines.append(
+        "This literature review supports bounded synthesis only where paper citation labels are attached. "
+        + " ".join(conclusion_labels[:4])
+    )
+    lines.append("")
+    return lines
 
 
 def _report_title(question: str) -> str:

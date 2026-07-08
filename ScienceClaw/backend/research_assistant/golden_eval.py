@@ -19,6 +19,7 @@ GoldenEvalTaskType = Literal[
     "evidence_qa",
     "no_evidence_or_insufficient_evidence",
     "multi_paper_synthesis",
+    "literature_review",
 ]
 GoldenEvalMode = Literal["payload", "live_ui"]
 
@@ -34,6 +35,13 @@ class GoldenEvalThresholds:
     min_distinct_cited_papers: int | None = None
     expected_support_statuses: list[str] | None = None
     expected_finding_codes: list[str] | None = None
+    require_llm_semantic_audit: bool = False
+    allowed_semantic_auditor_modes: list[str] | None = None
+    min_evidence_matrix_papers: int | None = None
+    min_evidence_matrix_themes: int | None = None
+    min_theme_paper_cells: int | None = None
+    min_evidence_linked_cells: int | None = None
+    required_report_sections: list[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -50,6 +58,9 @@ class GoldenEvalCase:
     mode: GoldenEvalMode
     paper_paths: list[str]
     question: str
+    expected_result: Literal["pass", "fail"] = "pass"
+    owner_module_hints: list[str] = field(default_factory=list)
+    failure_hint: str | None = None
     quality_thresholds: GoldenEvalThresholds = field(default_factory=GoldenEvalThresholds)
     required_outputs: GoldenEvalRequiredOutputs = field(default_factory=GoldenEvalRequiredOutputs)
     answer_payload_path: str | None = None
@@ -61,6 +72,7 @@ class GoldenEvalCase:
             "evidence_qa": "evidence_qa",
             "no_evidence_or_insufficient_evidence": "evidence_qa",
             "multi_paper_synthesis": "evidence_qa",
+            "literature_review": "evidence_qa",
         }[self.task_type]
         expected_admission = "accepted"
         if self.task_type == "no_evidence_or_insufficient_evidence":
@@ -73,6 +85,13 @@ class GoldenEvalCase:
             required_summary_mode=self.quality_thresholds.required_summary_mode,
             max_invalid_claims=self.quality_thresholds.max_invalid_claims,
             max_unsupported_claim_ratio=self.quality_thresholds.max_unsupported_claim_ratio,
+            require_llm_semantic_audit=self.quality_thresholds.require_llm_semantic_audit,
+            allowed_semantic_auditor_modes=set(self.quality_thresholds.allowed_semantic_auditor_modes or ["llm_enhanced"]),
+            min_evidence_matrix_papers=self.quality_thresholds.min_evidence_matrix_papers,
+            min_evidence_matrix_themes=self.quality_thresholds.min_evidence_matrix_themes,
+            min_theme_paper_cells=self.quality_thresholds.min_theme_paper_cells,
+            min_evidence_linked_cells=self.quality_thresholds.min_evidence_linked_cells,
+            required_report_sections=set(self.quality_thresholds.required_report_sections or []),
         )
 
 
@@ -83,6 +102,8 @@ class GoldenEvalCaseResult:
     mode: str
     passed: bool
     quality: dict[str, Any]
+    expected_result: str = "pass"
+    failure_hint: str | None = None
     answer_payload_path: str | None = None
     report_payload_path: str | None = None
     answer_payload: dict[str, Any] | None = None
@@ -158,17 +179,20 @@ def evaluate_payload_cases(
             answer_payload = json.loads(answer_path.read_text(encoding="utf-8"))
             quality = evaluate_research_answer(answer_payload, case.to_quality_requirement())
             quality_dict = _quality_dict_with_case_checks(case, answer_payload, quality, extra_findings=preflight_findings)
+            passed = _case_passed_for_expected_result(case, quality_dict)
             report_path = _resolve_payload_path(root_path, payload_path, case.report_payload_path) if case.report_payload_path else None
             results.append(
                 GoldenEvalCaseResult(
                     case_id=case.case_id,
                     task_type=case.task_type,
                     mode=case.mode,
-                    passed=bool(quality_dict.get("passed")),
+                    passed=passed,
                     quality=quality_dict,
+                    expected_result=case.expected_result,
+                    failure_hint=case.failure_hint,
                     answer_payload_path=str(answer_path),
                     report_payload_path=str(report_path) if report_path else None,
-                    owner_module_hints=owner_module_hints_for_quality(quality_dict),
+                    owner_module_hints=sorted(set(case.owner_module_hints) | set(owner_module_hints_for_quality(quality_dict))),
                 )
             )
         except Exception as exc:  # Batch eval must preserve failed cases.
@@ -180,6 +204,8 @@ def evaluate_payload_cases(
                     mode=case.mode,
                     passed=False,
                     quality=quality_dict,
+                    expected_result=case.expected_result,
+                    failure_hint=case.failure_hint,
                     owner_module_hints=owner_module_hints_for_quality(quality_dict),
                     error=str(exc),
                 )
@@ -196,15 +222,18 @@ def evaluate_live_ui_case(
     assert_live_golden_eval_result(ui_result, require_report=case.required_outputs.report)
     quality = evaluate_research_answer(ui_result.answer_payload, case.to_quality_requirement())
     quality_dict = _quality_dict_with_case_checks(case, ui_result.answer_payload, quality)
+    passed = _case_passed_for_expected_result(case, quality_dict)
     result = GoldenEvalCaseResult(
         case_id=case.case_id,
         task_type=case.task_type,
         mode="live_ui",
-        passed=bool(quality_dict.get("passed")),
+        passed=passed,
         quality=quality_dict,
+        expected_result=case.expected_result,
+        failure_hint=case.failure_hint,
         answer_payload=ui_result.answer_payload,
         report_payload=ui_result.report_payload,
-        owner_module_hints=owner_module_hints_for_quality(quality_dict),
+        owner_module_hints=sorted(set(case.owner_module_hints) | set(owner_module_hints_for_quality(quality_dict))),
     )
     return GoldenEvalRunResult(run_id=run_id or f"live-ui-{uuid.uuid4().hex[:8]}", mode="live-ui", cases=[result])
 
@@ -297,6 +326,11 @@ def render_markdown_summary(run_result: GoldenEvalRunResult) -> str:
         )
         if case.error:
             lines.append(f"- Error: {case.error}")
+        if case.expected_result == "fail":
+            lines.append("- Expected result: `fail` (negative gate case)")
+            lines.append(f"- Actual quality passed: `{case.quality.get('actual_quality_passed')}`")
+        if case.failure_hint:
+            lines.append(f"- Failure hint: {case.failure_hint}")
         findings = case.quality.get("findings", []) if isinstance(case.quality, Mapping) else []
         if findings:
             lines.append("- Findings:")
@@ -317,12 +351,16 @@ def module_hint_for_finding(code: str) -> str:
         return "Check F013 routing."
     if code in {"unsupported_claim_ratio_exceeded", "invalid_claims_exceeded"}:
         return "Check F006 Evidence Audit / F018 calibration / F019 thresholds."
+    if code.startswith("llm_semantic_"):
+        return "Check F023 LLM semantic auditor."
     if code.startswith("semantic_"):
-        return "Check F006 Evidence Audit / F018 calibration / F022 semantic audit."
+        return "Check F006 Evidence Audit / F018 calibration / F022/F023 semantic audit."
     if code in {"summary_mode_mismatch"}:
         return "Check F017 synthesis."
     if code in {"multi_paper_citation_coverage_too_low"}:
         return "Check F005 retrieval / F011 admission / F017 synthesis."
+    if code.startswith("evidence_matrix_") or code.startswith("literature_review_"):
+        return "Check F024 evidence matrix literature review."
     if code in {"admission_not_insufficient"}:
         return "Check F011 admission."
     if code in {"multi_agent_lifecycle_missing"}:
@@ -398,6 +436,9 @@ def _parse_case(raw_case: Any) -> GoldenEvalCase:
         mode=_required_str(raw_case, "mode"),  # type: ignore[arg-type]
         paper_paths=[str(path) for path in raw_case.get("paper_paths", [])],
         question=_required_str(raw_case, "question"),
+        expected_result=str(raw_case.get("expected_result") or "pass"),  # type: ignore[arg-type]
+        owner_module_hints=[str(hint) for hint in raw_case.get("owner_module_hints", [])],
+        failure_hint=raw_case.get("failure_hint"),
         answer_payload_path=raw_case.get("answer_payload_path"),
         report_payload_path=raw_case.get("report_payload_path"),
         quality_thresholds=GoldenEvalThresholds(
@@ -410,6 +451,13 @@ def _parse_case(raw_case: Any) -> GoldenEvalCase:
             min_distinct_cited_papers=_optional_int(thresholds.get("min_distinct_cited_papers")),
             expected_support_statuses=_optional_str_list(thresholds.get("expected_support_statuses")),
             expected_finding_codes=_optional_str_list(thresholds.get("expected_finding_codes")),
+            require_llm_semantic_audit=bool(thresholds.get("require_llm_semantic_audit", False)),
+            allowed_semantic_auditor_modes=_optional_str_list(thresholds.get("allowed_semantic_auditor_modes")),
+            min_evidence_matrix_papers=_optional_int(thresholds.get("min_evidence_matrix_papers")),
+            min_evidence_matrix_themes=_optional_int(thresholds.get("min_evidence_matrix_themes")),
+            min_theme_paper_cells=_optional_int(thresholds.get("min_theme_paper_cells")),
+            min_evidence_linked_cells=_optional_int(thresholds.get("min_evidence_linked_cells")),
+            required_report_sections=_optional_str_list(thresholds.get("required_report_sections")),
         ),
         required_outputs=GoldenEvalRequiredOutputs(
             answer=bool(outputs.get("answer", True)),
@@ -570,8 +618,30 @@ def _quality_dict_with_case_checks(
     decorated_findings = [_decorate_finding(finding) for finding in findings]
     quality_dict["findings"] = decorated_findings
     quality_dict["owner_module_hints"] = owner_module_hints_for_quality(quality_dict)
-    quality_dict["passed"] = not any(finding.get("severity", "error") == "error" for finding in decorated_findings)
+    actual_passed = not any(finding.get("severity", "error") == "error" for finding in decorated_findings)
+    quality_dict["actual_quality_passed"] = actual_passed
+    if case.expected_result == "fail":
+        quality_dict["expected_failure_observed"] = not actual_passed
+        if actual_passed:
+            decorated = _decorate_finding(
+                _finding_dict(
+                    "expected_failure_not_observed",
+                    "Case declares expected_result='fail' but the quality gate passed.",
+                    "expected_result",
+                )
+            )
+            decorated_findings.append(decorated)
+            quality_dict["findings"] = decorated_findings
+            quality_dict["expected_failure_observed"] = False
+    quality_dict["passed"] = _case_passed_for_expected_result(case, quality_dict)
     return quality_dict
+
+
+def _case_passed_for_expected_result(case: GoldenEvalCase, quality_dict: Mapping[str, Any]) -> bool:
+    actual_passed = bool(quality_dict.get("actual_quality_passed", quality_dict.get("passed")))
+    if case.expected_result == "fail":
+        return not actual_passed and bool(quality_dict.get("expected_failure_observed", True))
+    return actual_passed
 
 
 def _exception_quality(case: GoldenEvalCase, exc: Exception) -> dict[str, Any]:
@@ -607,12 +677,16 @@ def _owner_modules_for_finding(code: str) -> list[str]:
         return ["F013 routing"]
     if code in {"unsupported_claim_ratio_exceeded", "invalid_claims_exceeded"}:
         return ["F006 audit", "F018 calibration", "F019 golden eval"]
+    if code.startswith("llm_semantic_"):
+        return ["F023 LLM semantic auditor"]
     if code.startswith("semantic_"):
-        return ["F006 audit", "F018 calibration", "F022 semantic audit"]
+        return ["F006 audit", "F018 calibration", "F022 semantic audit", "F023 LLM semantic auditor"]
     if code == "summary_mode_mismatch":
         return ["F017 synthesis"]
     if code == "multi_paper_citation_coverage_too_low":
         return ["F005 retrieval", "F011 admission", "F017 synthesis"]
+    if code.startswith("evidence_matrix_") or code.startswith("literature_review_"):
+        return ["F024 evidence matrix literature review"]
     if code == "admission_not_insufficient":
         return ["F011 admission"]
     if code == "multi_agent_lifecycle_missing":

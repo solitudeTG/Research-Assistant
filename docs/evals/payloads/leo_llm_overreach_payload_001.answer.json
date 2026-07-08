@@ -1,0 +1,76 @@
+{
+  "answer_id": "golden-llm-overreach-001",
+  "content": "The cited LEO beamforming paper proves hospital patient safety outcomes. [paper-space-time:Introduction:1]",
+  "citations": [
+    {
+      "evidence_id": 71,
+      "chunk_id": "chunk-71",
+      "paper_id": "paper-space-time",
+      "title": "Space-Time Beamforming for LEO Satellite Communications Enabling Extremely Narrow Beams",
+      "section": "Introduction",
+      "page_start": 1,
+      "page_end": 1,
+      "quote": "The paper discusses space-time beamforming for LEO satellite communications and extremely narrow beams.",
+      "citation_label": "[paper-space-time:Introduction:1]",
+      "source_type": "paper",
+      "source_identity": {"paper_id": "paper-space-time"},
+      "evidence_scope": "project"
+    }
+  ],
+  "citation_count": 1,
+  "context_boundaries": {
+    "citation_evidence": ["paper", "web", "database"],
+    "context_only_memory": ["memory"],
+    "process_trace": ["tool_logs", "runtime_results", "agent_lifecycle"],
+    "model_reasoning": ["model_reasoning"]
+  },
+  "summary_synthesis": {},
+  "evidence_admission": {"decision": "accepted"},
+  "task_route": {"route": "evidence_qa"},
+  "audit": {
+    "status": "unsupported",
+    "claim_count": 1,
+    "approved_claim_count": 0,
+    "partial_claim_count": 0,
+    "unsupported_claim_count": 1,
+    "invalid_source_count": 0,
+    "semantic_auditor": {
+      "mode": "llm_enhanced",
+      "model": "fixture-semantic-auditor",
+      "claim_count": 1,
+      "overreach_count": 1,
+      "unsupported_count": 0,
+      "source_mismatch_count": 0,
+      "insufficient_evidence_count": 0,
+      "llm_auditor_status": "completed"
+    },
+    "claims": [
+      {
+        "claim_id": "claim-1",
+        "claim_text": "The cited LEO beamforming paper proves hospital patient safety outcomes. [paper-space-time:Introduction:1]",
+        "status": "unsupported",
+        "support_status": "overreach",
+        "deterministic_support_status": "partial",
+        "llm_support_status": "overreach",
+        "semantic_relevance_score": 0.42,
+        "source_quality_score": 1.0,
+        "evidence_ids": [],
+        "cited_evidence": [
+          {
+            "source_type": "paper",
+            "paper_id": "paper-space-time",
+            "title": "Space-Time Beamforming for LEO Satellite Communications Enabling Extremely Narrow Beams",
+            "section": "Introduction",
+            "page_start": 1,
+            "page_end": 1,
+            "chunk_id": "chunk-71",
+            "quote": "The paper discusses space-time beamforming for LEO satellite communications and extremely narrow beams."
+          }
+        ],
+        "rationale": "The cited quote is related to LEO beamforming but not to medical patient safety.",
+        "llm_rationale": "The evidence concerns satellite communications, so the patient safety outcome is an overreach.",
+        "finding_code": "llm_overreach"
+      }
+    ]
+  }
+}

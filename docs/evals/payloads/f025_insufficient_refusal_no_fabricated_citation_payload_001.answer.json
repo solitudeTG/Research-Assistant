@@ -1,0 +1,36 @@
+{
+  "answer_id": "f025-insufficient-refusal-001",
+  "content": "The provided LEO satellite beamforming papers do not provide citation evidence for medical patient safety outcomes, so the system refuses that claim instead of fabricating a citation.",
+  "citations": [],
+  "citation_count": 0,
+  "context_boundaries": {
+    "citation_evidence": ["paper", "web", "database"],
+    "context_only_memory": ["memory"],
+    "process_trace": ["tool_logs", "runtime_results", "agent_lifecycle"],
+    "model_reasoning": ["model_reasoning"]
+  },
+  "summary_synthesis": {},
+  "evidence_admission": {"decision": "rejected"},
+  "task_route": {"route": "evidence_qa"},
+  "audit": {
+    "status": "unsupported",
+    "claim_count": 1,
+    "approved_claim_count": 0,
+    "partial_claim_count": 0,
+    "unsupported_claim_count": 1,
+    "invalid_source_count": 0,
+    "claims": [
+      {
+        "claim_id": "claim-1",
+        "claim_text": "No admitted citation evidence supports medical patient safety outcomes.",
+        "support_status": "insufficient_evidence",
+        "semantic_relevance_score": 0.0,
+        "source_quality_score": 0.0,
+        "evidence_ids": [],
+        "cited_evidence": [],
+        "rationale": "The papers are about LEO satellite beamforming, not clinical patient outcomes.",
+        "finding_code": "insufficient_evidence_should_refuse"
+      }
+    ]
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "answer_id": "f025-literature-review-negative-001",
+  "content": "This intentionally bad literature review omits a usable evidence matrix and includes a context-only citation.",
+  "citations": [
+    {
+      "evidence_id": 301,
+      "chunk_id": "memory-301",
+      "paper_id": "memory-paper",
+      "title": "Context Memory",
+      "section": "Memory",
+      "page_start": 0,
+      "page_end": 0,
+      "quote": "A memory note is not citation evidence.",
+      "citation_label": "memory:note:301",
+      "source_type": "memory",
+      "source_identity": {"memory_id": "memory-301"},
+      "evidence_scope": "context"
+    }
+  ],
+  "citation_count": 1,
+  "context_boundaries": {
+    "citation_evidence": ["paper", "web", "database"],
+    "context_only_memory": ["memory"],
+    "process_trace": ["tool_logs", "runtime_results", "agent_lifecycle"],
+    "model_reasoning": ["model_reasoning"]
+  },
+  "summary_synthesis": {"mode": "evidence_matrix_literature_review"},
+  "evidence_admission": {"decision": "accepted"},
+  "task_route": {"route": "evidence_qa"},
+  "evidence_matrix": {
+    "paper_count": 6,
+    "papers": [],
+    "themes": []
+  },
+  "report": {
+    "artifact": true,
+    "sections": ["Evidence Matrix"]
+  },
+  "audit": {
+    "status": "partial",
+    "claim_count": 1,
+    "approved_claim_count": 0,
+    "partial_claim_count": 0,
+    "unsupported_claim_count": 1,
+    "invalid_source_count": 0,
+    "claims": [
+      {
+        "claim_id": "claim-1",
+        "claim_text": "The bad review relies on context-only memory as if it were evidence.",
+        "support_status": "source_mismatch",
+        "semantic_relevance_score": 0.0,
+        "source_quality_score": 0.0,
+        "evidence_ids": [301],
+        "cited_evidence": [{"source_type": "memory", "memory_id": "memory-301", "quote": "A memory note is not citation evidence."}],
+        "rationale": "Memory is context-only and cannot become citation evidence.",
+        "finding_code": "context_only_source_used_as_citation"
+      }
+    ]
+  }
+}

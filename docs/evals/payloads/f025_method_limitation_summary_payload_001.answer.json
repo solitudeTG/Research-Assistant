@@ -1,0 +1,80 @@
+{
+  "answer_id": "f025-method-limitation-summary-001",
+  "content": "The paper frames space-time beamforming as a LEO satellite communications method for narrow beams, while its evidence remains bounded to modeled beamforming assumptions and does not prove deployment success.",
+  "citations": [
+    {
+      "evidence_id": 101,
+      "chunk_id": "f025-chunk-101",
+      "paper_id": "paper-space-time",
+      "title": "Space-Time Beamforming for LEO Satellite Communications",
+      "section": "Method",
+      "page_start": 3,
+      "page_end": 3,
+      "quote": "The method focuses on space-time beamforming for narrow beams in LEO satellite communications.",
+      "citation_label": "paper-space-time:Method:3",
+      "source_type": "paper",
+      "source_identity": {"paper_id": "paper-space-time"},
+      "evidence_scope": "project"
+    },
+    {
+      "evidence_id": 102,
+      "chunk_id": "f025-chunk-102",
+      "paper_id": "paper-space-time",
+      "title": "Space-Time Beamforming for LEO Satellite Communications",
+      "section": "Limitations",
+      "page_start": 8,
+      "page_end": 8,
+      "quote": "The evaluation is bounded by modeled LEO satellite communication assumptions.",
+      "citation_label": "paper-space-time:Limitations:8",
+      "source_type": "paper",
+      "source_identity": {"paper_id": "paper-space-time"},
+      "evidence_scope": "project"
+    }
+  ],
+  "citation_count": 2,
+  "context_boundaries": {
+    "citation_evidence": ["paper", "web", "database"],
+    "context_only_memory": ["memory"],
+    "process_trace": ["tool_logs", "runtime_results", "agent_lifecycle"],
+    "model_reasoning": ["model_reasoning"]
+  },
+  "summary_synthesis": {
+    "mode": "llm_section_global",
+    "intermediate_boundary": "context_only",
+    "citation_source": "original_evidence"
+  },
+  "evidence_admission": {"decision": "accepted"},
+  "task_route": {"route": "whole_paper_summary"},
+  "audit": {
+    "status": "partial",
+    "claim_count": 2,
+    "approved_claim_count": 1,
+    "partial_claim_count": 1,
+    "unsupported_claim_count": 0,
+    "invalid_source_count": 0,
+    "claims": [
+      {
+        "claim_id": "claim-1",
+        "claim_text": "The paper uses space-time beamforming for narrow LEO satellite beams.",
+        "support_status": "supported",
+        "semantic_relevance_score": 1.0,
+        "source_quality_score": 1.0,
+        "evidence_ids": [101],
+        "cited_evidence": [{"source_type": "paper", "paper_id": "paper-space-time", "section": "Method", "chunk_id": "f025-chunk-101", "quote": "The method focuses on space-time beamforming for narrow beams in LEO satellite communications."}],
+        "rationale": "The claim restates method evidence.",
+        "finding_code": null
+      },
+      {
+        "claim_id": "claim-2",
+        "claim_text": "The limitations remain bounded to modeled assumptions.",
+        "support_status": "partial",
+        "semantic_relevance_score": 0.7,
+        "source_quality_score": 1.0,
+        "evidence_ids": [102],
+        "cited_evidence": [{"source_type": "paper", "paper_id": "paper-space-time", "section": "Limitations", "chunk_id": "f025-chunk-102", "quote": "The evaluation is bounded by modeled LEO satellite communication assumptions."}],
+        "rationale": "The limitation is grounded but summarized at a higher level.",
+        "finding_code": "semantic_support_partial"
+      }
+    ]
+  }
+}
